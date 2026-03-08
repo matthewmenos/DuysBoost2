@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}DUYS Boost — Grow Your Social Media{% endblock %}
+{% block content %}
+<style>
+.landing{max-width:100%;margin:-28px;background:var(--bg)}
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;width:800px;height:800px;background:radial-gradient(circle,rgba(124,77,255,.15) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(124,77,255,.1);border:1px solid rgba(124,77,255,.3);border-radius:20px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--accent);margin-bottom:28px}
+.hero h1{font-size:clamp(40px,7vw,80px);font-weight:800;line-height:1.05;margin-bottom:20px;max-width:900px}
+.hero h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:18px;color:var(--muted);max-width:560px;line-height:1.7;margin-bottom:36px}
+.hero-ctas{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.features{padding:80px 40px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;max-width:1100px;margin:0 auto}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;transition:all .3s}
+.feature-card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:var(--shadow)}
+.feature-icon{font-size:36px;margin-bottom:16px}
+.feature-title{font-size:18px;font-weight:700;margin-bottom:8px}
+.feature-desc{font-size:14px;color:var(--muted);line-height:1.6}
+.cta-section{text-align:center;padding:80px 24px;background:linear-gradient(135deg,rgba(124,77,255,.05),rgba(0,229,255,.05))}
+.cta-section h2{font-size:40px;margin-bottom:16px}
+.cta-section p{color:var(--muted);margin-bottom:32px;font-size:16px}
+</style>
+<div class="landing">
+  <div class="hero">
+    <div class="hero-badge">⚡ Powered by real users</div>
+    <h1>Boost Your <span>Social Media</span><br>Presence Today</h1>
+    <p>Create ad campaigns, earn by completing tasks, and grow your audience — all in one powerful platform.</p>
+    <div class="hero-ctas">
+      <a href="{{ url_for('signup') }}" class="btn btn-primary" style="font-size:16px;padding:14px 32px">Get Started Free →</a>
+      <a href="{{ url_for('login') }}" class="btn btn-outline" style="font-size:16px;padding:14px 32px">Sign In</a>
+    </div>
+  </div>
+  <div class="features">
+    <div class="feature-card"><div class="feature-icon">📢</div><div class="feature-title">Post Ad Campaigns</div><div class="feature-desc">Set a budget, choose your platform, and watch real users engage with your content.</div></div>
+    <div class="feature-card"><div class="feature-icon">💰</div><div class="feature-title">Earn by Completing Tasks</div><div class="feature-desc">Follow, like, subscribe — get paid instantly for every verified task you complete.</div></div>
+    <div class="feature-card"><div class="feature-icon">📊</div><div class="feature-title">Live Analytics</div><div class="feature-desc">Track followers gained, budget spent, and campaign performance in real time.</div></div>
+    <div class="feature-card"><div class="feature-icon">🎁</div><div class="feature-title">Referral Rewards</div><div class="feature-desc">Invite friends and earn {{ CURRENCY_SYMBOL }}1.00 for every new member who joins using your code.</div></div>
+    <div class="feature-card"><div class="feature-icon">🌙</div><div class="feature-title">Light & Dark Mode</div><div class="feature-desc">Work comfortably day or night with our beautiful adaptive interface.</div></div>
+    <div class="feature-card"><div class="feature-icon">🔒</div><div class="feature-title">Secure & Fast</div><div class="feature-desc">Auto-verified task submissions with instant wallet payouts and admin oversight.</div></div>
+  </div>
+  <div class="cta-section">
+    <h2>Ready to grow?</h2>
+    <p>Join thousands of creators and marketers already boosting on DUYS.</p>
+    <a href="{{ url_for('signup') }}" class="btn btn-primary" style="font-size:16px;padding:14px 32px">Create Free Account</a>
+  </div>
+</div>
+{% endblock %}

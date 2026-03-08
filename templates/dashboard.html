@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DUYS Boost{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Wallet Balance</div>
+    <div class="stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
+    <div class="stat-sub">Available to spend or withdraw</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Earned</div>
+    <div class="stat-value cyan">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(total_earned) }}</div>
+    <div class="stat-sub">From completed tasks</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Spent</div>
+    <div class="stat-value purple">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(total_spent) }}</div>
+    <div class="stat-sub">On ad campaigns</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active Ads</div>
+    <div class="stat-value">{{ ads|selectattr('status','eq','active')|list|length }}</div>
+    <div class="stat-sub">Currently running campaigns</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+  <!-- My Recent Ads -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">My Ads</div>
+      <a href="{{ url_for('ads') }}" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% if ads %}
+    {% for ad in ads %}
+    <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:14px;font-weight:600">{{ ad.title }}</div>
+        <span class="badge badge-{{ ad.status }}">{{ ad.status }}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">{{ ad.platform }} · {{ ad.task_type }} · {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}/task</div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{{ [(ad.budget_spent/ad.budget*100)|int, 100]|min }}%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px">
+        <span>{{ ad.followers_gained }}/{{ ad.followers_target }} followers</span>
+        <span>{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget_spent) }}/{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget) }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state"><div class="empty-icon">📢</div><div class="empty-text">No ads yet. <a href="{{ url_for('ads') }}" style="color:var(--accent)">Create one!</a></div></div>
+    {% endif %}
+  </div>
+
+  <!-- Available Tasks -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">Available Tasks</div>
+      <a href="{{ url_for('tasks') }}" class="btn btn-outline btn-sm">View All</a>
+    </div>
+    {% if available_ads %}
+    {% for ad in available_ads[:5] %}
+    <div style="padding:12px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:14px;font-weight:600">{{ ad.title }}</div>
+        <div style="font-size:12px;color:var(--muted)">{{ ad.platform }} · {{ ad.task_type }}</div>
+      </div>
+      <div style="text-align:right">
+      <div style="font-size:15px;font-weight:700;color:var(--green)">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}</div>
+        <a href="{{ url_for('tasks') }}" class="btn btn-green btn-sm" style="margin-top:4px">Do it</a>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No tasks available right now.</div></div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Real-time Activity Feed -->
+<div class="card">
+  <div class="section-header">
+    <div class="section-title">⚡ Live Activity Feed</div>
+    <div style="font-size:12px;color:var(--green);display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;background:var(--green);border-radius:50%;display:inline-block;animation:pulse 2s infinite"></span>Live</div>
+  </div>
+  <div id="activity-feed">
+    <div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">Loading activity...</div>
+  </div>
+</div>
+
+<style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadActivity(){
+  try{
+    const r=await fetch('/api/activity');
+    const d=await r.json();
+    const el=document.getElementById('activity-feed');
+    if(!d.length){el.innerHTML='<div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">No activity yet. Be the first to complete a task!</div>';return;}
+    el.innerHTML=d.map(item=>`
+      <div class="activity-item">
+        <div class="activity-dot"></div>
+        <div style="flex:1;font-size:14px"><strong>${item.worker}</strong> completed task for <em>${item.ad}</em></div>
+        <div style="font-size:14px;font-weight:700;color:var(--green)">+{{ CURRENCY_SYMBOL }}${item.reward.toFixed(2)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-left:12px">${item.time}</div>
+      </div>`).join('');
+  }catch(e){}
+}
+loadActivity();
+setInterval(loadActivity,10000);
+</script>
+{% endblock %}

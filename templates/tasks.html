@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Tasks — DUYS Boost{% endblock %}
+{% block page_title %}Complete Tasks{% endblock %}
+{% block content %}
+<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);max-width:600px">
+  <div class="stat-card">
+    <div class="stat-label">Available</div>
+    <div class="stat-value cyan">{{ available|length }}</div>
+    <div class="stat-sub">Tasks to complete</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Completed</div>
+    <div class="stat-value green">{{ my_tasks|length }}</div>
+    <div class="stat-sub">Your submissions</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Balance</div>
+    <div class="stat-value purple">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
+    <div class="stat-sub">Current wallet</div>
+  </div>
+</div>
+
+<div class="section-header" style="margin-top:24px">
+  <div class="section-title">Available Tasks</div>
+</div>
+{% if available %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;margin-bottom:32px">
+{% for ad in available %}
+<div class="card glow-hover">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+    <div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:3px">{{ ad.platform }}</div>
+      <div style="font-size:15px;font-weight:700">{{ ad.title }}</div>
+    </div>
+    <div style="font-size:22px;font-weight:800;color:var(--green)">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}</div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <span class="badge badge-active">{{ ad.task_type }}</span>
+    <span style="font-size:12px;color:var(--muted);display:flex;align-items:center">
+      {{ ad.followers_gained }}/{{ ad.followers_target }} done
+      {% if ad.followers_target %}
+        · {{ ad.followers_target - ad.followers_gained }} left
+      {% endif %}
+    </span>
+  </div>
+  <a href="{{ ad.target_url }}" target="_blank" class="btn btn-outline btn-sm" style="margin-bottom:10px;width:100%;justify-content:center">
+    Open {{ ad.platform }} Page ↗
+  </a>
+  <button class="btn btn-green btn-sm" style="width:100%;justify-content:center" onclick="openSubmit({{ ad.id }},'{{ ad.title|replace("\"","\\'") }}')">
+    Submit Proof & Earn {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}
+  </button>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:48px">
+  <div style="font-size:48px;margin-bottom:12px">✅</div>
+  <div style="font-size:18px;font-weight:700;margin-bottom:8px">All tasks completed!</div>
+  <div style="color:var(--muted)">Check back soon for new tasks.</div>
+</div>
+{% endif %}
+
+<!-- My Task History -->
+<div class="section-header" style="margin-top:8px">
+  <div class="section-title">My Submission History</div>
+</div>
+<div class="card">
+{% if my_tasks %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Campaign</th><th>Proof Link</th><th>Reward</th><th>Status</th><th>Date</th></tr></thead>
+    <tbody>
+    {% for t in my_tasks %}
+    <tr>
+      <td style="font-weight:600">{{ t.ad_title }}</td>
+      <td><a href="{{ t.proof_link }}" target="_blank" style="color:var(--accent);font-size:12px">View Proof ↗</a></td>
+      <td style="color:var(--green);font-weight:700">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(t.reward) }}</td>
+      <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
+      <td style="color:var(--muted);font-size:12px">{{ t.submitted_at[:10] }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No submissions yet. Complete a task above to get started!</div></div>
+{% endif %}
+</div>
+{% endblock %}
+{% block modals %}
+<div class="modal-overlay" id="submit-modal">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="modal-title">Submit Proof</div>
+      <button onclick="closeSubmit()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:20px" id="submit-ad-name"></p>
+    <form id="submit-form">
+      <input type="hidden" name="ad_id" id="submit-ad-id">
+      <div class="form-group">
+        <label class="form-label">Proof Link</label>
+        <input class="form-input" name="proof_link" type="url" placeholder="https://instagram.com/p/your_screenshot_or_profile" required>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">Paste a link proving you completed the task (screenshot, profile URL, etc.)</div>
+      </div>
+      <div id="submit-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px">Submit & Claim Reward 💰</button>
+    </form>
+  </div>
+</div>
+<script>
+function openSubmit(id,title){
+  document.getElementById('submit-ad-id').value=id;
+  document.getElementById('submit-ad-name').textContent=`Task: ${title}`;
+  document.getElementById('submit-modal').classList.add('active');
+}
+function closeSubmit(){document.getElementById('submit-modal').classList.remove('active')}
+document.getElementById('submit-modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeSubmit()});
+document.getElementById('submit-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');
+  btn.textContent='Submitting...';btn.disabled=true;
+  const fd=new FormData(e.target);
+  const r=await fetch('/tasks/submit',{method:'POST',body:fd});
+  const d=await r.json();
+  btn.textContent='Submit & Claim Reward 💰';btn.disabled=false;
+  if(d.success){showToast(`🎉 Earned {{ CURRENCY_SYMBOL }}${d.earned.toFixed(2)}!`);closeSubmit();setTimeout(()=>location.reload(),1500);}
+  else{const el=document.getElementById('submit-error');el.style.display='block';el.textContent=d.error;}
+});
+</script>
+{% endblock %}

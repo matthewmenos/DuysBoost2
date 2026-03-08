@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Wallet — DUYS Boost{% endblock %}
+{% block page_title %}Wallet{% endblock %}
+{% block content %}
+<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);max-width:700px;margin-bottom:28px">
+  <div class="stat-card">
+    <div class="stat-label">Available Balance</div>
+    <div class="stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Deposited</div>
+    <div class="stat-value cyan">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','deposit')|sum(attribute='amount')) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Withdrawn</div>
+    <div class="stat-value purple">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','withdrawal')|sum(attribute='amount')) }}</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
+  <!-- Deposit -->
+  <div class="card">
+    <div class="section-title" style="margin-bottom:18px">💳 Add Funds</div>
+    <form id="deposit-form">
+      <div class="form-group">
+        <label class="form-label">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <input class="form-input" name="amount" type="number" step="0.01" min="1" placeholder="25.00" required>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        {% for amt in [5,10,25,50] %}
+        <button type="button" class="btn btn-outline btn-sm" onclick="setAmount({{ amt }})">{{ CURRENCY_SYMBOL }}{{ amt }}</button>
+        {% endfor %}
+      </div>
+      <div style="background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);border-radius:10px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:16px">
+        ℹ️ Payments are processed securely with Paystack in Ghana Cedis ({{ CURRENCY_CODE }}).
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Add Funds</button>
+    </form>
+  </div>
+  <!-- Withdraw -->
+  <div class="card">
+    <div class="section-title" style="margin-bottom:18px">🏦 Withdraw Funds</div>
+    <form id="withdraw-form">
+      <div class="form-group">
+        <label class="form-label">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <input class="form-input" name="amount" type="number" step="0.01" min="1" placeholder="10.00" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Method</label>
+        <select class="form-input" name="method" required>
+          <option value="">Select method...</option>
+          <option value="PayPal">PayPal</option>
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Mobile Money">Mobile Money</option>
+          <option value="Crypto">Cryptocurrency</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Account / Address</label>
+        <input class="form-input" name="account" placeholder="PayPal email or bank account" required>
+      </div>
+      <div id="withdraw-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:10px"></div>
+      <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">Request Withdrawal</button>
+    </form>
+  </div>
+</div>
+
+<!-- Transaction History -->
+<div class="card">
+  <div class="section-title" style="margin-bottom:18px">Transaction History</div>
+  {% if transactions %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+      <tbody>
+      {% for tx in transactions %}
+      <tr>
+        <td>
+          <span style="font-size:16px">
+            {% if tx.type=='deposit' %}💳{% elif tx.type=='withdrawal' %}🏦{% elif tx.type=='earn' %}💰{% else %}📢{% endif %}
+          </span>
+        </td>
+        <td style="font-size:14px">{{ tx.description }}</td>
+        <td style="font-weight:700;color:{% if tx.type in ['deposit','earn'] %}var(--green){% else %}var(--red){% endif %}">
+          {{ '+' if tx.type in ['deposit','earn'] else '-' }}{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(tx.amount) }}
+        </td>
+        <td><span class="badge badge-{{ tx.status }}">{{ tx.status }}</span></td>
+        <td style="font-size:12px;color:var(--muted)">{{ tx.created_at[:16] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No transactions yet.</div></div>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function setAmount(v){document.querySelector('#deposit-form [name=amount]').value=v}
+
+document.getElementById('deposit-form').addEventListener('submit',e=>{
+  e.preventDefault();
+  const form = e.target;
+  const amountField = form.querySelector('[name=amount]');
+  const amount = parseFloat(amountField.value || '0');
+  if(!amount || amount <= 0){
+    showToast('Enter a valid amount.','error');
+    return;
+  }
+  if(!window.PaystackPop){
+    showToast('Payment gateway not loaded. Please try again.','error');
+    return;
+  }
+  const handler = PaystackPop.setup({
+    key: '{{ PAYSTACK_PUBLIC_KEY }}',
+    email: '{{ current_user.email }}',
+    amount: Math.round(amount * 100),
+    currency: '{{ CURRENCY_CODE }}',
+    callback: async function(response){
+      try{
+        const r = await fetch('/wallet/deposit',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({reference: response.reference, amount: amount})
+        });
+        const d = await r.json();
+        if(d.success){
+          showToast('Funds added via Paystack!');
+          setTimeout(()=>location.reload(),1000);
+        } else {
+          showToast(d.error || 'Could not confirm payment.','error');
+        }
+      }catch(err){
+        showToast('Error confirming payment.','error');
+      }
+    },
+    onClose: function(){
+      showToast('Payment window closed.','error');
+    }
+  });
+  handler.openIframe();
+});
+
+document.getElementById('withdraw-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');btn.textContent='Submitting...';btn.disabled=true;
+  const r=await fetch('/wallet/withdraw',{method:'POST',body:new FormData(e.target)});
+  const d=await r.json();
+  btn.textContent='Request Withdrawal';btn.disabled=false;
+  if(d.success){showToast('Withdrawal request submitted!');setTimeout(()=>location.reload(),1000);}
+  else{const el=document.getElementById('withdraw-error');el.style.display='block';el.textContent=d.error;}
+});
+</script>
+{% endblock %}
