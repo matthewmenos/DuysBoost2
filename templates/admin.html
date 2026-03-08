@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel — DUYS Boost{% endblock %}
+{% block page_title %}Admin Panel{% endblock %}
+{% block content %}
+<div style="background:rgba(255,82,82,.08);border:1px solid rgba(255,82,82,.3);border-radius:12px;padding:14px 20px;margin-bottom:24px;font-size:14px;color:var(--red)">
+  🛡️ <strong>Admin access only.</strong> Changes here affect all users.
+</div>
+
+<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);max-width:600px;margin-bottom:28px">
+  <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value cyan">{{ total_users }}</div></div>
+  <div class="stat-card"><div class="stat-label">Total Ads</div><div class="stat-value purple">{{ total_ads }}</div></div>
+  <div class="stat-card"><div class="stat-label">Volume ({{ CURRENCY_SYMBOL }})</div><div class="stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(total_vol) }}</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
+  <!-- Pending Withdrawals -->
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px">⏳ Pending Withdrawals</div>
+    {% if withdrawals %}
+    <div style="display:flex;flex-direction:column;gap:12px">
+    {% for w in withdrawals %}
+    <div style="background:var(--surface2);border-radius:12px;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600">{{ w.username }}</div>
+          <div style="font-size:13px;color:var(--muted)">{{ w.method }} · {{ w.account }}</div>
+        </div>
+        <div style="font-size:18px;font-weight:800;color:var(--yellow)">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-green btn-sm" onclick="processWdr({{ w.id }},'approve',this)">Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="processWdr({{ w.id }},'reject',this)">Reject</button>
+      </div>
+    </div>
+    {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No pending withdrawals.</div></div>
+    {% endif %}
+  </div>
+
+  <!-- Deposit to User -->
+  <div class="card">
+    <div class="section-title" style="margin-bottom:16px">💰 Deposit Funds to User</div>
+    <form id="admin-deposit-form">
+      <div class="form-group">
+        <label class="form-label">Select User</label>
+        <select class="form-input" name="user_id" required>
+          <option value="">Choose user...</option>
+          {% for u in users %}
+          {% if not u.is_admin %}
+          <option value="{{ u.id }}">{{ u.username }} ({{ CURRENCY_SYMBOL }}{{ '%.2f'|format(u.balance) }})</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <input class="form-input" name="amount" type="number" step="0.01" min="0.01" placeholder="10.00" required>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Credit User</button>
+    </form>
+  </div>
+</div>
+
+<!-- All Users -->
+<div class="card" style="margin-bottom:24px">
+  <div class="section-title" style="margin-bottom:16px">👥 All Users</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Username</th><th>Email</th><th>Balance</th><th>Joined</th><th>Admin</th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr>
+        <td style="font-weight:600">{{ u.username }}</td>
+        <td style="font-size:13px;color:var(--muted)">{{ u.email }}</td>
+        <td style="color:var(--green);font-weight:700">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(u.balance) }}</td>
+        <td style="font-size:13px;color:var(--muted)">{{ u.created_at[:10] }}</td>
+        <td>{% if u.is_admin %}<span class="badge badge-active">Yes</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- All Ads -->
+<div class="card">
+  <div class="section-title" style="margin-bottom:16px">📢 All Campaigns</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Title</th><th>Owner</th><th>Platform</th><th>Budget</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for ad in ads %}
+      <tr>
+        <td style="font-weight:600">{{ ad.title }}</td>
+        <td style="font-size:13px;color:var(--muted)">{{ ad.owner_name }}</td>
+        <td>{{ ad.platform }}</td>
+        <td style="font-size:13px">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget_spent) }}/{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget) }}</td>
+        <td><span class="badge badge-{{ ad.status }}">{{ ad.status }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function processWdr(id, action, btn){
+  btn.disabled=true;btn.textContent='...';
+  const r=await fetch(`/admin/withdrawal/${id}/${action}`,{method:'POST'});
+  const d=await r.json();
+  if(d.success){showToast(`Withdrawal ${action}d`);btn.closest('[style]').remove();}
+  else{btn.disabled=false;btn.textContent=action;}
+}
+document.getElementById('admin-deposit-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');btn.textContent='Processing...';btn.disabled=true;
+  const r=await fetch('/admin/deposit_user',{method:'POST',body:new FormData(e.target)});
+  const d=await r.json();
+  btn.textContent='Credit User';btn.disabled=false;
+  if(d.success){showToast('Funds credited!');e.target.reset();}
+  else showToast('Error occurred','error');
+});
+</script>
+{% endblock %}

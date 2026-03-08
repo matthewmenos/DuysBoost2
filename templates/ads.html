@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}My Ads — DUYS Boost{% endblock %}
+{% block page_title %}Ad Campaigns{% endblock %}
+{% block content %}
+<div class="section-header">
+  <div>
+    <div class="section-title">My Campaigns</div>
+    <div style="font-size:14px;color:var(--muted);margin-top:4px">Balance: <span style="color:var(--green);font-weight:700">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</span></div>
+  </div>
+  <button class="btn btn-primary" onclick="openModal('create-ad-modal')">+ New Ad</button>
+</div>
+
+{% if ads %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
+{% for ad in ads %}
+<div class="card glow-hover" id="ad-card-{{ ad.id }}">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+    <div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">{{ ad.platform }}</div>
+      <div style="font-size:16px;font-weight:700">{{ ad.title }}</div>
+    </div>
+    <span class="badge badge-{{ ad.status }}" id="ad-status-{{ ad.id }}">{{ ad.status }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div style="background:var(--surface2);border-radius:10px;padding:12px">
+      <div style="font-size:11px;color:var(--muted)">Task Type</div>
+      <div style="font-size:14px;font-weight:600;margin-top:2px">{{ ad.task_type }}</div>
+    </div>
+    <div style="background:var(--surface2);border-radius:10px;padding:12px">
+      <div style="font-size:11px;color:var(--muted)">Reward/Task</div>
+      <div style="font-size:14px;font-weight:600;margin-top:2px;color:var(--green)">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}</div>
+    </div>
+    <div style="background:var(--surface2);border-radius:10px;padding:12px">
+      <div style="font-size:11px;color:var(--muted)">Followers</div>
+      <div style="font-size:14px;font-weight:600;margin-top:2px">
+        {{ ad.followers_gained }}/{{ ad.followers_target }}
+        {% if ad.followers_target %}
+          <span style="font-size:12px;color:var(--muted)">({{ ad.followers_target - ad.followers_gained }} left)</span>
+        {% endif %}
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-radius:10px;padding:12px">
+      <div style="font-size:11px;color:var(--muted)">Budget Used</div>
+      <div style="font-size:14px;font-weight:600;margin-top:2px">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget_spent) }}/{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget) }}</div>
+    </div>
+  </div>
+  <div class="progress-bar" style="margin-bottom:12px">
+    <div class="progress-fill" style="width:{{ [(ad.budget_spent/ad.budget*100)|int,100]|min }}%"></div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="{{ ad.target_url }}" target="_blank" class="btn btn-outline btn-sm">View URL</a>
+    <button class="btn btn-sm {% if ad.status=='active' %}btn-danger{% else %}btn-green{% endif %}" onclick="toggleAd({{ ad.id }})">
+      <span id="toggle-text-{{ ad.id }}">{{ 'Pause' if ad.status=='active' else 'Resume' }}</span>
+    </button>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:60px">
+  <div style="font-size:56px;margin-bottom:16px">📢</div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:8px">No campaigns yet</div>
+  <div style="color:var(--muted);margin-bottom:24px">Create your first ad campaign to start gaining followers!</div>
+  <button class="btn btn-primary" onclick="openModal('create-ad-modal')">Create Your First Ad</button>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block modals %}
+<!-- Create Ad Modal -->
+<div class="modal-overlay" id="create-ad-modal">
+  <div class="modal" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="modal-title">Create New Campaign</div>
+      <button onclick="closeModal('create-ad-modal')" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <form id="create-ad-form">
+      <div class="form-group">
+        <label class="form-label">Campaign Title</label>
+        <input class="form-input" name="title" placeholder="e.g. Follow my Instagram" required>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group">
+          <label class="form-label">Platform</label>
+          <select class="form-input" name="platform" required>
+            <option value="">Select...</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Twitter/X">Twitter/X</option>
+            <option value="YouTube">YouTube</option>
+            <option value="TikTok">TikTok</option>
+            <option value="Facebook">Facebook</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Task Type</label>
+          <select class="form-input" name="task_type" required>
+            <option value="">Select...</option>
+            <option value="Follow">Follow</option>
+            <option value="Like">Like</option>
+            <option value="Subscribe">Subscribe</option>
+            <option value="Comment">Comment</option>
+            <option value="Share">Share</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target URL</label>
+        <div style="display:flex;gap:6px">
+          <input class="form-input" id="target-prefix" type="text" value="" style="max-width:55%" readonly placeholder="Select platform first">
+          <input class="form-input" id="target-handle" type="text" placeholder="yourhandle" style="flex:1">
+        </div>
+        <input type="hidden" name="target_url" id="target-url-hidden" required>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+        <div class="form-group">
+          <label class="form-label">Budget ({{ CURRENCY_SYMBOL }})</label>
+          <input class="form-input" name="budget" id="budget-field" type="number" step="0.01" min="1" placeholder="10.00" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reward/Task ({{ CURRENCY_SYMBOL }})</label>
+          <input class="form-input" name="reward_per_task" id="reward-field" type="number" step="0.01" min="0.01" value="{{ '%.2f'|format(worker_reward) }}" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Followers</label>
+          <input class="form-input" name="followers_target" id="followers-field" type="number" min="1" placeholder="100">
+        </div>
+      </div>
+      <div id="ad-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:12px"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px">Launch Campaign 🚀</button>
+    </form>
+  </div>
+</div>
+<script>
+const PLATFORM_PREFIXES = {
+  'Instagram': 'https://instagram.com/',
+  'Twitter/X': 'https://twitter.com/',
+  'YouTube': 'https://www.youtube.com/',
+  'TikTok': 'https://www.tiktok.com/@',
+  'Facebook': 'https://facebook.com/'
+};
+
+function openModal(id){document.getElementById(id).classList.add('active')}
+function closeModal(id){document.getElementById(id).classList.remove('active')}
+document.querySelector('.modal-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal(e.currentTarget.id)});
+
+// Auto-generate social URL prefix and full target URL
+const platformSelect = document.querySelector('#create-ad-form select[name="platform"]');
+const prefixInput = document.getElementById('target-prefix');
+const handleInput = document.getElementById('target-handle');
+const targetHidden = document.getElementById('target-url-hidden');
+const followersField = document.getElementById('followers-field');
+const budgetField = document.getElementById('budget-field');
+
+if(platformSelect){
+  platformSelect.addEventListener('change',()=>{
+    const p = PLATFORM_PREFIXES[platformSelect.value] || '';
+    prefixInput.value = p;
+    updateTargetUrl();
+  });
+}
+if(handleInput){
+  handleInput.addEventListener('input',updateTargetUrl);
+}
+
+function updateTargetUrl(){
+  const prefix = prefixInput.value || '';
+  const handle = (handleInput.value || '').replace(/^@/,'').trim();
+  if(prefix && handle){
+    targetHidden.value = prefix + handle;
+  } else {
+    targetHidden.value = '';
+  }
+}
+
+// Auto-calc budget from followers based on fixed pricing
+const LISTER_COST_PER_TASK = {{ '%.2f'|format(lister_cost) }};
+if(followersField){
+  followersField.addEventListener('input',()=>{
+    const followers = parseInt(followersField.value || '0',10);
+    if(followers > 0){
+      budgetField.value = (followers * LISTER_COST_PER_TASK).toFixed(2);
+    } else {
+      budgetField.value = '';
+    }
+  });
+}
+
+document.getElementById('create-ad-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('[type=submit]');
+  btn.textContent='Launching...';btn.disabled=true;
+  const fd=new FormData(e.target);
+  const r=await fetch('/ads/create',{method:'POST',body:fd});
+  const d=await r.json();
+  btn.textContent='Launch Campaign 🚀';btn.disabled=false;
+  if(d.success){showToast('Campaign launched!');closeModal('create-ad-modal');setTimeout(()=>location.reload(),1000);}
+  else{const el=document.getElementById('ad-error');el.style.display='block';el.textContent=d.error;}
+});
+
+async function toggleAd(id){
+  const r=await fetch(`/ads/${id}/toggle`,{method:'POST'});
+  const d=await r.json();
+  if(d.success){
+    const badge=document.getElementById(`ad-status-${id}`);
+    const text=document.getElementById(`toggle-text-${id}`);
+    badge.className=`badge badge-${d.status}`;
+    badge.textContent=d.status;
+    text.textContent=d.status==='active'?'Pause':'Resume';
+    showToast(`Ad ${d.status}`);
+  }
+}
+</script>
+{% endblock %}
