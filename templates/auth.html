@@ -1,107 +1,274 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Sign Up' if mode=='signup' else 'Sign In' }} — DUYS Boost{% endblock %}
-{% block content %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block head_extra %}
 <style>
-.auth-page{min-height:calc(100vh - 60px);display:flex;align-items:center;justify-content:center;margin:-28px;background:var(--bg);position:relative}
-.auth-page::before{content:'';position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(124,77,255,.1) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
-.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:40px;width:100%;max-width:440px;position:relative;z-index:1}
-.auth-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px}
-.auth-title{font-size:26px;font-weight:800;margin-bottom:6px}
-.auth-sub{font-size:14px;color:var(--muted);margin-bottom:28px}
-.auth-tabs{display:flex;background:var(--surface2);border-radius:12px;padding:4px;margin-bottom:28px}
-.auth-tab{flex:1;text-align:center;padding:9px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;color:var(--muted)}
-.auth-tab.active{background:var(--surface);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.divider{display:flex;align-items:center;gap:14px;margin:20px 0;color:var(--muted);font-size:13px}
-.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
-.social-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:11px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;color:var(--text)}
-.social-btn:hover{border-color:var(--accent)}
-.error-list{background:rgba(255,82,82,.1);border:1px solid rgba(255,82,82,.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--red)}
+body.auth-body { background: var(--bg); }
+.auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+  position: relative;
+  overflow-x: hidden;
+}
+.auth-page::before {
+  content: '';
+  position: absolute;
+  width: min(90vw, 600px);
+  height: min(90vw, 600px);
+  background: radial-gradient(circle, rgba(124,77,255,.12) 0%, transparent 65%);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 440px;
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--shadow-lg);
+}
+@media (min-width: 520px) { .auth-card { padding: 36px 32px; } }
+
+.auth-logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+@media (min-width: 520px) { .auth-logo { justify-content: flex-start; margin-bottom: 24px; } }
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 5vw, 24px);
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.auth-sub {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-bottom: 22px;
+  line-height: 1.5;
+}
+
+.auth-tabs {
+  display: flex;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  color: var(--muted);
+  text-decoration: none;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+}
+.auth-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.social-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 420px) { .social-row { grid-template-columns: 1fr 1fr; } }
+
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  color: var(--text);
+  min-height: 44px;
+}
+.social-btn:hover { border-color: var(--accent); background: var(--surface-3); }
+
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  text-decoration: none;
+}
+.auth-back:hover { color: var(--accent); }
 </style>
+{% endblock %}
+
+{% block layout %}
 <div class="auth-page">
   <div class="auth-card">
+    <a href="{{ url_for('index') }}" class="auth-back">← Back to home</a>
     <div class="auth-logo">
-      <div class="logo-mark">D</div>
+      <div class="logo-mark" aria-hidden="true">D</div>
       <div class="logo-text">DUYS Boost</div>
     </div>
-    <div class="auth-tabs">
-      <div class="auth-tab {% if mode=='login' %}active{% endif %}" onclick="window.location='{{ url_for('login') }}'">Sign In</div>
-      <div class="auth-tab {% if mode=='signup' %}active{% endif %}" onclick="window.location='{{ url_for('signup') }}'">Sign Up</div>
+
+    <div class="auth-title">{{ 'Create your account' if mode == 'signup' else 'Welcome back' }}</div>
+    <div class="auth-sub">{{ 'Start growing your social presence in minutes.' if mode == 'signup' else 'Sign in to continue to your dashboard.' }}</div>
+
+    <div class="auth-tabs" role="tablist">
+      <a class="auth-tab {% if mode=='login' %}active{% endif %}" href="{{ url_for('login') }}" role="tab">Sign In</a>
+      <a class="auth-tab {% if mode=='signup' %}active{% endif %}" href="{{ url_for('signup') }}" role="tab">Sign Up</a>
     </div>
-    <div id="error-box" class="error-list" style="display:none"></div>
+
+    <div id="error-box" class="error-list" style="display:none" role="alert"></div>
+
     {% if mode == 'login' %}
-    <form id="auth-form">
+    <form id="auth-form" novalidate>
       <div class="form-group">
-        <label class="form-label">Email or Username</label>
-        <input class="form-input" name="identifier" type="text" placeholder="you@example.com" required>
+        <label class="form-label" for="login-id">Email or Username</label>
+        <input class="form-input" id="login-id" name="identifier" type="text" autocomplete="username" placeholder="you@example.com" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
-        <div style="position:relative">
-          <input class="form-input" name="password" type="password" placeholder="••••••••" required id="pw-field">
-          <span onclick="togglePw()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px" id="pw-eye">👁️</span>
+        <label class="form-label" for="pw-field">Password</label>
+        <div class="password-wrap">
+          <input class="form-input" id="pw-field" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          <button type="button" class="password-toggle" onclick="togglePw()" aria-label="Show password" id="pw-eye">👁️</button>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;font-size:15px">Sign In →</button>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Sign In →</button>
     </form>
+
     <div class="divider">or continue with</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <button class="social-btn" type="button" onclick="window.location='{{ url_for('google_login_route') }}'">🌐 Google</button>
-      <button class="social-btn" type="button" onclick="window.location='{{ url_for('apple_login_route') }}'"> Apple</button>
+    <div class="social-row">
+      <button class="social-btn" type="button" onclick="window.location='{{ url_for('google_login_route') }}'">
+        <span aria-hidden="true">🌐</span> Google
+      </button>
+      <button class="social-btn" type="button" onclick="window.location='{{ url_for('apple_login_route') }}'">
+        <span aria-hidden="true"></span> Apple
+      </button>
     </div>
+
     {% else %}
-    <form id="auth-form">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <form id="auth-form" novalidate>
+      <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">Username</label>
-          <input class="form-input" name="username" type="text" placeholder="cooluser" required>
+          <label class="form-label" for="su-username">Username</label>
+          <input class="form-input" id="su-username" name="username" type="text" autocomplete="username" placeholder="cooluser" minlength="3" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Referral Code <span style="color:var(--muted)">(optional)</span></label>
-          <input class="form-input" name="referral_code" type="text" placeholder="abc123">
+          <label class="form-label" for="su-ref">Referral <span class="optional">(optional)</span></label>
+          <input class="form-input" id="su-ref" name="referral_code" type="text" placeholder="abc123">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Email</label>
-        <input class="form-input" name="email" type="email" placeholder="you@example.com" required>
+        <label class="form-label" for="su-email">Email</label>
+        <input class="form-input" id="su-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
-        <div style="position:relative">
-          <input class="form-input" name="password" type="password" placeholder="Min. 8 characters" required id="pw-field">
-          <span onclick="togglePw()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:16px" id="pw-eye">👁️</span>
+        <label class="form-label" for="pw-field">Password</label>
+        <div class="password-wrap">
+          <input class="form-input" id="pw-field" name="password" type="password" autocomplete="new-password" placeholder="Min. 8 characters" minlength="8" required>
+          <button type="button" class="password-toggle" onclick="togglePw()" aria-label="Show password" id="pw-eye">👁️</button>
+        </div>
+        <div class="pw-strength" data-strength-for="pw-field" data-level="0">
+          <div class="pw-strength-bar"><span></span><span></span><span></span><span></span></div>
+          <div class="pw-strength-label"></div>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Confirm Password</label>
-        <input class="form-input" name="confirm_password" type="password" placeholder="••••••••" required>
+        <label class="form-label" for="su-confirm">Confirm Password</label>
+        <input class="form-input" id="su-confirm" name="confirm_password" type="password" autocomplete="new-password" placeholder="••••••••" required>
       </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;font-size:15px">Create Account →</button>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Create Account →</button>
     </form>
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-function togglePw(){
-  const f=document.getElementById('pw-field');
-  const e=document.getElementById('pw-eye');
-  f.type=f.type==='password'?'text':'password';
-  e.textContent=f.type==='password'?'👁️':'🙈';
+function togglePw() {
+  const f = document.getElementById('pw-field');
+  const e = document.getElementById('pw-eye');
+  const isPw = f.type === 'password';
+  f.type = isPw ? 'text' : 'password';
+  e.textContent = isPw ? '🙈' : '👁️';
+  e.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
 }
-document.getElementById('auth-form').addEventListener('submit',async e=>{
+
+// Pre-fill referral from ?ref= query param
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('ref');
+  const refInput = document.getElementById('su-ref');
+  if (ref && refInput) refInput.value = ref;
+})();
+
+document.getElementById('auth-form').addEventListener('submit', async e => {
   e.preventDefault();
-  const btn=e.target.querySelector('[type=submit]');
-  btn.textContent='Loading...';btn.disabled=true;
-  const fd=new FormData(e.target);
-  const action='{{ url_for("login") if mode=="login" else url_for("signup") }}';
-  const r=await fetch(action,{method:'POST',body:fd});
-  const d=await r.json();
-  btn.textContent=btn.textContent.replace('Loading...','{{ "Sign In →" if mode=="login" else "Create Account →" }}');
-  btn.disabled=false;
-  if(d.success){window.location=d.redirect;}
-  else{
-    const eb=document.getElementById('error-box');
-    eb.style.display='block';
-    eb.innerHTML=d.errors.join('<br>');
+  const form = e.target;
+  const btn = form.querySelector('[type=submit]');
+  const originalText = btn.textContent;
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+  try {
+    const fd = new FormData(form);
+    const action = '{{ url_for("login") if mode=="login" else url_for("signup") }}';
+    const r = await fetch(action, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      window.location = d.redirect;
+      return;
+    }
+    const eb = document.getElementById('error-box');
+    eb.style.display = 'block';
+    eb.innerHTML = (d.errors || ['Something went wrong.']).map(escapeHtml).join('<br>');
+    eb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (_err) {
+    showToast('Network error. Please try again.', 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 });
 </script>

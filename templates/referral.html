@@ -1,39 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Referrals — DUYS Boost{% endblock %}
 {% block page_title %}Referral Program{% endblock %}
+
 {% block content %}
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
-  <div class="card" style="background:linear-gradient(135deg,rgba(124,77,255,.1),rgba(0,229,255,.1));border-color:rgba(124,77,255,.3)">
-    <div style="font-size:40px;margin-bottom:14px">🎁</div>
-    <div class="section-title" style="margin-bottom:8px">Your Referral Code</div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;font-family:monospace;font-size:22px;font-weight:800;letter-spacing:.15em;color:var(--accent);text-align:center;margin-bottom:16px">
+<div class="split-2">
+  <div class="card" style="background:var(--gradient-subtle);border-color:rgba(124,77,255,.25)">
+    <div style="font-size:40px;margin-bottom:12px">🎁</div>
+    <div class="section-title mb-8">Your Referral Code</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:clamp(18px,5vw,22px);font-weight:800;letter-spacing:.15em;color:var(--accent);text-align:center;margin-bottom:16px;overflow-wrap:anywhere">
       {{ current_user.referral_code }}
     </div>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-primary" onclick="copyCode()" style="flex:1;justify-content:center">📋 Copy Code</button>
-      <button class="btn btn-outline" onclick="shareLink()" style="flex:1;justify-content:center">🔗 Share Link</button>
+    <div class="form-grid-2" style="gap:10px">
+      <button class="btn btn-primary" onclick="copyCode()">📋 Copy Code</button>
+      <button class="btn btn-outline" onclick="shareLink()">🔗 Share Link</button>
     </div>
   </div>
+
   <div class="card">
-    <div class="section-title" style="margin-bottom:16px">How It Works</div>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div style="display:flex;gap:14px;align-items:flex-start">
+    <div class="section-title mb-16">How It Works</div>
+    <div class="flex flex-col gap-12">
+      <div class="flex gap-12 items-center">
         <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:grid;place-items:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0">1</div>
-        <div><div style="font-weight:600;margin-bottom:2px">Share your code</div><div style="font-size:13px;color:var(--muted)">Send your referral code or link to friends.</div></div>
+        <div>
+          <div class="fw-700 mb-8" style="margin-bottom:2px">Share your code</div>
+          <div class="text-sm text-muted">Send your referral code or link to friends.</div>
+        </div>
       </div>
-      <div style="display:flex;gap:14px;align-items:flex-start">
-        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent2);display:grid;place-items:center;font-weight:700;font-size:14px;color:#000;flex-shrink:0">2</div>
-        <div><div style="font-weight:600;margin-bottom:2px">Friend signs up</div><div style="font-size:13px;color:var(--muted)">They create an account using your code.</div></div>
+      <div class="flex gap-12 items-center">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--accent-2);display:grid;place-items:center;font-weight:700;font-size:14px;color:#000;flex-shrink:0">2</div>
+        <div>
+          <div class="fw-700 mb-8" style="margin-bottom:2px">Friend signs up</div>
+          <div class="text-sm text-muted">They create an account using your code.</div>
+        </div>
       </div>
-      <div style="display:flex;gap:14px;align-items:flex-start">
+      <div class="flex gap-12 items-center">
         <div style="width:32px;height:32px;border-radius:50%;background:var(--green);display:grid;place-items:center;font-weight:700;font-size:14px;color:#000;flex-shrink:0">3</div>
-        <div><div style="font-weight:600;margin-bottom:2px">You earn {{ CURRENCY_SYMBOL }}1.00</div><div style="font-size:13px;color:var(--muted)">Instantly credited to your wallet.</div></div>
+        <div>
+          <div class="fw-700 mb-8" style="margin-bottom:2px">You earn {{ CURRENCY_SYMBOL }}1.00</div>
+          <div class="text-sm text-muted">Instantly credited to your wallet.</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="stats-grid" style="grid-template-columns:1fr 1fr;max-width:400px;margin-bottom:28px">
+<div class="stats-grid-2" style="max-width:480px">
   <div class="stat-card">
     <div class="stat-label">Total Referred</div>
     <div class="stat-value cyan">{{ referred_users|length }}</div>
@@ -45,37 +56,77 @@
 </div>
 
 <div class="card">
-  <div class="section-title" style="margin-bottom:16px">Referred Users</div>
+  <div class="section-title mb-16">Referred Users</div>
   {% if referred_users %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Username</th><th>Joined</th><th>Reward</th></tr></thead>
+      <thead>
+        <tr><th>Username</th><th>Joined</th><th>Reward</th></tr>
+      </thead>
       <tbody>
       {% for u in referred_users %}
       <tr>
-        <td style="font-weight:600">{{ u.username }}</td>
-        <td style="font-size:13px;color:var(--muted)">{{ u.created_at[:10] }}</td>
-        <td style="color:var(--green);font-weight:700">+{{ CURRENCY_SYMBOL }}1.00</td>
+        <td class="fw-700">{{ u.username }}</td>
+        <td class="text-xs text-muted">{{ u.created_at[:10] }}</td>
+        <td class="text-green fw-700">+{{ CURRENCY_SYMBOL }}1.00</td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No referrals yet. Share your code to start earning!</div></div>
+  <div class="empty-state">
+    <div class="empty-icon">👥</div>
+    <div class="empty-title">No referrals yet</div>
+    <div class="empty-text">Share your code to start earning!</div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
-function copyCode(){
-  navigator.clipboard.writeText('{{ current_user.referral_code }}');
-  showToast('Referral code copied!');
+const REFERRAL_CODE = {{ current_user.referral_code|tojson }};
+
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_e) { /* fall through */ }
+  // Fallback for non-secure contexts / older browsers
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_e) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
 }
-function shareLink(){
-  const link=`${window.location.origin}/signup?ref={{ current_user.referral_code }}`;
-  navigator.clipboard.writeText(link);
-  showToast('Referral link copied!');
+
+async function copyCode() {
+  const ok = await copyToClipboard(REFERRAL_CODE);
+  showToast(ok ? 'Referral code copied!' : 'Copy failed — copy manually.', ok ? 'success' : 'error');
 }
+
+async function shareLink() {
+  const link = window.location.origin + '/signup?ref=' + encodeURIComponent(REFERRAL_CODE);
+  // Try native share on mobile first
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Join DUYS Boost', text: 'Sign up with my referral code!', url: link });
+      return;
+    } catch (_e) { /* cancelled — fall back to clipboard */ }
+  }
+  const ok = await copyToClipboard(link);
+  showToast(ok ? 'Referral link copied!' : 'Copy failed — copy manually.', ok ? 'success' : 'error');
+}
+
+window.copyCode = copyCode;
+window.shareLink = shareLink;
 </script>
 {% endblock %}

@@ -1,47 +1,269 @@
 {% extends "base.html" %}
 {% block title %}DUYS Boost — Grow Your Social Media{% endblock %}
-{% block content %}
+{% block body_class %}landing-body{% endblock %}
+
+{% block head_extra %}
 <style>
-.landing{max-width:100%;margin:-28px;background:var(--bg)}
-.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;width:800px;height:800px;background:radial-gradient(circle,rgba(124,77,255,.15) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(124,77,255,.1);border:1px solid rgba(124,77,255,.3);border-radius:20px;padding:6px 16px;font-size:13px;font-weight:600;color:var(--accent);margin-bottom:28px}
-.hero h1{font-size:clamp(40px,7vw,80px);font-weight:800;line-height:1.05;margin-bottom:20px;max-width:900px}
-.hero h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero p{font-size:18px;color:var(--muted);max-width:560px;line-height:1.7;margin-bottom:36px}
-.hero-ctas{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
-.features{padding:80px 40px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;max-width:1100px;margin:0 auto}
-.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;transition:all .3s}
-.feature-card:hover{transform:translateY(-4px);border-color:var(--accent);box-shadow:var(--shadow)}
-.feature-icon{font-size:36px;margin-bottom:16px}
-.feature-title{font-size:18px;font-weight:700;margin-bottom:8px}
-.feature-desc{font-size:14px;color:var(--muted);line-height:1.6}
-.cta-section{text-align:center;padding:80px 24px;background:linear-gradient(135deg,rgba(124,77,255,.05),rgba(0,229,255,.05))}
-.cta-section h2{font-size:40px;margin-bottom:16px}
-.cta-section p{color:var(--muted);margin-bottom:32px;font-size:16px}
+/* Landing page owns its own layout — no sidebar / topbar / page-content wrapper */
+body.landing-body { background: var(--bg); }
+.landing {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  overflow-x: hidden;
+}
+.landing-header {
+  position: sticky; top: 0; z-index: 50;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .landing-header { padding: 16px 32px; }
+}
+.landing-header .logo-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.landing-header .logo-text { font-size: 16px; }
+@media (min-width: 480px) { .landing-header .logo-text { font-size: 18px; } }
+
+.landing-header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 20px 72px;
+  overflow: hidden;
+  min-height: calc(100vh - 60px);
+  min-height: calc(100dvh - 60px);
+}
+@media (min-width: 720px) {
+  .hero { padding: 80px 32px 96px; }
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  width: min(120vw, 900px);
+  height: min(120vw, 900px);
+  background: radial-gradient(circle, rgba(124,77,255,.18) 0%, transparent 65%);
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+}
+.hero > * { position: relative; z-index: 1; }
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(124,77,255,.1);
+  border: 1px solid rgba(124,77,255,.3);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 24px;
+}
+@media (min-width: 480px) { .hero-badge { font-size: 13px; padding: 6px 16px; } }
+
+.hero h1 {
+  font-size: clamp(32px, 9vw, 72px);
+  font-weight: 800;
+  line-height: 1.05;
+  margin-bottom: 18px;
+  max-width: 900px;
+  letter-spacing: -.02em;
+  padding: 0 4px;
+}
+.hero h1 span {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero p {
+  font-size: clamp(14.5px, 3.8vw, 18px);
+  color: var(--text-dim);
+  max-width: 560px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+  padding: 0 4px;
+}
+.hero-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+}
+@media (min-width: 520px) {
+  .hero-ctas {
+    flex-direction: row;
+    justify-content: center;
+    max-width: none;
+    gap: 12px;
+  }
+}
+
+/* ── Features ─────────────────────────────────────────────────────────── */
+.features {
+  padding: 56px 20px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+@media (min-width: 560px) {
+  .features { grid-template-columns: 1fr 1fr; gap: 18px; padding: 72px 24px; }
+}
+@media (min-width: 960px) {
+  .features { grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 96px 32px; }
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+@media (min-width: 640px) { .feature-card { padding: 28px 24px; } }
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+.feature-icon { font-size: 30px; margin-bottom: 12px; }
+@media (min-width: 640px) { .feature-icon { font-size: 34px; margin-bottom: 14px; } }
+.feature-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+@media (min-width: 480px) { .feature-title { font-size: 17px; } }
+.feature-desc {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+@media (min-width: 480px) { .feature-desc { font-size: 14px; } }
+
+/* ── CTA section ──────────────────────────────────────────────────────── */
+.cta-section {
+  text-align: center;
+  padding: 56px 20px;
+  background: var(--gradient-subtle);
+}
+@media (min-width: 720px) { .cta-section { padding: 80px 32px; } }
+.cta-section h2 {
+  font-size: clamp(24px, 6.5vw, 40px);
+  margin-bottom: 12px;
+  letter-spacing: -.01em;
+  padding: 0 4px;
+}
+.cta-section p {
+  color: var(--text-dim);
+  margin: 0 auto 24px;
+  font-size: clamp(13.5px, 3.5vw, 16px);
+  max-width: 500px;
+  line-height: 1.6;
+  padding: 0 4px;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+.landing-footer {
+  padding: 20px 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+@media (min-width: 720px) { .landing-footer { padding: 28px 32px; font-size: 12.5px; } }
 </style>
+{% endblock %}
+
+{% block layout %}
 <div class="landing">
-  <div class="hero">
+  <header class="landing-header">
+    <a href="{{ url_for('index') }}" class="logo-row">
+      <div class="logo-mark" aria-hidden="true">D</div>
+      <div class="logo-text">DUYS Boost</div>
+    </a>
+    <div class="landing-header-actions">
+      <a href="{{ url_for('login') }}" class="btn btn-outline btn-sm hide-mobile">Sign In</a>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+  </header>
+
+  <section class="hero">
     <div class="hero-badge">⚡ Powered by real users</div>
     <h1>Boost Your <span>Social Media</span><br>Presence Today</h1>
-    <p>Create ad campaigns, earn by completing tasks, and grow your audience — all in one powerful platform.</p>
+    <p>Create ad campaigns, earn by completing tasks, and grow your audience — all in one powerful platform built for Ghana.</p>
     <div class="hero-ctas">
-      <a href="{{ url_for('signup') }}" class="btn btn-primary" style="font-size:16px;padding:14px 32px">Get Started Free →</a>
-      <a href="{{ url_for('login') }}" class="btn btn-outline" style="font-size:16px;padding:14px 32px">Sign In</a>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Get Started Free →</a>
+      <a href="{{ url_for('login') }}" class="btn btn-outline btn-lg">Sign In</a>
     </div>
-  </div>
-  <div class="features">
-    <div class="feature-card"><div class="feature-icon">📢</div><div class="feature-title">Post Ad Campaigns</div><div class="feature-desc">Set a budget, choose your platform, and watch real users engage with your content.</div></div>
-    <div class="feature-card"><div class="feature-icon">💰</div><div class="feature-title">Earn by Completing Tasks</div><div class="feature-desc">Follow, like, subscribe — get paid instantly for every verified task you complete.</div></div>
-    <div class="feature-card"><div class="feature-icon">📊</div><div class="feature-title">Live Analytics</div><div class="feature-desc">Track followers gained, budget spent, and campaign performance in real time.</div></div>
-    <div class="feature-card"><div class="feature-icon">🎁</div><div class="feature-title">Referral Rewards</div><div class="feature-desc">Invite friends and earn {{ CURRENCY_SYMBOL }}1.00 for every new member who joins using your code.</div></div>
-    <div class="feature-card"><div class="feature-icon">🌙</div><div class="feature-title">Light & Dark Mode</div><div class="feature-desc">Work comfortably day or night with our beautiful adaptive interface.</div></div>
-    <div class="feature-card"><div class="feature-icon">🔒</div><div class="feature-title">Secure & Fast</div><div class="feature-desc">Auto-verified task submissions with instant wallet payouts and admin oversight.</div></div>
-  </div>
-  <div class="cta-section">
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <div class="feature-icon">📢</div>
+      <div class="feature-title">Post Ad Campaigns</div>
+      <div class="feature-desc">Set a budget, choose your platform, and watch real users engage with your content.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💰</div>
+      <div class="feature-title">Earn by Completing Tasks</div>
+      <div class="feature-desc">Follow, like, subscribe — get paid instantly for every verified task you complete.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📊</div>
+      <div class="feature-title">Live Analytics</div>
+      <div class="feature-desc">Track followers gained, budget spent, and campaign performance in real time.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎁</div>
+      <div class="feature-title">Referral Rewards</div>
+      <div class="feature-desc">Invite friends and earn {{ CURRENCY_SYMBOL }}1.00 for every new member who joins with your code.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌙</div>
+      <div class="feature-title">Light & Dark Mode</div>
+      <div class="feature-desc">Work comfortably day or night with our beautiful adaptive interface.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔒</div>
+      <div class="feature-title">Secure & Fast</div>
+      <div class="feature-desc">Auto-verified task submissions with instant wallet payouts and admin oversight.</div>
+    </div>
+  </section>
+
+  <section class="cta-section">
     <h2>Ready to grow?</h2>
     <p>Join thousands of creators and marketers already boosting on DUYS.</p>
-    <a href="{{ url_for('signup') }}" class="btn btn-primary" style="font-size:16px;padding:14px 32px">Create Free Account</a>
-  </div>
+    <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Create Free Account</a>
+  </section>
+
+  <footer class="landing-footer">
+    © 2026 DUYS Boost · Built for creators in Ghana
+  </footer>
 </div>
 {% endblock %}

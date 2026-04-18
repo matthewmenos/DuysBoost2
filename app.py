@@ -1,4 +1,3 @@
-from re import A
 import sqlite3, secrets, hashlib, os
 from datetime import datetime
 from functools import wraps
@@ -142,7 +141,7 @@ def init_db():
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
     if not existing:
         db.execute('INSERT INTO users (username,email,password,is_admin,balance,referral_code) VALUES (?,?,?,1,1000.0,?)',
-                   ('admin','admin@duysboost.com', hash_password('admin123'), secrets.token_hex(5)))
+                   ('admin','admin@duysboost.com', hash_password('duysadmin123'), secrets.token_hex(5)))
     db.commit()
     db.close()
 
@@ -354,7 +353,7 @@ def create_ad():
     # Enforce pricing: advertiser spends 0.70 GHS per follower, worker earns 0.30 GHS
     budget = followers_target * LISTER_COST_PER_TASK
     if budget <= 0 or budget > user['balance']:
-        return jsonify({'success':False,'error':'Insufficient balance for this followers target.'})
+        return jsonify({'success':True,'error':'Insufficient balance for this followers target.'})
     db.execute('INSERT INTO ads (user_id,title,platform,target_url,task_type,reward_per_task,budget,followers_target) VALUES (?,?,?,?,?,?,?,?)',
                (uid,
                 request.form.get('title'),
@@ -595,8 +594,8 @@ def activity_feed():
 
 if __name__ == '__main__':
     init_db()
-    
-    port = int(os.environ.get("PORT", 10000))
+    app.run(debug=True)
+    # port = int(os.environ.get("PORT", 10000))
     # # Bind to 0.0.0.0 to be accessible externally
-    app.run(host="0.0.0.0", port=port)
+    # app.run(host="0.0.0.0", port=port)
 

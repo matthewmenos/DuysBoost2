@@ -1,22 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Notifications — DUYS Boost{% endblock %}
 {% block page_title %}Notifications{% endblock %}
+
 {% block content %}
 <div class="card">
   {% if notifications %}
-  <div style="display:flex;flex-direction:column;gap:2px">
+  <div class="flex flex-col" style="gap:2px">
   {% for n in notifications %}
-  <div style="display:flex;align-items:flex-start;gap:14px;padding:16px;border-radius:12px;background:{% if not n.read %}rgba(124,77,255,.05){% else %}transparent{% endif %};transition:background .2s">
-    <div style="width:10px;height:10px;border-radius:50%;background:{% if not n.read %}var(--accent){% else %}var(--border){% endif %};margin-top:5px;flex-shrink:0"></div>
-    <div style="flex:1">
-      <div style="font-size:14px;line-height:1.5">{{ n.message }}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px">{{ n.created_at[:16] }}</div>
+  <div style="display:flex;align-items:flex-start;gap:14px;padding:14px;border-radius:var(--radius);background:{% if not n.read %}rgba(124,77,255,.06){% else %}transparent{% endif %};transition:background var(--transition)">
+    <div style="width:10px;height:10px;border-radius:50%;background:{% if not n.read %}var(--accent){% else %}var(--border-strong){% endif %};margin-top:6px;flex-shrink:0"></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;line-height:1.5;overflow-wrap:anywhere">{{ n.message }}</div>
+      <div class="text-xs text-muted mt-8" style="margin-top:4px">{{ n.created_at[:16] }}</div>
     </div>
   </div>
   {% endfor %}
   </div>
   {% else %}
-  <div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-text">You're all caught up! No notifications.</div></div>
+  <div class="empty-state">
+    <div class="empty-icon">🔔</div>
+    <div class="empty-title">All caught up</div>
+    <div class="empty-text">You have no notifications right now.</div>
+  </div>
   {% endif %}
 </div>
 {% endblock %}
