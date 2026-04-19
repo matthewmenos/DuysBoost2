@@ -75,20 +75,20 @@
       <thead>
         <tr>
           <th>Campaign</th>
-          <th>Proof</th>
+          <th class="col-hide-xs">Proof</th>
           <th>Reward</th>
           <th>Status</th>
-          <th>Date</th>
+          <th class="col-hide-sm">Date</th>
         </tr>
       </thead>
       <tbody>
       {% for t in my_tasks %}
       <tr>
         <td class="fw-700">{{ t.ad_title }}</td>
-        <td><a href="{{ t.proof_link }}" target="_blank" rel="noopener" class="text-accent text-xs">View ↗</a></td>
-        <td class="text-green fw-700">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(t.reward) }}</td>
+        <td class="col-hide-xs"><a href="{{ t.proof_link }}" target="_blank" rel="noopener" class="text-accent text-xs">View ↗</a></td>
+        <td class="text-green fw-700" style="white-space:nowrap">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(t.reward) }}</td>
         <td><span class="badge badge-{{ t.status }}">{{ t.status }}</span></td>
-        <td class="text-muted text-xs">{{ t.submitted_at[:10] }}</td>
+        <td class="col-hide-sm text-muted text-xs" style="white-space:nowrap">{{ t.submitted_at[:10] }}</td>
       </tr>
       {% endfor %}
       </tbody>

@@ -1,154 +1,459 @@
 {% extends "base.html" %}
 {% block title %}Wallet — DUYS Boost{% endblock %}
 {% block page_title %}Wallet{% endblock %}
+
+{% block head_extra %}
+<style>
+.recipient-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.recipient-card.empty {
+  border-style: dashed;
+  background: transparent;
+}
+.recipient-icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--gradient-primary);
+  display: grid; place-items: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.recipient-icon.empty {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.recipient-info { flex: 1; min-width: 0; }
+.recipient-info .provider {
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted);
+  font-weight: 700;
+}
+.recipient-info .account {
+  font-family: var(--font-display);
+  font-size: clamp(15px, 4vw, 17px);
+  font-weight: 700;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.recipient-info .holder {
+  font-size: 12.5px; color: var(--muted);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.recipient-actions {
+  display: flex; gap: 8px;
+  width: 100%;
+}
+@media (min-width: 560px) {
+  .recipient-actions { width: auto; margin-left: auto; }
+}
+.recipient-actions .btn { flex: 1; }
+@media (min-width: 560px) { .recipient-actions .btn { flex: 0 0 auto; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);max-width:700px;margin-bottom:28px">
+<div class="stats-grid-3">
   <div class="stat-card">
     <div class="stat-label">Available Balance</div>
     <div class="stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Total Deposited</div>
-    <div class="stat-value cyan">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','deposit')|sum(attribute='amount')) }}</div>
+    <div class="stat-value cyan">
+      {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','deposit')|sum(attribute='amount')) }}
+    </div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Total Withdrawn</div>
-    <div class="stat-value purple">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','withdrawal')|sum(attribute='amount')) }}</div>
+    <div class="stat-value purple">
+      {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(transactions|selectattr('type','eq','withdrawal')|sum(attribute='amount')) }}
+    </div>
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
+<div class="split-2">
   <!-- Deposit -->
   <div class="card">
-    <div class="section-title" style="margin-bottom:18px">💳 Add Funds</div>
-    <form id="deposit-form">
+    <div class="section-title mb-16">💳 Add Funds</div>
+    <form id="deposit-form" novalidate>
       <div class="form-group">
-        <label class="form-label">Amount ({{ CURRENCY_SYMBOL }})</label>
-        <input class="form-input" name="amount" type="number" step="0.01" min="1" placeholder="25.00" required>
+        <label class="form-label" for="dep-amount">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <input class="form-input" id="dep-amount" name="amount" type="number" step="0.01" min="1" placeholder="25.00" required inputmode="decimal">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
-        {% for amt in [5,10,25,50] %}
+      <div class="form-grid-2 mb-16">
+        {% for amt in [5, 10, 25, 50] %}
         <button type="button" class="btn btn-outline btn-sm" onclick="setAmount({{ amt }})">{{ CURRENCY_SYMBOL }}{{ amt }}</button>
         {% endfor %}
       </div>
-      <div style="background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);border-radius:10px;padding:12px;font-size:13px;color:var(--muted);margin-bottom:16px">
+
+      {% if PAYSTACK_ENABLED %}
+      <div class="info-box mb-16">
         ℹ️ Payments are processed securely with Paystack in Ghana Cedis ({{ CURRENCY_CODE }}).
       </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">Add Funds</button>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Add Funds</button>
+      {% else %}
+      <div class="info-box warning mb-16">
+        ⚠️ Deposits are currently unavailable. Please contact support.
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg" disabled>Add Funds</button>
+      {% endif %}
     </form>
   </div>
+
   <!-- Withdraw -->
   <div class="card">
-    <div class="section-title" style="margin-bottom:18px">🏦 Withdraw Funds</div>
-    <form id="withdraw-form">
-      <div class="form-group">
-        <label class="form-label">Amount ({{ CURRENCY_SYMBOL }})</label>
-        <input class="form-input" name="amount" type="number" step="0.01" min="1" placeholder="10.00" required>
+    <div class="section-title mb-16">🏦 Withdraw Funds</div>
+
+    {% if current_user.paystack_recipient %}
+    <div class="recipient-card mb-16">
+      <div class="recipient-icon" aria-hidden="true">📱</div>
+      <div class="recipient-info">
+        <div class="provider">{{ MOMO_PROVIDERS.get(current_user.recipient_provider, 'Mobile Money') }}</div>
+        <div class="account">{{ current_user.recipient_account }}</div>
+        <div class="holder">{{ current_user.recipient_name }}</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Method</label>
-        <select class="form-input" name="method" required>
-          <option value="">Select method...</option>
-          <option value="Mobile Money">Mobile Money</option>
-        </select>
+      <div class="recipient-actions">
+        <button type="button" class="btn btn-outline btn-sm" onclick="openModal('recipient-modal')">Change</button>
       </div>
+    </div>
+    <form id="withdraw-form" novalidate>
       <div class="form-group">
-        <label class="form-label">Account / Address</label>
-        <input class="form-input" name="account" placeholder="Account Number" required>
+        <label class="form-label" for="wdr-amount">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <input class="form-input" id="wdr-amount" name="amount" type="number" step="0.01" min="1"
+               max="{{ '%.2f'|format(current_user.balance) }}"
+               placeholder="10.00" required inputmode="decimal">
+        <div class="text-xs text-muted mt-8">
+          Minimum {{ CURRENCY_SYMBOL }}1.00 · Available {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}
+        </div>
       </div>
-      <div id="withdraw-error" style="display:none;color:var(--red);font-size:13px;margin-bottom:10px"></div>
-      <button type="submit" class="btn btn-outline" style="width:100%;justify-content:center">Request Withdrawal</button>
+      <div id="withdraw-error" class="error-list" style="display:none"></div>
+      {% if PAYSTACK_TRANSFERS_ENABLED %}
+      <button type="submit" class="btn btn-primary btn-block btn-lg">
+        Withdraw to Mobile Money
+      </button>
+      {% else %}
+      <div class="info-box warning mb-16">
+        ⚠️ Automatic payouts are unavailable. Requests will be processed manually.
+      </div>
+      <button type="submit" class="btn btn-outline btn-block btn-lg">Request Withdrawal</button>
+      {% endif %}
     </form>
+    {% else %}
+    <div class="recipient-card empty mb-16">
+      <div class="recipient-icon empty" aria-hidden="true">📱</div>
+      <div class="recipient-info">
+        <div class="provider" style="color:var(--accent)">No payout account</div>
+        <div class="holder">Add your mobile money account to withdraw earnings.</div>
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block btn-lg" onclick="openModal('recipient-modal')">
+      + Add Payout Account
+    </button>
+    {% endif %}
   </div>
 </div>
 
 <!-- Transaction History -->
 <div class="card">
-  <div class="section-title" style="margin-bottom:18px">Transaction History</div>
+  <div class="section-title mb-16">Transaction History</div>
   {% if transactions %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Type</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Description</th>
+          <th>Amount</th>
+          <th class="col-hide-xs">Status</th>
+          <th class="col-hide-xs">Date</th>
+        </tr>
+      </thead>
       <tbody>
       {% for tx in transactions %}
       <tr>
-        <td>
-          <span style="font-size:16px">
-            {% if tx.type=='deposit' %}💳{% elif tx.type=='withdrawal' %}🏦{% elif tx.type=='earn' %}💰{% else %}📢{% endif %}
-          </span>
+        <td style="font-size:18px;text-align:center;width:36px">
+          {% if tx.type=='deposit' %}💳
+          {% elif tx.type=='withdrawal' %}🏦
+          {% elif tx.type=='earn' %}💰
+          {% else %}📢{% endif %}
         </td>
-        <td style="font-size:14px">{{ tx.description }}</td>
-        <td style="font-weight:700;color:{% if tx.type in ['deposit','earn'] %}var(--green){% else %}var(--red){% endif %}">
-          {{ '+' if tx.type in ['deposit','earn'] else '-' }}{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(tx.amount) }}
+        <td style="font-size:13.5px;overflow-wrap:anywhere">{{ tx.description }}</td>
+        <td class="fw-700" style="color:{% if tx.type in ['deposit','earn'] %}var(--green){% else %}var(--red){% endif %};white-space:nowrap">
+          {{ '+' if tx.type in ['deposit','earn'] else '−' }}{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(tx.amount) }}
         </td>
-        <td><span class="badge badge-{{ tx.status }}">{{ tx.status }}</span></td>
-        <td style="font-size:12px;color:var(--muted)">{{ tx.created_at[:16] }}</td>
+        <td class="col-hide-xs"><span class="badge badge-{{ tx.status }}">{{ tx.status }}</span></td>
+        <td class="col-hide-xs text-muted text-xs" style="white-space:nowrap">{{ tx.created_at[:16] }}</td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">No transactions yet.</div></div>
+  <div class="empty-state">
+    <div class="empty-icon">💳</div>
+    <div class="empty-title">No transactions yet</div>
+    <div class="empty-text">Deposits and earnings will appear here.</div>
+  </div>
   {% endif %}
 </div>
 
+<!-- Withdrawal history (shows Paystack transfer statuses) -->
+{% if withdrawals %}
+<div class="card mt-24">
+  <div class="section-title mb-16">Withdrawal History</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Amount</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th class="col-hide-xs">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for w in withdrawals %}
+      <tr>
+        <td class="fw-700" style="color:var(--red);white-space:nowrap">
+          {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}
+        </td>
+        <td style="font-size:13px;overflow-wrap:anywhere">
+          {{ w.method }}<br>
+          <span class="text-xs text-muted">{{ w.account }}</span>
+        </td>
+        <td>
+          <span class="badge badge-{{ w.status }}">{{ w.status }}</span>
+          {% if w.failure_reason and w.status == 'failed' %}
+          <div class="text-xs text-muted mt-8" style="max-width:220px;line-height:1.4">{{ w.failure_reason }}</div>
+          {% endif %}
+        </td>
+        <td class="col-hide-xs text-muted text-xs" style="white-space:nowrap">{{ w.created_at[:16] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
+
+{% block modals %}
+<!-- Add/Change Payout Account Modal -->
+<div class="modal-overlay" id="recipient-modal" role="dialog" aria-modal="true" aria-labelledby="recipient-title">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="recipient-title">
+        {{ 'Change Payout Account' if current_user.paystack_recipient else 'Add Payout Account' }}
+      </div>
+      <button class="modal-close" onclick="closeModal('recipient-modal')" aria-label="Close">✕</button>
+    </div>
+
+    <p class="text-sm text-muted mb-16">
+      Your earnings will be sent to this mobile money account via Paystack.
+      Make sure the details match exactly.
+    </p>
+
+    <form id="recipient-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="rec-name">Account Holder Name</label>
+        <input class="form-input" id="rec-name" name="account_name" type="text"
+               placeholder="Kofi Mensah" required minlength="2" autocomplete="name"
+               value="{{ current_user.recipient_name or '' }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="rec-provider">Network</label>
+        <select class="form-input" id="rec-provider" name="provider" required>
+          <option value="">Select network…</option>
+          {% for code, label in MOMO_PROVIDERS.items() %}
+          <option value="{{ code }}" {% if current_user.recipient_provider == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="rec-phone">Mobile Money Number</label>
+        <input class="form-input" id="rec-phone" name="phone" type="tel"
+               placeholder="0241234567" required inputmode="tel"
+               autocomplete="tel-national" maxlength="14"
+               value="{{ current_user.recipient_account or '' }}">
+        <div class="text-xs text-muted mt-8">
+          10-digit Ghana number (e.g. 024 123 4567). International format also accepted.
+        </div>
+      </div>
+
+      <div class="info-box mb-16">
+        🔒 Your account details are saved securely with Paystack. You can change them anytime.
+      </div>
+
+      <div id="recipient-error" class="error-list" style="display:none"></div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg">
+        {{ 'Save Changes' if current_user.paystack_recipient else 'Save Account' }}
+      </button>
+
+      {% if current_user.paystack_recipient %}
+      <button type="button" class="btn btn-outline btn-block mt-12" onclick="removeRecipient(this)">
+        Remove Account
+      </button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+{% endblock %}
+
 {% block scripts %}
 <script>
-function setAmount(v){document.querySelector('#deposit-form [name=amount]').value=v}
+function setAmount(v) {
+  const el = document.querySelector('#deposit-form [name=amount]');
+  if (el) el.value = v;
+}
 
-document.getElementById('deposit-form').addEventListener('submit',e=>{
+/* ── Deposit via Paystack Popup ─────────────────────────────────────── */
+document.getElementById('deposit-form').addEventListener('submit', e => {
   e.preventDefault();
-  const form = e.target;
-  const amountField = form.querySelector('[name=amount]');
+  {% if not PAYSTACK_ENABLED %}
+  showToast('Deposits are currently unavailable.', 'error');
+  return;
+  {% else %}
+  const amountField = e.target.querySelector('[name=amount]');
   const amount = parseFloat(amountField.value || '0');
-  if(!amount || amount <= 0){
-    showToast('Enter a valid amount.','error');
+  if (!amount || amount <= 0) {
+    showToast('Enter a valid amount.', 'error');
     return;
   }
-  if(!window.PaystackPop){
-    showToast('Payment gateway not loaded. Please try again.','error');
+  if (!window.PaystackPop) {
+    showToast('Payment gateway not loaded. Please try again.', 'error');
     return;
   }
   const handler = PaystackPop.setup({
-    key: '{{ pk_live_daa9a08eb2735529f0fd1a37a21d1f0117648613 }}',
-    email: '{{ current_user.email }}',
+    key: {{ PAYSTACK_PUBLIC_KEY|tojson }},
+    email: {{ current_user.email|tojson }},
     amount: Math.round(amount * 100),
-    currency: '{{ CURRENCY_CODE }}',
-    callback: async function(response){
-      try{
-        const r = await fetch('/wallet/deposit',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({reference: response.reference, amount: amount})
+    currency: {{ CURRENCY_CODE|tojson }},
+    callback: async function (response) {
+      try {
+        const r = await fetch('/wallet/deposit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference: response.reference, amount: amount })
         });
         const d = await r.json();
-        if(d.success){
-          showToast('Funds added via Paystack!');
-          setTimeout(()=>location.reload(),1000);
+        if (d.success) {
+          showToast('Funds added!');
+          setTimeout(() => location.reload(), 900);
         } else {
-          showToast(d.error || 'Could not confirm payment.','error');
+          showToast(d.error || 'Could not confirm payment.', 'error');
         }
-      }catch(err){
-        showToast('Error confirming payment.','error');
+      } catch (_err) {
+        showToast('Error confirming payment.', 'error');
       }
     },
-    onClose: function(){
-      showToast('Payment window closed.','error');
-    }
+    onClose: function () { showToast('Payment cancelled.', 'info'); }
   });
   handler.openIframe();
+  {% endif %}
 });
 
-document.getElementById('withdraw-form').addEventListener('submit',async e=>{
-  e.preventDefault();
-  const btn=e.target.querySelector('[type=submit]');btn.textContent='Submitting...';btn.disabled=true;
-  const r=await fetch('/wallet/withdraw',{method:'POST',body:new FormData(e.target)});
-  const d=await r.json();
-  btn.textContent='Request Withdrawal';btn.disabled=false;
-  if(d.success){showToast('Withdrawal request submitted!');setTimeout(()=>location.reload(),1000);}
-  else{const el=document.getElementById('withdraw-error');el.style.display='block';el.textContent=d.error;}
-});
+/* ── Save / update payout recipient ─────────────────────────────────── */
+const recipientForm = document.getElementById('recipient-form');
+if (recipientForm) {
+  recipientForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('[type=submit]');
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+    const errBox = document.getElementById('recipient-error');
+    errBox.style.display = 'none';
+    try {
+      const r = await fetch('/wallet/recipient', {
+        method: 'POST',
+        body: new FormData(form)
+      });
+      const d = await r.json();
+      if (d.success) {
+        showToast('Payout account saved!');
+        closeModal('recipient-modal');
+        setTimeout(() => location.reload(), 700);
+      } else {
+        errBox.style.display = 'block';
+        errBox.textContent = d.error || 'Could not save account.';
+      }
+    } catch (_err) {
+      errBox.style.display = 'block';
+      errBox.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+}
+
+async function removeRecipient(btn) {
+  if (!confirm('Remove your saved payout account? You will need to add one again to withdraw.')) return;
+  const original = btn.textContent;
+  btn.textContent = 'Removing…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/wallet/recipient', { method: 'DELETE' });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Account removed.');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      showToast(d.error || 'Could not remove account.', 'error');
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  } catch (_err) {
+    showToast('Network error.', 'error');
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+window.removeRecipient = removeRecipient;
+
+/* ── Withdrawal ─────────────────────────────────────────────────────── */
+const withdrawForm = document.getElementById('withdraw-form');
+if (withdrawForm) {
+  withdrawForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('[type=submit]');
+    const original = btn.textContent;
+    btn.textContent = 'Submitting…';
+    btn.disabled = true;
+    const errBox = document.getElementById('withdraw-error');
+    errBox.style.display = 'none';
+    try {
+      const r = await fetch('/wallet/withdraw', { method: 'POST', body: new FormData(form) });
+      const d = await r.json();
+      if (d.success) {
+        showToast('Withdrawal request submitted!');
+        setTimeout(() => location.reload(), 900);
+      } else {
+        errBox.style.display = 'block';
+        errBox.textContent = d.error || 'Could not submit.';
+      }
+    } catch (_err) {
+      errBox.style.display = 'block';
+      errBox.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  });
+}
 </script>
 {% endblock %}

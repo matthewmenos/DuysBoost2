@@ -5,6 +5,9 @@
 {% block content %}
 <div class="info-box warning mb-24">
   🛡️ <strong>Admin access only.</strong> Changes here affect all users.
+  {% if not PAYSTACK_TRANSFERS_ENABLED %}
+  <br>⚠️ Paystack is not configured — approvals will be manual only.
+  {% endif %}
 </div>
 
 <div class="stats-grid-3">
@@ -23,25 +26,37 @@
 </div>
 
 <div class="split-2">
-  <!-- Pending Withdrawals -->
+  <!-- Actionable Withdrawals (pending + failed) -->
   <div class="card">
-    <div class="section-title mb-16">⏳ Pending Withdrawals</div>
+    <div class="section-title mb-16">⏳ Withdrawals Needing Action</div>
     {% if withdrawals %}
     <div class="flex flex-col gap-12">
     {% for w in withdrawals %}
     <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px" id="wdr-row-{{ w.id }}">
-      <div class="flex justify-between items-center mb-12" style="gap:10px">
+      <div class="flex justify-between items-center mb-12" style="gap:10px;flex-wrap:wrap">
         <div style="min-width:0">
           <div class="fw-700" style="overflow-wrap:anywhere">{{ w.username }}</div>
           <div class="text-xs text-muted" style="overflow-wrap:anywhere">{{ w.method }} · {{ w.account }}</div>
+          {% if w.failure_reason and w.status == 'failed' %}
+          <div class="text-xs mt-8" style="color:var(--red);max-width:100%;line-height:1.4">
+            ⚠️ {{ w.failure_reason }}
+          </div>
+          {% endif %}
         </div>
-        <div style="font-size:17px;font-weight:800;color:var(--yellow);white-space:nowrap;flex-shrink:0">
-          {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}
+        <div class="flex flex-col items-center gap-8" style="flex-shrink:0">
+          <div style="font-size:17px;font-weight:800;color:var(--yellow);white-space:nowrap">
+            {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}
+          </div>
+          <span class="badge badge-{{ w.status }}">{{ w.status }}</span>
         </div>
       </div>
       <div class="flex gap-8">
-        <button class="btn btn-green btn-sm" style="flex:1" onclick="processWdr({{ w.id }},'approve',this)">Approve</button>
-        <button class="btn btn-danger btn-sm" style="flex:1" onclick="processWdr({{ w.id }},'reject',this)">Reject</button>
+        <button class="btn btn-green btn-sm" style="flex:1" onclick="processWdr({{ w.id }},'approve',this)">
+          {% if w.status == 'failed' %}Retry Payout{% else %}Approve{% endif %}
+        </button>
+        <button class="btn btn-danger btn-sm" style="flex:1" onclick="processWdr({{ w.id }},'reject',this)">
+          Reject & Refund
+        </button>
       </div>
     </div>
     {% endfor %}
@@ -49,7 +64,7 @@
     {% else %}
     <div class="empty-state" style="padding:28px 20px">
       <div class="empty-icon">✅</div>
-      <div class="empty-text">No pending withdrawals.</div>
+      <div class="empty-text">No withdrawals need action.</div>
     </div>
     {% endif %}
   </div>
@@ -78,6 +93,42 @@
   </div>
 </div>
 
+{% if recent_withdrawals %}
+<!-- Recent withdrawals audit -->
+<div class="card mb-24">
+  <div class="section-title mb-16">🧾 Recent Withdrawals</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th class="col-hide-xs">Account</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th class="col-hide-sm">Processed</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for w in recent_withdrawals %}
+      <tr>
+        <td class="fw-700">{{ w.username }}</td>
+        <td class="col-hide-xs text-xs" style="overflow-wrap:anywhere">
+          {{ w.method }}<br>
+          <span class="text-muted">{{ w.account }}</span>
+        </td>
+        <td class="fw-700" style="white-space:nowrap">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}</td>
+        <td><span class="badge badge-{{ w.status }}">{{ w.status }}</span></td>
+        <td class="col-hide-sm text-xs text-muted" style="white-space:nowrap">
+          {{ (w.processed_at or w.created_at)[:16] }}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- All Users -->
 <div class="card mb-24">
   <div class="section-title mb-16">👥 All Users</div>
@@ -86,20 +137,29 @@
       <thead>
         <tr>
           <th>Username</th>
-          <th>Email</th>
+          <th class="col-hide-sm">Email</th>
           <th>Balance</th>
-          <th>Joined</th>
-          <th>Admin</th>
+          <th class="col-hide-xs">Payout</th>
+          <th class="col-hide-sm">Joined</th>
+          <th class="col-hide-xs">Admin</th>
         </tr>
       </thead>
       <tbody>
       {% for u in users %}
       <tr>
         <td class="fw-700">{{ u.username }}</td>
-        <td class="text-xs text-muted" style="overflow-wrap:anywhere">{{ u.email }}</td>
+        <td class="col-hide-sm text-xs text-muted" style="overflow-wrap:anywhere">{{ u.email }}</td>
         <td class="text-green fw-700" style="white-space:nowrap">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(u.balance) }}</td>
-        <td class="text-xs text-muted" style="white-space:nowrap">{{ u.created_at[:10] }}</td>
-        <td>{% if u.is_admin %}<span class="badge badge-active">Yes</span>{% endif %}</td>
+        <td class="col-hide-xs text-xs">
+          {% if u.paystack_recipient %}
+            <span class="badge badge-active">{{ u.recipient_provider or 'Set' }}</span>
+            <div class="text-muted" style="margin-top:4px">{{ u.recipient_account }}</div>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td class="col-hide-sm text-xs text-muted" style="white-space:nowrap">{{ u.created_at[:10] }}</td>
+        <td class="col-hide-xs">{% if u.is_admin %}<span class="badge badge-active">Yes</span>{% endif %}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -115,9 +175,9 @@
       <thead>
         <tr>
           <th>Title</th>
-          <th>Owner</th>
-          <th>Platform</th>
-          <th>Budget</th>
+          <th class="col-hide-xs">Owner</th>
+          <th class="col-hide-sm">Platform</th>
+          <th class="col-hide-xs">Budget</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -125,9 +185,9 @@
       {% for ad in ads %}
       <tr>
         <td class="fw-700" style="overflow-wrap:anywhere">{{ ad.title }}</td>
-        <td class="text-xs text-muted">{{ ad.owner_name }}</td>
-        <td>{{ ad.platform }}</td>
-        <td class="text-xs" style="white-space:nowrap">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget_spent) }}/{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget) }}</td>
+        <td class="col-hide-xs text-xs text-muted">{{ ad.owner_name }}</td>
+        <td class="col-hide-sm">{{ ad.platform }}</td>
+        <td class="col-hide-xs text-xs" style="white-space:nowrap">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget_spent) }}/{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.budget) }}</td>
         <td><span class="badge badge-{{ ad.status }}">{{ ad.status }}</span></td>
       </tr>
       {% endfor %}
@@ -141,23 +201,29 @@
 <script>
 async function processWdr(id, action, btn) {
   const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '…';
+  const row = document.getElementById('wdr-row-' + id);
+  // Disable both buttons in this row while processing
+  if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
+  btn.textContent = action === 'approve' ? 'Processing…' : 'Rejecting…';
   try {
     const r = await fetch(`/admin/withdrawal/${id}/${action}`, { method: 'POST' });
     const d = await r.json();
     if (d.success) {
-      showToast(`Withdrawal ${action}d`);
-      const row = document.getElementById('wdr-row-' + id);
+      const statusMsg = d.status === 'processing'
+        ? 'Transfer initiated — waiting for Paystack confirmation'
+        : d.status === 'approved'
+          ? (d.manual ? 'Withdrawal approved (manual)' : 'Withdrawal paid out!')
+          : `Withdrawal ${d.status}`;
+      showToast(statusMsg);
       if (row) row.remove();
     } else {
       showToast(d.error || 'Action failed', 'error');
-      btn.disabled = false;
+      if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
       btn.textContent = original;
     }
   } catch (_e) {
     showToast('Network error.', 'error');
-    btn.disabled = false;
+    if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
     btn.textContent = original;
   }
 }

@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/affiliat/public_html/
+    - /bin/cp -R * $DEPLOYPATH
+    - /bin/echo "Deployment successful"

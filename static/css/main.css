@@ -581,52 +581,75 @@ select.form-input,
   -webkit-overflow-scrolling: touch;
   margin: 0 -4px;
   padding: 0 4px;
-}
-.table-wrap::after {
-  /* hint that it scrolls */
-  content: '';
-  display: block;
+  /* Subtle right-edge fade hints at horizontal scroll when needed */
+  background:
+    linear-gradient(to right, var(--surface), var(--surface) 30%, transparent) 0 0 / 20px 100% no-repeat,
+    linear-gradient(to left, var(--surface), var(--surface) 30%, transparent) 100% 0 / 20px 100% no-repeat;
+  background-attachment: local, local;
 }
 table {
   width: 100%;
-  min-width: 560px;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
+  table-layout: auto;
+}
+@media (min-width: 640px) {
+  table { font-size: 14px; }
 }
 th {
   text-align: left;
-  padding: 10px 14px;
-  font-size: 11px;
+  padding: 10px 8px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .06em;
   color: var(--muted);
   font-weight: 700;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
+@media (min-width: 640px) {
+  th { padding: 10px 14px; font-size: 11px; letter-spacing: .08em; }
+}
 td {
-  padding: 12px 14px;
+  padding: 10px 8px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+@media (min-width: 640px) {
+  td { padding: 12px 14px; }
 }
 tr:last-child td { border-bottom: none; }
 tbody tr { transition: background var(--transition); }
 tbody tr:hover td { background: var(--surface-2); }
 
+/* Wide tables that should scroll on mobile rather than squish */
+.table-wrap.table-wide table,
+.table-scroll table {
+  min-width: 560px;
+}
+
 /* Badges */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 10px; border-radius: 20px;
-  font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .05em;
+  padding: 3px 9px; border-radius: 20px;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (min-width: 640px) {
+  .badge { padding: 3px 10px; font-size: 11px; letter-spacing: .05em; }
 }
 .badge-active, .badge-approved { background: rgba(0,230,118,.14); color: var(--green); }
 .badge-paused, .badge-pending { background: rgba(255,234,0,.14); color: #bfa900; }
 [data-theme="light"] .badge-paused, [data-theme="light"] .badge-pending { color: #8a7a00; }
 [data-theme="dark"] .badge-paused, [data-theme="dark"] .badge-pending { color: var(--yellow); }
 .badge-completed { background: rgba(0,229,255,.14); color: var(--accent-2); }
+.badge-processing { background: rgba(0,229,255,.14); color: var(--accent-2); }
 .badge-rejected, .badge-failed { background: rgba(255,82,82,.14); color: var(--red); }
+.badge-processing { background: rgba(124,77,255,.14); color: var(--accent); }
 
 /* Progress */
 .progress-bar {
@@ -956,3 +979,9 @@ tbody tr:hover td { background: var(--surface-2); }
 .fw-700 { font-weight: 700; }
 .hide-mobile { display: none; }
 @media (min-width: 640px) { .hide-mobile { display: initial; } .hide-desktop { display: none; } }
+
+/* Table column visibility helpers */
+.col-hide-xs { display: none; }
+@media (min-width: 560px) { .col-hide-xs { display: table-cell; } }
+.col-hide-sm { display: none; }
+@media (min-width: 768px) { .col-hide-sm { display: table-cell; } }
