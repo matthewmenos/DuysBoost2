@@ -13,7 +13,6 @@ python app.py
 
 Visit: http://localhost:5000
 
-Default admin login: `admin` / `admin123` — **change this immediately.**
 
 ## Environment Variables
 
