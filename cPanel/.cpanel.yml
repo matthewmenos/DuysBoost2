@@ -1,6 +1,8 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/affiliat/public_html/
-    - /bin/cp -R * $DEPLOYPATH
+    - export DEPLOYPATH=/home/affiliat/repositories/DuysBoost2/
+    - /bin/cp -R app.py requirements.txt static templates $DEPLOYPATH
+    - cd $DEPLOYPATH
+    - python3 -m pip install --user -r requirements.txt
     - /bin/echo "Deployment successful"
