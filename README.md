@@ -38,6 +38,8 @@ export PORT=5000
 export FLASK_DEBUG=0
 ```
 
+Copy `.env.example` to `.env` for local development and do not commit `.env`.
+
 > ⚠️ **Security note:** The previous version of this app shipped with
 > hardcoded live Paystack keys. Those keys have been removed. If they were
 > ever committed, **rotate them in your Paystack dashboard immediately.**
