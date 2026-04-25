@@ -46,12 +46,15 @@
   </div>
 
   <div class="flex flex-col gap-8">
-    <a href="{{ ad.target_url }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm btn-block">
+    <button class="btn btn-outline btn-sm btn-block" onclick='openTargetLink({{ ad.id }}, {{ ad.target_url|tojson }}, {{ ad.platform|tojson }})' id="open-btn-{{ ad.id }}">
       Open {{ ad.platform }} ↗
-    </a>
-    <button class="btn btn-green btn-sm btn-block" onclick='openSubmit({{ ad.id }}, {{ ad.title|tojson }})'>
+    </button>
+    <button class="btn btn-green btn-sm btn-block" onclick='openSubmit({{ ad.id }}, {{ ad.title|tojson }})' id="submit-btn-{{ ad.id }}" disabled>
       Submit & Earn {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}
     </button>
+    <div class="text-xs text-muted text-center" id="timer-text-{{ ad.id }}" style="display:none">
+      ⏱️ Please wait 15 seconds after opening the link before submitting proof...
+    </div>
   </div>
 </div>
 {% endfor %}
@@ -130,6 +133,49 @@
 </div>
 
 <script>
+// Store timing data for each task
+const taskTimers = {};
+
+function openTargetLink(adId, targetUrl, platform) {
+  // Open the target URL in new tab
+  window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  
+  // Update button text and disable it temporarily
+  const openBtn = document.getElementById('open-btn-' + adId);
+  const submitBtn = document.getElementById('submit-btn-' + adId);
+  const timerText = document.getElementById('timer-text-' + adId);
+  
+  openBtn.textContent = '✓ Link Opened - Waiting...';
+  openBtn.disabled = true;
+  timerText.style.display = 'block';
+  
+  // Clear any existing timer for this task
+  if (taskTimers[adId]) {
+    clearTimeout(taskTimers[adId]);
+  }
+  
+  // Start countdown
+  let countdown = 15;
+  const countdownInterval = setInterval(() => {
+    countdown--;
+    timerText.textContent = `⏱️ Please wait ${countdown} seconds before submitting proof...`;
+    
+    if (countdown <= 0) {
+      clearInterval(countdownInterval);
+    }
+  }, 1000);
+  
+  // Enable submit button after 15 seconds
+  taskTimers[adId] = setTimeout(() => {
+    submitBtn.disabled = false;
+    openBtn.textContent = 'Open ' + platform + ' ↗';
+    openBtn.disabled = false;
+    timerText.style.display = 'none';
+    showToast('✅ You can now submit your proof!', 'success');
+    delete taskTimers[adId];
+  }, 15000);
+}
+
 function openSubmit(id, title) {
   document.getElementById('submit-ad-id').value = id;
   document.getElementById('submit-ad-name').textContent = 'Task: ' + title;
@@ -153,7 +199,7 @@ document.getElementById('submit-form').addEventListener('submit', async e => {
     const r = await fetch('/tasks/submit', { method: 'POST', body: fd });
     const d = await r.json();
     if (d.success) {
-      showToast('🎉 Earned {{ CURRENCY_SYMBOL }}' + d.earned.toFixed(2) + '!');
+      showToast(d.message || '🎉 Task completed successfully!');
       closeModal('submit-modal');
       setTimeout(() => location.reload(), 1200);
     } else {

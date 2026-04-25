@@ -2,6 +2,56 @@
 {% block title %}Dashboard — DUYS Boost{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.analytics-metric {
+  text-align: center;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.analytics-chart {
+  height: 150px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+  .analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .metric-value {
+    font-size: 16px;
+  }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="stats-grid">
   <div class="stat-card">
@@ -26,6 +76,73 @@
   </div>
 </div>
 
+<!-- Analytics Overview -->
+<div class="card">
+  <div class="section-header">
+    <div class="section-title">📊 Campaign Analytics</div>
+    <a href="{{ url_for('analytics') }}" class="btn btn-outline btn-sm">View Full Analytics</a>
+  </div>
+  
+  {% if ads %}
+  <div class="analytics-grid">
+    <div class="analytics-metric">
+      <div class="metric-label">Total Campaigns</div>
+      <div class="metric-value">{{ ads|length }}</div>
+    </div>
+    <div class="analytics-metric">
+      <div class="metric-label">Active Campaigns</div>
+      <div class="metric-value">{{ ads|selectattr('status','eq','active')|list|length }}</div>
+    </div>
+    <div class="analytics-metric">
+      <div class="metric-label">Followers Gained</div>
+      <div class="metric-value">{{ ads|sum(attribute='followers_gained') or 0 }}</div>
+    </div>
+    <div class="analytics-metric">
+      <div class="metric-label">Total Budget</div>
+      <div class="metric-value">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ads|sum(attribute='budget')) }}</div>
+    </div>
+    <div class="analytics-metric">
+      <div class="metric-label">Total Spent</div>
+      <div class="metric-value">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ads|sum(attribute='budget_spent') or 0) }}</div>
+    </div>
+    <div class="analytics-metric">
+      <div class="metric-label">Avg. ROI</div>
+      <div class="metric-value">
+        {% set total_roi = 0 %}
+        {% set roi_count = 0 %}
+        {% for ad in ads %}
+          {% if ad.budget_spent and ad.budget_spent > 0 %}
+            {% set roi = ((ad.followers_gained or 0) * 0.7 - ad.budget_spent) / ad.budget_spent * 100 %}
+            {% set total_roi = total_roi + roi %}
+            {% set roi_count = roi_count + 1 %}
+          {% endif %}
+        {% endfor %}
+        {% if roi_count > 0 %}
+          {{ '%.1f'|format(total_roi / roi_count) }}%
+        {% else %}
+          N/A
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+  <!-- Quick Chart -->
+  {% if ads %}
+  <div class="analytics-chart">
+    <canvas id="dashboardChart" width="300" height="150"></canvas>
+  </div>
+  {% endif %}
+  
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📊</div>
+    <div class="empty-title">No analytics yet</div>
+    <div class="empty-text">Create your first ad campaign to see performance metrics.</div>
+    <a href="{{ url_for('ads') }}" class="btn btn-primary btn-sm mt-16">Create Campaign</a>
+  </div>
+  {% endif %}
+</div>
+
 <div class="split-2">
   <!-- My Recent Ads -->
   <div class="card">
@@ -42,7 +159,7 @@
       </div>
       <div class="text-xs text-muted mb-8">{{ ad.platform }} · {{ ad.task_type }} · {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}/task</div>
       <div class="progress-bar">
-        <div class="progress-fill" style="width:{{ [(ad.budget_spent/ad.budget*100)|int if ad.budget else 0, 100]|min }}%"></div>
+        <div class="progress-fill" style="width:{% if ad.budget and ad.budget > 0 %}{{ [((ad.budget_spent or 0) / ad.budget * 100)|int, 100]|min }}%{% else %}0%{% endif %}"></div>
       </div>
       <div class="flex justify-between text-xs text-muted mt-8" style="gap:8px">
         <span>{{ ad.followers_gained }}/{{ ad.followers_target }} followers</span>
@@ -106,24 +223,98 @@
 
 {% block scripts %}
 <script>
+// Make currency symbol available to JavaScript
+const CURRENCY_SYMBOL = '{{ CURRENCY_SYMBOL }}';
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Dashboard Analytics Chart
+if (document.getElementById('dashboardChart')) {
+  const adsData = {{ ads|tojson if ads else 'null' }};
+  if (adsData && adsData.length > 0) {
+    const ctx = document.getElementById('dashboardChart').getContext('2d');
+    const recentAds = adsData.slice(0, 5).reverse();
+    
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: recentAds.map(ad => ad.title ? ad.title.substring(0, 12) + '...' : 'Ad'),
+        datasets: [{
+          label: 'Followers Gained',
+          data: recentAds.map(ad => ad.followers_gained || 0),
+          borderColor: 'var(--accent)',
+          backgroundColor: 'rgba(124, 77, 255, 0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { display: false }
+          },
+          x: {
+            grid: { display: false }
+          }
+        },
+        elements: {
+          point: {
+            hoverBorderWidth: 2
+          }
+        }
+      }
+    });
+  }
+}
+
 async function loadActivity() {
   try {
     const r = await fetch('/api/activity');
+    if (!r.ok) {
+      console.warn('Activity API returned error:', r.status);
+      return;
+    }
     const d = await r.json();
     const el = document.getElementById('activity-feed');
-    if (!d.length) {
+    if (!el) return;
+    
+    if (!d || !Array.isArray(d) || d.length === 0) {
       el.innerHTML = '<div class="text-muted text-sm text-center" style="padding:20px">No activity yet. Be the first to complete a task!</div>';
       return;
     }
-    el.innerHTML = d.map(item => (
-      '<div class="activity-item">' +
-        '<div class="activity-dot" aria-hidden="true"></div>' +
-        '<div class="activity-text"><strong>' + escapeHtml(item.worker) + '</strong> completed <em>' + escapeHtml(item.ad) + '</em></div>' +
-        '<div class="activity-reward">+{{ CURRENCY_SYMBOL }}' + item.reward.toFixed(2) + '</div>' +
-        '<div class="activity-time">' + escapeHtml(item.time) + '</div>' +
-      '</div>'
-    )).join('');
-  } catch (_e) { /* silent */ }
+    el.innerHTML = d.map(item => {
+      if (!item.worker || !item.ad || typeof item.reward !== 'number') {
+        return '';
+      }
+      return (
+        '<div class="activity-item">' +
+          '<div class="activity-dot" aria-hidden="true"></div>' +
+          '<div class="activity-text"><strong>' + escapeHtml(item.worker) + '</strong> completed <em>' + escapeHtml(item.ad) + '</em></div>' +
+          '<div class="activity-reward">+' + CURRENCY_SYMBOL + item.reward.toFixed(2) + '</div>' +
+          '<div class="activity-time">' + escapeHtml(item.time || '') + '</div>' +
+        '</div>'
+      );
+    }).filter(item => item).join('');
+  } catch (e) {
+    console.warn('Error loading activity:', e);
+    const el = document.getElementById('activity-feed');
+    if (el) {
+      el.innerHTML = '<div class="text-muted text-sm text-center" style="padding:20px">Unable to load activity feed.</div>';
+    }
+  }
 }
 loadActivity();
 setInterval(loadActivity, 10000);

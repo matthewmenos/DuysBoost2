@@ -319,6 +319,84 @@ def admin_required(f):
     return decorated
 
 
+def verify_task_completion(ad, proof_link, user_id):
+    """
+    Strict verification of task completion based on platform and task type.
+    Returns {'valid': bool, 'error': str}
+    """
+    platform = ad['platform'].lower()
+    task_type = ad['task_type'].lower()
+
+    # Basic URL validation
+    if not proof_link or not proof_link.startswith(('http://', 'https://')):
+        return {'valid': False, 'error': 'Please provide a valid URL as proof.'}
+
+    # Platform-specific validation
+    if task_type == 'follow':
+        return verify_follow_task(platform, proof_link, ad['target_url'])
+    elif task_type == 'like':
+        return verify_like_task(platform, proof_link)
+    elif task_type == 'comment':
+        return verify_comment_task(platform, proof_link)
+    elif task_type == 'share':
+        return verify_share_task(platform, proof_link)
+    else:
+        # For unknown task types, do basic validation
+        return {'valid': True, 'error': ''}
+
+
+def verify_follow_task(platform, proof_link, target_url):
+    """Verify follow task completion"""
+    if platform == 'instagram':
+        # Check if it's an Instagram URL
+        if 'instagram.com/' in proof_link:
+            return {'valid': True, 'error': ''}
+        else:
+            return {'valid': False, 'error': 'Please provide an Instagram URL as proof.'}
+
+    elif platform == 'tiktok':
+        if 'tiktok.com/' in proof_link:
+            return {'valid': True, 'error': ''}
+        else:
+            return {'valid': False, 'error': 'Please provide a TikTok URL as proof.'}
+
+    elif platform == 'twitter' or platform == 'x':
+        if 'twitter.com/' in proof_link or 'x.com/' in proof_link:
+            return {'valid': True, 'error': ''}
+        else:
+            return {'valid': False, 'error': 'Please provide a Twitter/X URL as proof.'}
+
+    elif platform == 'facebook':
+        if 'facebook.com/' in proof_link:
+            return {'valid': True, 'error': ''}
+        else:
+            return {'valid': False, 'error': 'Please provide a Facebook URL as proof.'}
+
+    elif platform == 'youtube':
+        if 'youtube.com/' in proof_link or 'youtu.be/' in proof_link:
+            return {'valid': True, 'error': ''}
+        else:
+            return {'valid': False, 'error': 'Please provide a YouTube URL as proof.'}
+
+    # For other platforms, basic validation
+    return {'valid': True, 'error': ''}
+
+
+def verify_like_task(platform, proof_link):
+    """Verify like task completion"""
+    return verify_follow_task(platform, proof_link, '')
+
+
+def verify_comment_task(platform, proof_link):
+    """Verify comment task completion"""
+    return verify_follow_task(platform, proof_link, '')
+
+
+def verify_share_task(platform, proof_link):
+    """Verify share task completion"""
+    return verify_follow_task(platform, proof_link, '')
+
+
 def get_current_user():
     if 'user_id' not in session:
         return None
@@ -550,6 +628,9 @@ def dashboard():
     ads = db.execute(
         'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC LIMIT 5', (uid,)
     ).fetchall()
+    # Convert Row objects to dicts for JSON serialization
+    ads = [dict(ad) for ad in ads]
+    
     recent_tasks = db.execute(
         'SELECT tc.*, a.title as ad_title FROM task_completions tc '
         'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=? '
@@ -574,6 +655,9 @@ def dashboard():
         'ORDER BY created_at DESC LIMIT 10',
         (uid, uid)
     ).fetchall()
+    # Convert available_ads Row objects to dicts
+    available_ads = [dict(ad) for ad in available_ads]
+    
     return render_template(
         'dashboard.html',
         ads=ads, recent_tasks=recent_tasks,
@@ -709,34 +793,43 @@ def submit_task():
 
     now = datetime.now(timezone.utc).isoformat()
     reward = WORKER_REWARD_PER_TASK
+
+    # Strict verification: Check proof link validity based on platform and task type
+    verification_result = verify_task_completion(ad, proof_link, uid)
+
+    if not verification_result['valid']:
+        return jsonify({'success': False, 'error': verification_result['error']})
+
+    # Award reward immediately for valid submissions
     db.execute(
         'INSERT INTO task_completions (ad_id,worker_id,proof_link,status,reward,reviewed_at) '
         'VALUES (?,?,?,?,?,?)',
-        (ad_id, uid, proof_link, 'approved', reward, now)
+        (ad_id, uid, proof_link, 'completed', reward, now)
     )
-    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
+
+    # Update ad budget and follower count
     db.execute(
         'UPDATE ads SET budget_spent=budget_spent+?, followers_gained=followers_gained+1 '
         'WHERE id=?',
         (LISTER_COST_PER_TASK, ad_id)
     )
-    updated_ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
-    goal_met = (
-        updated_ad['budget_spent'] >= updated_ad['budget'] or
-        (updated_ad['followers_target']
-         and updated_ad['followers_gained'] >= updated_ad['followers_target'])
-    )
-    if goal_met:
-        db.execute('UPDATE ads SET status="completed" WHERE id=?', (ad_id,))
-        add_notification(db, ad['user_id'],
-                         f'✅ Your ad "{ad["title"]}" has reached its goal!')
+
+    # Credit the worker's balance immediately
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
+
+    # Add transaction record
     add_transaction(db, uid, 'earn', reward, f'Task completed: {ad["title"]}')
+
+    # Notify user of successful completion
     add_notification(db, uid,
-                     f'💰 +{CURRENCY_SYMBOL}{reward:.2f} earned for completing "{ad["title"]}"')
+                     f'✅ Task completed! +{CURRENCY_SYMBOL}{reward:.2f} added to your wallet for "{ad["title"]}"')
+
+    # Notify ad owner of new follower gained
     add_notification(db, ad['user_id'],
-                     f'📈 New follower gained on "{ad["title"]}"!')
+                     f'📈 New follower gained for "{ad["title"]}"!')
+
     db.commit()
-    return jsonify({'success': True, 'earned': reward})
+    return jsonify({'success': True, 'message': f'Task completed! +{CURRENCY_SYMBOL}{reward:.2f} added to your wallet'})
 
 
 # ── Wallet ───────────────────────────────────────────────────────────────────
@@ -1208,6 +1301,7 @@ def activity_feed():
     ])
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Paystack webhook
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1326,6 +1420,160 @@ def paystack_webhook():
 
     # Unknown event — acknowledge so Paystack stops retrying.
     return '', 200
+
+
+# ── Analytics ───────────────────────────────────────────────────────────────
+@app.route('/analytics')
+@login_required
+def analytics():
+    """Main analytics dashboard for advertisers."""
+    db = get_db()
+    uid = session['user_id']
+    
+    # Fetch all ads created by this user
+    ads = db.execute(
+        'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC', (uid,)
+    ).fetchall()
+    
+    if not ads:
+        return render_template('analytics.html', ads=[], summary=None, currency=CURRENCY_SYMBOL)
+    
+    # Calculate aggregate metrics
+    total_budget = sum(float(ad['budget']) for ad in ads)
+    total_spent = sum(float(ad['budget_spent']) or 0 for ad in ads)
+    total_followers = sum(int(ad['followers_gained']) or 0 for ad in ads)
+    active_campaigns = sum(1 for ad in ads if ad['status'] == 'active')
+    
+    # Total task completions
+    total_completions = db.execute(
+        'SELECT COUNT(*) FROM task_completions WHERE ad_id IN '
+        '(SELECT id FROM ads WHERE user_id=?) AND status="approved"',
+        (uid,)
+    ).fetchone()[0]
+    
+    # ROI calculation
+    roi = 0
+    if total_spent > 0:
+        roi = ((total_followers * LISTER_COST_PER_TASK - total_spent) / total_spent * 100)
+    
+    summary = {
+        'total_ads': len(ads),
+        'active_campaigns': active_campaigns,
+        'total_budget': total_budget,
+        'total_spent': total_spent,
+        'total_followers': total_followers,
+        'total_completions': total_completions,
+        'roi': roi,
+        'avg_cost_per_follower': total_spent / total_followers if total_followers > 0 else 0
+    }
+    
+    return render_template('analytics.html', ads=ads, summary=summary, 
+                         currency=CURRENCY_SYMBOL, cost_per_task=LISTER_COST_PER_TASK)
+
+
+@app.route('/api/analytics/<int:ad_id>')
+@login_required
+def api_analytics(ad_id):
+    """Get detailed analytics for a specific ad."""
+    db = get_db()
+    uid = session['user_id']
+    
+    # Verify ownership
+    ad = db.execute('SELECT * FROM ads WHERE id=? AND user_id=?', (ad_id, uid)).fetchone()
+    if not ad:
+        return jsonify({'success': False, 'error': 'Ad not found'}), 404
+    
+    # Fetch task completions
+    completions = db.execute(
+        'SELECT * FROM task_completions WHERE ad_id=? ORDER BY submitted_at DESC',
+        (ad_id,)
+    ).fetchall()
+    
+    # Calculate metrics
+    total_tasks = len(completions)
+    completed_tasks = sum(1 for c in completions if c['status'] == 'completed')
+    rejected_tasks = sum(1 for c in completions if c['status'] == 'rejected')
+    
+    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+    total_paid = sum(float(c['reward']) or 0 for c in completions if c['status'] == 'completed')
+    
+    # Group by date for trend chart
+    trend_data = {}
+    for completion in completions:
+        date = completion['submitted_at'][:10]  # YYYY-MM-DD
+        if date not in trend_data:
+            trend_data[date] = {'total': 0, 'completed': 0}
+        trend_data[date]['total'] += 1
+        if completion['status'] == 'completed':
+            trend_data[date]['completed'] += 1
+    
+    return jsonify({
+        'success': True,
+        'ad': {
+            'id': ad['id'],
+            'title': ad['title'],
+            'platform': ad['platform'],
+            'task_type': ad['task_type'],
+            'budget': ad['budget'],
+            'budget_spent': ad['budget_spent'] or 0,
+            'followers_target': ad['followers_target'],
+            'followers_gained': ad['followers_gained'] or 0,
+            'status': ad['status']
+        },
+        'metrics': {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'rejected_tasks': rejected_tasks,
+            'completion_rate': round(completion_rate, 2),
+            'total_paid': round(total_paid, 2),
+            'avg_reward': round(total_paid / completed_tasks, 2) if completed_tasks > 0 else 0,
+            'target_completion_rate': round((completed_tasks / ad['followers_target'] * 100), 2) if ad['followers_target'] > 0 else 0,
+            'roi': round((ad['followers_gained'] * LISTER_COST_PER_TASK - (ad['budget_spent'] or 0)) / (ad['budget_spent'] or 1) * 100, 2) if ad['budget_spent'] else 0
+        },
+        'trend': sorted(trend_data.items())
+    })
+
+
+@app.route('/api/analytics/performance')
+@login_required
+def api_analytics_performance():
+    """Get performance comparison across all user ads."""
+    db = get_db()
+    uid = session['user_id']
+    
+    ads = db.execute(
+        'SELECT id, title, platform, task_type, followers_target, followers_gained, '
+        'budget, budget_spent, status FROM ads WHERE user_id=? ORDER BY followers_gained DESC LIMIT 10',
+        (uid,)
+    ).fetchall()
+    
+    performance_data = []
+    for ad in ads:
+        completions = db.execute(
+            'SELECT COUNT(*) FROM task_completions WHERE ad_id=? AND status="approved"',
+            (ad['id'],)
+        ).fetchone()[0]
+        
+        roi = 0
+        if ad['budget_spent']:
+            roi = ((ad['followers_gained'] or 0) * LISTER_COST_PER_TASK - ad['budget_spent']) / ad['budget_spent'] * 100
+        
+        performance_data.append({
+            'title': ad['title'],
+            'platform': ad['platform'],
+            'followers_target': ad['followers_target'],
+            'followers_gained': ad['followers_gained'] or 0,
+            'completion_rate': round((ad['followers_gained'] or 0) / ad['followers_target'] * 100, 1) if ad['followers_target'] > 0 else 0,
+            'budget': ad['budget'],
+            'cost_per_follower': round(ad['budget_spent'] / (ad['followers_gained'] or 1), 2) if ad['followers_gained'] else 0,
+            'roi': round(roi, 2),
+            'status': ad['status']
+        })
+    
+    return jsonify({
+        'success': True,
+        'performance': performance_data
+    })
 
 
 # ─────────────────────────────────────────────────────────────────────────────

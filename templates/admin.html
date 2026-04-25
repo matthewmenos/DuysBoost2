@@ -218,6 +218,7 @@
 </div>
 {% endblock %}
 
+
 {% block scripts %}
 <script>
 async function processWdr(id, action, btn) {
@@ -227,14 +228,14 @@ async function processWdr(id, action, btn) {
   if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
   btn.textContent = action === 'approve' ? 'Processing…' : 'Rejecting…';
   try {
-    const r = await fetch(`/admin/withdrawal/${id}/${action}`, { method: 'POST' });
+    const r = await fetch(/admin/withdrawal//, { method: 'POST' });
     const d = await r.json();
     if (d.success) {
       const statusMsg = d.status === 'processing'
         ? 'Transfer initiated — waiting for Paystack confirmation'
         : d.status === 'approved'
-          ? (d.manual ? 'Withdrawal approved (manual)' : 'Withdrawal paid out!')
-          : `Withdrawal ${d.status}`;
+          ? 'Withdrawal approved (manual)'
+          : Withdrawal ;
       showToast(statusMsg);
       if (row) row.remove();
     } else {
@@ -258,39 +259,16 @@ document.getElementById('admin-deposit-form').addEventListener('submit', async e
   btn.textContent = 'Processing…';
   btn.disabled = true;
   try {
-    const r = await fetch('/admin/deposit_user', { method: 'POST', body: new FormData(form) });
+    const fd = new FormData(form);
+    const r = await fetch('/admin/deposit', { method: 'POST', body: fd });
     const d = await r.json();
     if (d.success) {
-      showToast('Funds credited!');
+      showToast('User balance updated!');
       form.reset();
     } else {
-      showToast(d.error || 'Error occurred', 'error');
+      showToast(d.error || 'Failed to update balance', 'error');
     }
   } catch (_e) {
-    showToast('Network error.', 'error');
-  } finally {
-    btn.textContent = original;
-    btn.disabled = false;
-  }
-});
-
-document.getElementById('send-notification-form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const form = e.target;
-  const btn = form.querySelector('[type=submit]');
-  const original = btn.textContent;
-  btn.textContent = 'Sending…';
-  btn.disabled = true;
-  try {
-    const r = await fetch('/admin/send_notification', { method: 'POST', body: new FormData(form) });
-    const d = await r.json();
-    if (d.success) {
-      showToast('Notification sent!');
-      form.reset();
-    } else {
-      showToast(d.error || 'Failed to send.', 'error');
-    }
-  } catch (_err) {
     showToast('Network error.', 'error');
   } finally {
     btn.textContent = original;
