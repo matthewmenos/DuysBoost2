@@ -5,30 +5,30 @@
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 :root {
   /* Dark theme (default) */
-  --bg: #0a0a0f;
-  --bg-elevated: #0f0f18;
-  --surface: #141420;
-  --surface-2: #1c1c2b;
+  --bg: #0d0e11;
+  --bg-elevated: #15171c;
+  --surface: #15171c;
+  --surface-2: #1c1f27;
   --surface-3: #25253a;
-  --border: #2a2a3e;
-  --border-strong: #3a3a52;
+  --border: rgba(255,255,255,0.07);
+  --border-strong: rgba(255,255,255,0.15);
 
-  --text: #f0f0f8;
+  --text: #f0eeea;
   --text-dim: #b8b8d0;
-  --muted: #7878a0;
+  --muted: #7a7e8a;
   --muted-2: #5a5a7a;
 
-  --accent: #7c4dff;
-  --accent-2: #00e5ff;
-  --accent-hover: #9472ff;
+  --accent: #e8c96a;
+  --accent-2: #5be5c5;
+  --accent-hover: #f0d88a;
   --green: #00e676;
   --red: #ff5252;
   --yellow: #ffea00;
   --orange: #ff9100;
 
-  --gradient-primary: linear-gradient(135deg, #7c4dff 0%, #00e5ff 100%);
+  --gradient-primary: linear-gradient(135deg, #e8c96a 0%, #5be5c5 100%);
   --gradient-green: linear-gradient(135deg, #00c853 0%, #00e676 100%);
-  --gradient-subtle: linear-gradient(135deg, rgba(124,77,255,.08), rgba(0,229,255,.08));
+  --gradient-subtle: linear-gradient(135deg, rgba(232,201,106,.08), rgba(91,229,197,.08));
 
   --radius-sm: 8px;
   --radius: 12px;
@@ -36,7 +36,7 @@
   --radius-xl: 20px;
 
   --shadow-sm: 0 2px 8px rgba(0,0,0,.15);
-  --shadow: 0 8px 24px rgba(124,77,255,.12);
+  --shadow: 0 8px 24px rgba(232,201,106,.12);
   --shadow-lg: 0 16px 48px rgba(0,0,0,.25);
 
   --sidebar-width: 248px;
@@ -261,7 +261,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
   min-height: 100vh; min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding-bottom: var(--bottomnav-height);
+  padding-bottom: 96px;
 }
 
 .topbar {
@@ -324,44 +324,80 @@ body.no-scroll { overflow: hidden; touch-action: none; }
    Mobile bottom nav (replaces sidebar shortcuts on small screens)
    ========================================================================= */
 .bottom-nav {
-  position: fixed; bottom: 0; left: 0; right: 0;
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
   height: var(--bottomnav-height);
-  background: color-mix(in srgb, var(--surface) 95%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50px;
   display: flex;
   align-items: stretch;
   z-index: 90;
+  padding: 0 8px;
   padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: calc(100vw - 32px);
+  max-width: 400px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bottom-nav.hidden {
+  transform: translateX(-50%) translateY(100px);
 }
 .bottom-nav-item {
   flex: 1;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 3px;
+  gap: 2px;
   font-size: 10px; font-weight: 600;
   color: var(--muted);
   text-decoration: none;
-  padding: 6px 2px;
-  transition: color var(--transition);
+  padding: 8px 4px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  border-radius: 50%;
+  margin: 4px 0;
 }
-.bottom-nav-item.active { color: var(--accent); }
+.bottom-nav-item:hover {
+  color: var(--accent);
+  transform: scale(1.05);
+}
+.bottom-nav-item.active {
+  color: var(--accent);
+  background: rgba(124, 77, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
 .bottom-nav-item.active::before {
-  content: ''; position: absolute; top: 0; left: 25%; right: 25%;
-  height: 2px; background: var(--accent); border-radius: 0 0 2px 2px;
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: liquidGlow 2s ease-in-out infinite;
 }
-.bottom-nav-item .icon { font-size: 18px; }
+@keyframes liquidGlow {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scaleX(1); }
+  50% { opacity: 1; transform: translateX(-50%) scaleX(1.2); }
+}
+.bottom-nav-item .icon { font-size: 20px; }
 .bottom-nav-item .bn-badge {
   position: absolute;
-  top: 4px; right: 25%;
+  top: -2px; right: 20%;
   background: var(--red);
   color: #fff;
   font-size: 9px; font-weight: 700;
   padding: 1px 5px;
   border-radius: 20px;
   min-width: 16px; text-align: center;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
 /* =========================================================================

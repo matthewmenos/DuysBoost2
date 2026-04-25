@@ -30,8 +30,6 @@ export PAYSTACK_SECRET_KEY="sk_test_..."    # or sk_live_
 # Optional OAuth
 export GOOGLE_CLIENT_ID="..."
 export GOOGLE_CLIENT_SECRET="..."
-export APPLE_CLIENT_ID="..."
-export APPLE_CLIENT_SECRET="..."
 
 # Runtime
 export PORT=5000
@@ -39,6 +37,8 @@ export FLASK_DEBUG=0
 ```
 
 Copy `.env.example` to `.env` for local development and do not commit `.env`.
+
+This app loads environment variables from `.env` automatically using `python-dotenv`, so your Paystack secret key is kept out of source control.
 
 > ⚠️ **Security note:** The previous version of this app shipped with
 > hardcoded live Paystack keys. Those keys have been removed. If they were

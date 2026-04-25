@@ -1,8 +1,172 @@
 ---
 deployment:
   tasks:
+    # 1. Set deployment path and create necessary directories
     - export DEPLOYPATH=/home/affiliat/repositories/DuysBoost2/
+    - export PYTHON=/usr/bin/python3
+    - /bin/mkdir -p $DEPLOYPATH
+    
+    # 2. Copy application files
     - /bin/cp -R app.py requirements.txt static templates $DEPLOYPATH
+    
+    # 3. Navigate to deployment directory
     - cd $DEPLOYPATH
-    - python3 -m pip install --user -r requirements.txt
-    - /bin/echo "Deployment successful"
+    
+    # 4. Install Python dependencies as user
+    - $PYTHON -m pip install --user -r requirements.txt
+    
+    # 5. Create .env file if it doesn't exist with required environment variables
+    - |
+      if [ ! -f $DEPLOYPATH/.env ]; then
+        /bin/cat > $DEPLOYPATH/.env << 'EOF'
+# Flask Configuration
+FLASK_SECRET_KEY=$(openssl rand -hex 32)
+COOKIE_SECURE=1
+
+# Paystack Configuration (IMPORTANT: Replace with your actual LIVE keys from dashboard)
+PAYSTACK_PUBLIC_KEY=pk_live_your_actual_public_key_here
+PAYSTACK_SECRET_KEY=sk_live_your_actual_secret_key_here
+
+# Google OAuth Configuration (IMPORTANT: Replace with your actual credentials)
+GOOGLE_CLIENT_ID=your_actual_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_actual_google_client_secret_here
+
+# Application Settings
+PORT=5000
+FLASK_DEBUG=0
+EOF
+        /bin/echo "✓ .env file created. Please update with your API keys."
+      else
+        /bin/echo "✓ .env file already exists. Skipping creation."
+      fi
+    
+    # 6. Initialize SQLite database if it doesn't exist
+    - |
+      if [ ! -f $DEPLOYPATH/duys_boost.db ]; then
+        $PYTHON << 'PYEOF'
+import sqlite3
+import os
+
+db_path = os.path.join(os.getcwd(), 'duys_boost.db')
+conn = sqlite3.connect(db_path)
+c = conn.cursor()
+
+# Users table
+c.execute('''
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    theme TEXT DEFAULT 'dark',
+    referral_code TEXT UNIQUE,
+    referred_by INTEGER,
+    balance REAL DEFAULT 0.0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(referred_by) REFERENCES users(id)
+  )
+''')
+
+# Ads table
+c.execute('''
+  CREATE TABLE IF NOT EXISTS ads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    instagram_url TEXT NOT NULL,
+    task_count INTEGER NOT NULL,
+    engagement_type TEXT DEFAULT 'followers',
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )
+''')
+
+# Tasks table
+c.execute('''
+  CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ad_id INTEGER NOT NULL,
+    worker_id INTEGER,
+    status TEXT DEFAULT 'pending',
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(ad_id) REFERENCES ads(id),
+    FOREIGN KEY(worker_id) REFERENCES users(id)
+  )
+''')
+
+# Transactions table
+c.execute('''
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    amount REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    reference TEXT,
+    momo_provider TEXT,
+    momo_number TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )
+''')
+
+# Notifications table
+c.execute('''
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT,
+    type TEXT DEFAULT 'info',
+    is_read INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  )
+''')
+
+conn.commit()
+conn.close()
+print("✓ Database initialized successfully")
+PYEOF
+      else
+        /bin/echo "✓ Database already exists. Skipping initialization."
+      fi
+    
+    # 7. Set proper ownership and permissions
+    - /bin/chown -R affiliat:affiliat $DEPLOYPATH
+    - /bin/chmod -R 755 $DEPLOYPATH
+    - /bin/chmod 700 $DEPLOYPATH/.env
+    - /bin/chmod 644 $DEPLOYPATH/duys_boost.db
+    - /bin/chmod 755 $DEPLOYPATH/static $DEPLOYPATH/templates
+    
+    # 8. Verify installation
+    - |
+      $PYTHON << 'VERIFYEOF'
+import sys
+try:
+  import flask
+  import authlib
+  import requests
+  import dotenv
+  print("✓ All dependencies verified successfully")
+except ImportError as e:
+  print(f"✗ Missing dependency: {e}")
+  sys.exit(1)
+VERIFYEOF
+    
+    # 9. Final deployment message
+    - /bin/echo "=================================================="
+    - /bin/echo "✓ Deployment Successful!"
+    - /bin/echo "=================================================="
+    - /bin/echo "📝 Next Steps:"
+    - /bin/echo "1. Update .env file with your API keys:"
+    - /bin/echo "   - PAYSTACK_PUBLIC_KEY (pk_live_...)"
+    - /bin/echo "   - PAYSTACK_SECRET_KEY (sk_live_...)"
+    - /bin/echo "   - GOOGLE_CLIENT_ID"
+    - /bin/echo "   - GOOGLE_CLIENT_SECRET"
+    - /bin/echo "2. Configure your web server to run app.py"
+    - /bin/echo "3. Restart the application"
+    - /bin/echo "=================================================="

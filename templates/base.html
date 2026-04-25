@@ -135,6 +135,29 @@
 
 {% if PAYSTACK_ENABLED %}<script src="https://js.paystack.co/v1/inline.js"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script>
+(function() {
+  // Hide/show bottom nav on scroll
+  let lastScrollY = window.scrollY;
+  const bottomNav = document.querySelector('.bottom-nav');
+  
+  if (bottomNav) {
+    window.addEventListener('scroll', () => {
+      const currentScrollY = window.scrollY;
+      const scrollingDown = currentScrollY > lastScrollY;
+      
+      if (scrollingDown && currentScrollY > 100) {
+        bottomNav.classList.add('hidden');
+      } else {
+        bottomNav.classList.remove('hidden');
+      }
+      
+      lastScrollY = currentScrollY;
+    });
+  }
+})();
+</script>
+{% endblock %}
 </body>
 </html>

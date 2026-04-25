@@ -1,6 +1,6 @@
 """
 DUYS Boost — Social Media Boost Platform
-Flask backend with SQLite, Paystack deposits, OAuth (Google/Apple),
+Flask backend with SQLite, Paystack deposits, OAuth (Google),
 referral rewards, and an ads/tasks marketplace.
 """
 import hashlib
@@ -14,6 +14,7 @@ from functools import wraps
 
 import requests
 from authlib.integrations.flask_client import OAuth
+from dotenv import load_dotenv
 from flask import (
     Flask, abort, g, jsonify, redirect, render_template, request, session,
     url_for
@@ -23,6 +24,13 @@ from flask import (
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+base_dir = os.path.dirname(__file__)
+dotenv_path = os.path.join(base_dir, '.env')
+if not os.path.exists(dotenv_path):
+    example_path = os.path.join(base_dir, '.env.example')
+    if os.path.exists(example_path):
+        dotenv_path = example_path
+load_dotenv(dotenv_path, override=False)
 
 # Use a strong secret key from env in production; fall back to a random one locally.
 # IMPORTANT: set FLASK_SECRET_KEY in production so sessions survive restarts.
@@ -59,8 +67,6 @@ PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-APPLE_CLIENT_ID = os.environ.get('APPLE_CLIENT_ID', '')
-APPLE_CLIENT_SECRET = os.environ.get('APPLE_CLIENT_SECRET', '')
 
 oauth = OAuth(app)
 if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
@@ -70,15 +76,6 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         client_secret=GOOGLE_CLIENT_SECRET,
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid email profile'},
-    )
-
-if APPLE_CLIENT_ID and APPLE_CLIENT_SECRET:
-    oauth.register(
-        name='apple',
-        client_id=APPLE_CLIENT_ID,
-        client_secret=APPLE_CLIENT_SECRET,
-        server_metadata_url='https://appleid.apple.com/.well-known/openid-configuration',
-        client_kwargs={'scope': 'name email'},
     )
 
 
@@ -517,27 +514,6 @@ def google_auth_callback():
     return _finalize_oauth_login(userinfo, provider='Google')
 
 
-# ── OAuth: Apple ─────────────────────────────────────────────────────────────
-@app.route('/auth/apple')
-def apple_login_route():
-    if not getattr(oauth, 'apple', None):
-        return redirect(url_for('login'))
-    redirect_uri = url_for('apple_auth_callback', _external=True)
-    return oauth.apple.authorize_redirect(redirect_uri)
-
-
-@app.route('/auth/apple/callback', methods=['GET', 'POST'])
-def apple_auth_callback():
-    if not getattr(oauth, 'apple', None):
-        return redirect(url_for('login'))
-    try:
-        token = oauth.apple.authorize_access_token()
-        userinfo = token.get('userinfo') or {}
-    except Exception:
-        return redirect(url_for('login'))
-    return _finalize_oauth_login(userinfo, provider='Apple')
-
-
 def _finalize_oauth_login(userinfo, provider):
     email = (userinfo or {}).get('email')
     name = (userinfo or {}).get('name') or (email.split('@')[0] if email else None)
@@ -661,6 +637,12 @@ def create_ad():
     ).fetchone()
     add_transaction(db, uid, 'spend', budget, f'Budget for ad: {ad["title"]}')
     add_notification(db, uid, f'📢 Ad "{ad["title"]}" is now live!')
+    
+    # Notify all other users about the new task
+    users = db.execute('SELECT id FROM users WHERE id != ?', (uid,)).fetchall()
+    for user in users:
+        add_notification(db, user['id'], f'📢 New task available: "{ad["title"]}" on {ad["platform"]}')
+    
     db.commit()
     return jsonify({'success': True})
 
@@ -786,19 +768,11 @@ def deposit():
     declared_amount = safe_float(payload.get('amount'), 0)
     if not reference or declared_amount <= 0:
         return jsonify({'success': False, 'error': 'Invalid deposit payload.'}), 400
-    try:
-        resp = requests.get(
-            f'https://api.paystack.co/transaction/verify/{reference}',
-            headers={'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}'},
-            timeout=10,
-        )
-        body = resp.json()
-    except Exception:
-        return jsonify({'success': False,
-                        'error': 'Failed to verify payment with Paystack.'}), 502
-    if not body.get('status'):
+    ok, data = paystack_get(f'/transaction/verify/{reference}')
+    if not ok:
+        return jsonify({'success': False, 'error': data}), 502
+    if not data.get('status'):
         return jsonify({'success': False, 'error': 'Unable to verify payment.'}), 400
-    data = body.get('data') or {}
     if data.get('status') != 'success' or data.get('currency') != CURRENCY_CODE:
         return jsonify({'success': False, 'error': 'Payment not successful.'}), 400
     paid_amount = (data.get('amount') or 0) / 100.0
@@ -1186,6 +1160,32 @@ def admin_deposit():
         db, user_id,
         f'💰 Admin credited {CURRENCY_SYMBOL}{amount:.2f} to your account!'
     )
+    db.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/admin/send_notification', methods=['POST'])
+@admin_required
+def send_notification():
+    db = get_db()
+    message = request.form.get('message', '').strip()
+    user_id = safe_int(request.form.get('user_id'), 0)
+    
+    if not message:
+        return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
+    
+    if user_id:
+        # Send to specific user
+        user = db.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found.'}), 404
+        add_notification(db, user_id, f'📢 {message}')
+    else:
+        # Send to all users
+        users = db.execute('SELECT id FROM users').fetchall()
+        for user in users:
+            add_notification(db, user['id'], f'📢 {message}')
+    
     db.commit()
     return jsonify({'success': True})
 
