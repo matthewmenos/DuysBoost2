@@ -71,7 +71,7 @@
 
   <!-- Send Notification -->
   <div class="section-title mb-16">📢 Send Notification</div>
-  <form id="send-notification-form" novalidate>
+  <form id="send-notification-form" method="POST" action="/admin/send_notification" novalidate>
     <div class="form-group">
       <label class="form-label" for="notif-user">Recipient (leave empty for all users)</label>
       <select class="form-input" id="notif-user" name="user_id">
@@ -93,7 +93,7 @@
   <!-- Deposit to User -->
   <div class="card">
     <div class="section-title mb-16">💰 Deposit Funds to User</div>
-    <form id="admin-deposit-form" novalidate>
+    <form id="admin-deposit-form" method="POST" action="/admin/deposit_user" novalidate>
       <div class="form-group">
         <label class="form-label" for="adm-user">Select User</label>
         <select class="form-input" id="adm-user" name="user_id" required>
@@ -228,14 +228,14 @@ async function processWdr(id, action, btn) {
   if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
   btn.textContent = action === 'approve' ? 'Processing…' : 'Rejecting…';
   try {
-    const r = await fetch(/admin/withdrawal//, { method: 'POST' });
+    const r = await fetch(`/admin/withdrawal/${id}/${action}`, { method: 'POST' });
     const d = await r.json();
     if (d.success) {
       const statusMsg = d.status === 'processing'
         ? 'Transfer initiated — waiting for Paystack confirmation'
         : d.status === 'approved'
           ? 'Withdrawal approved (manual)'
-          : Withdrawal ;
+          : 'Withdrawal updated';
       showToast(statusMsg);
       if (row) row.remove();
     } else {
@@ -251,6 +251,31 @@ async function processWdr(id, action, btn) {
 }
 window.processWdr = processWdr;
 
+document.getElementById('send-notification-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('[type=submit]');
+  const original = btn.textContent;
+  btn.textContent = 'Sending…';
+  btn.disabled = true;
+  try {
+    const fd = new FormData(form);
+    const r = await fetch('/admin/send_notification', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Notification sent!');
+      form.reset();
+    } else {
+      showToast(d.error || 'Failed to send notification', 'error');
+    }
+  } catch (_e) {
+    showToast('Network error.', 'error');
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('admin-deposit-form').addEventListener('submit', async e => {
   e.preventDefault();
   const form = e.target;
@@ -260,7 +285,7 @@ document.getElementById('admin-deposit-form').addEventListener('submit', async e
   btn.disabled = true;
   try {
     const fd = new FormData(form);
-    const r = await fetch('/admin/deposit', { method: 'POST', body: fd });
+    const r = await fetch('/admin/deposit_user', { method: 'POST', body: fd });
     const d = await r.json();
     if (d.success) {
       showToast('User balance updated!');

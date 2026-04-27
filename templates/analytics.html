@@ -244,7 +244,7 @@
     <div class="metric-card">
       <div class="metric-label">Total Spent</div>
       <div class="metric-value">{{ currency }}{{ summary.total_spent|round(2) }}</div>
-      <div class="metric-change">{{ ((summary.total_spent / summary.total_budget * 100)|round(1) if summary.total_budget > 0 else 0) }}% utilization</div>
+      <div class="metric-change">{% if summary.total_budget > 0 %}{{ ((summary.total_spent / summary.total_budget * 100)|round(1)) }}% utilization{% else %}—{% endif %}</div>
     </div>
     
     <div class="metric-card">

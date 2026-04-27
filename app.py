@@ -1236,6 +1236,7 @@ def process_withdrawal(wdr_id, action):
 
 
 @app.route('/admin/deposit_user', methods=['POST'])
+@app.route('/admin/deposit', methods=['POST'])
 @admin_required
 def admin_deposit():
     db = get_db()
