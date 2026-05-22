@@ -136,7 +136,6 @@
 
 {% block modals %}{% endblock %}
 
-{% if PAYSTACK_ENABLED %}<script src="https://js.paystack.co/v1/inline.js"></script>{% endif %}
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% block scripts %}
 <script>

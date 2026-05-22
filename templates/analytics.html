@@ -47,11 +47,7 @@
   margin-bottom: 6px;
 }
 
-.metric-change {
-  font-size: 12px;
-  color: var(--muted);
-}
-
+.metric-change { font-size: 12px; color: var(--muted); }
 .metric-change.positive { color: var(--green); }
 .metric-change.negative { color: var(--red); }
 
@@ -68,17 +64,8 @@
   border-radius: var(--radius-lg);
   padding: 20px;
 }
-
-.chart-container h3 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.chart-wrapper {
-  position: relative;
-  height: 250px;
-}
+.chart-container h3 { margin: 0 0 16px 0; font-size: 16px; font-weight: 700; }
+.chart-wrapper { position: relative; height: 250px; }
 
 .ads-table {
   width: 100%;
@@ -88,12 +75,7 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
-
-.ads-table thead {
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-}
-
+.ads-table thead { background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .ads-table th {
   padding: 12px 16px;
   text-align: left;
@@ -103,22 +85,11 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-
-.ads-table td {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  font-size: 14px;
-}
-
+.ads-table td { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
 .ads-table tbody tr:last-child td { border-bottom: none; }
-
 .ads-table tbody tr:hover { background: var(--surface-2); }
 
-.ad-title {
-  font-weight: 600;
-  color: var(--text);
-}
-
+.ad-title { font-weight: 600; color: var(--text); }
 .ad-platform {
   display: inline-block;
   padding: 4px 10px;
@@ -129,40 +100,13 @@
   font-weight: 600;
 }
 
-.progress-bar {
-  background: var(--surface-3);
-  border-radius: 4px;
-  height: 6px;
-  overflow: hidden;
-  margin: 4px 0;
-}
+.progress-bar { background: var(--surface-3); border-radius: 4px; height: 6px; overflow: hidden; margin: 4px 0; }
+.progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
 
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.empty-state-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-}
-
-.empty-state h2 {
-  font-size: 20px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-
-.empty-state p {
-  color: var(--muted);
-  margin-bottom: 20px;
-}
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+.empty-state h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.empty-state p { color: var(--muted); margin-bottom: 20px; }
 
 .btn-primary-outline {
   display: inline-block;
@@ -174,19 +118,9 @@
   text-decoration: none;
   transition: all var(--transition);
 }
+.btn-primary-outline:hover { background: var(--accent); color: white; }
 
-.btn-primary-outline:hover {
-  background: var(--accent);
-  color: white;
-}
-
-.filter-controls {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
+.filter-controls { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .filter-btn {
   padding: 8px 16px;
   background: var(--surface-2);
@@ -198,7 +132,6 @@
   color: var(--muted);
   transition: all var(--transition);
 }
-
 .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
 .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
 
@@ -234,35 +167,34 @@
       <div class="metric-value">{{ summary.active_campaigns }}</div>
       <div class="metric-change">of {{ summary.total_ads }} total</div>
     </div>
-    
     <div class="metric-card">
       <div class="metric-label">Total Budget</div>
-      <div class="metric-value">{{ currency }}{{ summary.total_budget|round(2) }}</div>
+      <div class="metric-value">{{ currency }}{{ '%.2f'|format(summary.total_budget) }}</div>
       <div class="metric-change">allocated</div>
     </div>
-    
     <div class="metric-card">
       <div class="metric-label">Total Spent</div>
-      <div class="metric-value">{{ currency }}{{ summary.total_spent|round(2) }}</div>
-      <div class="metric-change">{% if summary.total_budget > 0 %}{{ ((summary.total_spent / summary.total_budget * 100)|round(1)) }}% utilization{% else %}—{% endif %}</div>
+      <div class="metric-value">{{ currency }}{{ '%.2f'|format(summary.total_spent) }}</div>
+      <div class="metric-change">
+        {% if summary.total_budget > 0 %}
+          {{ '%.1f'|format(summary.total_spent / summary.total_budget * 100) }}% utilization
+        {% else %}—{% endif %}
+      </div>
     </div>
-    
     <div class="metric-card">
       <div class="metric-label">Followers Gained</div>
-      <div class="metric-value">{{ summary.total_followers|int }}</div>
-      <div class="metric-change">{{ currency }}{{ summary.avg_cost_per_follower|round(3) }} per follower</div>
+      <div class="metric-value">{{ summary.total_followers }}</div>
+      <div class="metric-change">{{ currency }}{{ '%.4f'|format(summary.avg_cost_per_follower) }} per follower</div>
     </div>
-    
     <div class="metric-card">
       <div class="metric-label">Completed Tasks</div>
-      <div class="metric-value">{{ summary.total_completions|int }}</div>
+      <div class="metric-value">{{ summary.total_completions }}</div>
       <div class="metric-change">across all campaigns</div>
     </div>
-    
     <div class="metric-card">
       <div class="metric-label">ROI</div>
       <div class="metric-value {% if summary.roi > 0 %}positive{% elif summary.roi < 0 %}negative{% endif %}">
-        {{ summary.roi|round(1) }}%
+        {{ '%.1f'|format(summary.roi) }}%
       </div>
       <div class="metric-change {% if summary.roi > 0 %}positive{% elif summary.roi < 0 %}negative{% endif %}">
         {% if summary.roi > 0 %}📈 Profitable{% elif summary.roi < 0 %}📉 Loss{% else %}➡️ Break-even{% endif %}
@@ -278,21 +210,18 @@
         <canvas id="performanceChart"></canvas>
       </div>
     </div>
-
     <div class="chart-container">
       <h3>Budget Distribution</h3>
       <div class="chart-wrapper">
         <canvas id="budgetChart"></canvas>
       </div>
     </div>
-
     <div class="chart-container">
       <h3>Platform Breakdown</h3>
       <div class="chart-wrapper">
         <canvas id="platformChart"></canvas>
       </div>
     </div>
-
     <div class="chart-container">
       <h3>Task Completion Rate</h3>
       <div class="chart-wrapper">
@@ -304,13 +233,11 @@
   <!-- Filter & Ads Table -->
   <div>
     <h2 style="margin-bottom: 16px; font-size: 20px;">Campaign Details</h2>
-    
     <div class="filter-controls">
-      <button class="filter-btn active" onclick="filterAds('all')">All Campaigns</button>
-      <button class="filter-btn" onclick="filterAds('active')">Active</button>
-      <button class="filter-btn" onclick="filterAds('paused')">Paused</button>
+      <button class="filter-btn active" onclick="filterAds('all', this)">All Campaigns</button>
+      <button class="filter-btn" onclick="filterAds('active', this)">Active</button>
+      <button class="filter-btn" onclick="filterAds('paused', this)">Paused</button>
     </div>
-
     <table class="ads-table">
       <thead>
         <tr>
@@ -326,18 +253,23 @@
       <tbody id="ads-tbody">
         {% for ad in ads %}
         <tr data-status="{{ ad.status }}">
-          <td class="ad-title">{{ ad.title[:30] }}...</td>
+          <td class="ad-title">{{ ad.title[:30] }}{% if ad.title|length > 30 %}…{% endif %}</td>
           <td><span class="ad-platform">{{ ad.platform }}</span></td>
           <td>{{ ad.followers_target }}</td>
           <td><strong>{{ ad.followers_gained or 0 }}</strong></td>
           <td>
+            {% set pct = ((ad.followers_gained or 0) / ad.followers_target * 100) if ad.followers_target > 0 else 0 %}
             <div class="progress-bar">
-              <div class="progress-fill" style="width: {{ (((ad.followers_gained or 0) / ad.followers_target * 100) if ad.followers_target > 0 else 0)|round(1) }}%"></div>
+              <div class="progress-fill" style="width: {{ pct|round(1) }}%"></div>
             </div>
-            {{ (((ad.followers_gained or 0) / ad.followers_target * 100) if ad.followers_target > 0 else 0)|round(1) }}%
+            {{ pct|round(1) }}%
           </td>
-          <td>{{ currency }}{{ ad.budget|round(2) }}</td>
-          <td><span style="color: {% if ad.status == 'active' %}var(--green){% else %}var(--muted){% endif %}">{{ ad.status|title }}</span></td>
+          <td>{{ currency }}{{ '%.2f'|format(ad.budget) }}</td>
+          <td>
+            <span style="color: {% if ad.status == 'active' %}var(--green){% else %}var(--muted){% endif %}">
+              {{ ad.status|title }}
+            </span>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -346,117 +278,140 @@
 
   {% endif %}
 </div>
+{% endblock %}
 
+{% block scripts %}
+{% if summary %}
 <script>
-const ads = {{ ads|tojson }};
-const currency = '{{ currency }}';
+(function() {
+  const ads = {{ ads | tojson }};
+  const currency = {{ currency | tojson }};
 
-// Performance Chart (Line Chart)
-if (document.getElementById('performanceChart') && ads.length > 0) {
-  const sorted = ads.slice(0, 5).reverse();
-  const ctx = document.getElementById('performanceChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: sorted.map(a => a.title.substring(0, 15)),
-      datasets: [{
-        label: 'Followers Gained',
-        data: sorted.map(a => a.followers_gained || 0),
-        borderColor: 'var(--accent)',
-        backgroundColor: 'rgba(124, 77, 255, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } }
-    }
-  });
-}
+  // Resolve CSS variable to a hex/rgb string for Chart.js
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#7c4dff';
+  }
 
-// Budget Distribution Chart (Pie)
-if (document.getElementById('budgetChart') && ads.length > 0) {
-  const ctx = document.getElementById('budgetChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ads.slice(0, 5).map(a => a.title.substring(0, 12)),
-      datasets: [{
-        data: ads.slice(0, 5).map(a => a.budget),
-        backgroundColor: ['#7c4dff', '#ff6b6b', '#51cf66', '#ffd43b', '#74c0fc']
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom' } }
-    }
-  });
-}
+  const ACCENT = '#7c4dff';
+  const COLORS = ['#7c4dff', '#ff6b6b', '#51cf66', '#ffd43b', '#74c0fc'];
 
-// Platform Breakdown (Bar)
-if (document.getElementById('platformChart') && ads.length > 0) {
-  const platforms = {};
-  ads.forEach(a => {
-    platforms[a.platform] = (platforms[a.platform] || 0) + 1;
-  });
-  const ctx = document.getElementById('platformChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: Object.keys(platforms),
-      datasets: [{
-        label: 'Campaigns',
-        data: Object.values(platforms),
-        backgroundColor: 'var(--accent)'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } }
-    }
-  });
-}
+  // ── Performance Chart (Line) ──────────────────────────────────
+  const perfCanvas = document.getElementById('performanceChart');
+  if (perfCanvas && ads.length > 0) {
+    const sorted = ads.slice(0, 5).slice().reverse();
+    new Chart(perfCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: sorted.map(a => (a.title || '').substring(0, 15)),
+        datasets: [{
+          label: 'Followers Gained',
+          data: sorted.map(a => a.followers_gained || 0),
+          borderColor: ACCENT,
+          backgroundColor: 'rgba(124,77,255,0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+  }
 
-// Completion Rate Chart (Bar)
-if (document.getElementById('completionChart') && ads.length > 0) {
-  const sorted = ads.slice(0, 5);
-  const ctx = document.getElementById('completionChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: sorted.map(a => a.title.substring(0, 15)),
-      datasets: [{
-        label: 'Completion %',
-        data: sorted.map(a => ((a.followers_gained || 0) / a.followers_target * 100).toFixed(1)),
-        backgroundColor: 'var(--accent)'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { max: 100 } }
-    }
-  });
-}
+  // ── Budget Distribution (Doughnut) ───────────────────────────
+  const budgetCanvas = document.getElementById('budgetChart');
+  if (budgetCanvas && ads.length > 0) {
+    const slice = ads.slice(0, 5);
+    new Chart(budgetCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: slice.map(a => (a.title || '').substring(0, 14)),
+        datasets: [{
+          data: slice.map(a => parseFloat(a.budget) || 0),
+          backgroundColor: COLORS,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }
+      }
+    });
+  }
 
-// Filter Functionality
-function filterAds(status) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  
-  document.querySelectorAll('#ads-tbody tr').forEach(row => {
-    const rowStatus = row.getAttribute('data-status');
-    if (status === 'all' || rowStatus === status) {
-      row.style.display = '';
-    } else {
-      row.style.display = 'none';
-    }
-  });
-}
+  // ── Platform Breakdown (Bar) ─────────────────────────────────
+  const platCanvas = document.getElementById('platformChart');
+  if (platCanvas && ads.length > 0) {
+    const platforms = {};
+    ads.forEach(a => {
+      const p = a.platform || 'Other';
+      platforms[p] = (platforms[p] || 0) + 1;
+    });
+    new Chart(platCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: Object.keys(platforms),
+        datasets: [{
+          label: 'Campaigns',
+          data: Object.values(platforms),
+          backgroundColor: ACCENT,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  }
+
+  // ── Completion Rate (Bar) ────────────────────────────────────
+  const compCanvas = document.getElementById('completionChart');
+  if (compCanvas && ads.length > 0) {
+    const slice = ads.slice(0, 5);
+    new Chart(compCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: slice.map(a => (a.title || '').substring(0, 15)),
+        datasets: [{
+          label: 'Completion %',
+          data: slice.map(a => {
+            const target = parseInt(a.followers_target) || 1;
+            const gained = parseInt(a.followers_gained) || 0;
+            return parseFloat((gained / target * 100).toFixed(1));
+          }),
+          backgroundColor: COLORS,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } }
+      }
+    });
+  }
+
+  // ── Filter Functionality ─────────────────────────────────────
+  window.filterAds = function(status, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    document.querySelectorAll('#ads-tbody tr').forEach(row => {
+      const rowStatus = row.getAttribute('data-status');
+      row.style.display = (status === 'all' || rowStatus === status) ? '' : 'none';
+    });
+  };
+})();
 </script>
+{% endif %}
 {% endblock %}

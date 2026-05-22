@@ -1,6 +1,6 @@
 """
 DUYS Boost — Social Media Boost Platform
-Flask backend with SQLite, Paystack deposits, OAuth (Google),
+Flask backend with SQLite, Crypto (USDT) deposits, OAuth (Google),
 referral rewards, and an ads/tasks marketplace.
 """
 import hashlib
@@ -32,11 +32,8 @@ if not os.path.exists(dotenv_path):
         dotenv_path = example_path
 load_dotenv(dotenv_path, override=False)
 
-# Use a strong secret key from env in production; fall back to a random one locally.
-# IMPORTANT: set FLASK_SECRET_KEY in production so sessions survive restarts.
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
 
-# Secure cookie settings (hardens sessions against CSRF and XSS)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
@@ -45,25 +42,27 @@ app.config.update(
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'duys_boost.db')
 
-# Currency & pricing (Ghana Cedis)
-CURRENCY_CODE = 'GHS'
-CURRENCY_SYMBOL = 'GH₵'
-WORKER_REWARD_PER_TASK = 0.30   # 30 pesewas earned per completed follower task
-LISTER_COST_PER_TASK = 0.70     # 70 pesewas spent per follower gained
-REFERRAL_BONUS = 1.0            # 1 cedi per successful referral
+# Currency & pricing (USD)
+CURRENCY_CODE = 'USD'
+CURRENCY_SYMBOL = '$'
+WORKER_REWARD_PER_TASK = 0.05   # $0.05 earned per completed follower task
+LISTER_COST_PER_TASK = 0.10     # $0.10 spent per follower gained
+REFERRAL_BONUS = 0.50           # $0.50 per successful referral
+REFERRAL_ACTIVATION_FEE = 1.00  # $1.00 activation fee credited to admin
 
-# Ghana Mobile Money providers supported by Paystack Transfers.
-# The key is what the user sees; the value is Paystack's bank_code.
-# Note: Vodafone Cash rebranded to Telecel Cash, but Paystack still uses 'VOD'.
-MOMO_PROVIDERS = {
-    'MTN':      'MTN Mobile Money',
-    'VOD':      'Telecel Cash (Vodafone)',
-    'ATL':      'AirtelTigo Money',
+# Supported USDT crypto networks for deposit/withdrawal
+CRYPTO_NETWORKS = {
+    'aptos':     {'label': 'Aptos (APT)',        'token': 'USDT', 'chain': 'Aptos'},
+    'avalanche': {'label': 'Avalanche (AVAX)',    'token': 'USDT', 'chain': 'Avalanche C-Chain'},
+    'bsc':       {'label': 'BNB Smart Chain (BSC)', 'token': 'USDT', 'chain': 'BSC'},
 }
 
-# External integrations — ALWAYS read from environment, never hardcode secrets.
-PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', '')
-PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
+# Wallet addresses for each network — set these in .env
+CRYPTO_WALLETS = {
+    'aptos':     os.environ.get('CRYPTO_WALLET_APTOS', ''),
+    'avalanche': os.environ.get('CRYPTO_WALLET_AVALANCHE', ''),
+    'bsc':       os.environ.get('CRYPTO_WALLET_BSC', ''),
+}
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
@@ -113,10 +112,10 @@ def init_db():
         referred_by INTEGER,
         is_admin INTEGER DEFAULT 0,
         theme TEXT DEFAULT 'dark',
-        paystack_recipient TEXT,
-        recipient_provider TEXT,
-        recipient_account TEXT,
-        recipient_name TEXT,
+        crypto_network TEXT,
+        crypto_address TEXT,
+        crypto_name TEXT,
+        referral_bonus_awarded INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS ads (
@@ -126,7 +125,7 @@ def init_db():
         platform TEXT NOT NULL,
         target_url TEXT NOT NULL,
         task_type TEXT NOT NULL,
-        reward_per_task REAL DEFAULT 0.10,
+        reward_per_task REAL DEFAULT 0.05,
         budget REAL NOT NULL,
         budget_spent REAL DEFAULT 0,
         followers_target INTEGER DEFAULT 0,
@@ -171,19 +170,28 @@ def init_db():
         amount REAL,
         method TEXT,
         account TEXT,
+        network TEXT,
         status TEXT DEFAULT 'pending',
-        transfer_code TEXT,
-        paystack_reference TEXT,
+        tx_hash TEXT,
         failure_reason TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         processed_at TEXT,
         FOREIGN KEY(user_id) REFERENCES users(id)
     );
+    CREATE TABLE IF NOT EXISTS crypto_deposits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        network TEXT NOT NULL,
+        tx_hash TEXT UNIQUE NOT NULL,
+        amount REAL NOT NULL,
+        status TEXT DEFAULT 'pending',
+        confirmed_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
     ''')
 
     # ── Migrations for databases created by earlier versions ─────────────
-    # Adding columns via CREATE TABLE IF NOT EXISTS is a no-op on existing
-    # tables, so we add them here idempotently.
     def _add_col_if_missing(table, col, decl):
         cols = {r[1] for r in db.execute(f'PRAGMA table_info({table})').fetchall()}
         if col not in cols:
@@ -197,12 +205,12 @@ def init_db():
         if index_name not in existing:
             db.execute(f'CREATE INDEX {index_name} ON {table}({cols})')
 
-    _add_col_if_missing('users', 'paystack_recipient', 'TEXT')
-    _add_col_if_missing('users', 'recipient_provider', 'TEXT')
-    _add_col_if_missing('users', 'recipient_account', 'TEXT')
-    _add_col_if_missing('users', 'recipient_name', 'TEXT')
-    _add_col_if_missing('withdrawals', 'transfer_code', 'TEXT')
-    _add_col_if_missing('withdrawals', 'paystack_reference', 'TEXT')
+    # Migrate old paystack columns to crypto columns
+    _add_col_if_missing('users', 'crypto_network', 'TEXT')
+    _add_col_if_missing('users', 'crypto_address', 'TEXT')
+    _add_col_if_missing('users', 'crypto_name', 'TEXT')
+    _add_col_if_missing('withdrawals', 'tx_hash', 'TEXT')
+    _add_col_if_missing('withdrawals', 'network', 'TEXT')
     _add_col_if_missing('withdrawals', 'failure_reason', 'TEXT')
     _add_col_if_missing('withdrawals', 'processed_at', 'TEXT')
 
@@ -213,7 +221,8 @@ def init_db():
     _create_index_if_missing('transactions', 'idx_tx_user', 'user_id')
     _create_index_if_missing('notifications', 'idx_notif_user', 'user_id, read')
     _create_index_if_missing('withdrawals', 'idx_wdr_status', 'status')
-    _create_index_if_missing('withdrawals', 'idx_wdr_transfer', 'transfer_code')
+    _create_index_if_missing('crypto_deposits', 'idx_cdep_user', 'user_id')
+
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
     if not existing:
         db.execute(
@@ -229,9 +238,6 @@ def init_db():
 # ─────────────────────────────────────────────────────────────────────────────
 # Password hashing (salted PBKDF2-SHA256)
 # ─────────────────────────────────────────────────────────────────────────────
-# Format: "pbkdf2_sha256${iterations}${salt_hex}${hash_hex}"
-# Legacy format (plain sha256 hex) is still verified for backward compatibility
-# and transparently upgraded on next successful login.
 PBKDF2_ITERATIONS = 120_000
 
 
@@ -254,12 +260,10 @@ def verify_password(pw: str, stored: str) -> bool:
             return hmac.compare_digest(dk.hex(), hash_hex)
         except Exception:
             return False
-    # Legacy: plain sha256 hex digest
     return hmac.compare_digest(hashlib.sha256(pw.encode()).hexdigest(), stored)
 
 
 def _maybe_upgrade_password_hash(db, user_id: int, plaintext: str, stored: str):
-    """Transparently upgrade legacy sha256 hashes to pbkdf2 on successful login."""
     if stored and not stored.startswith('pbkdf2_sha256$'):
         db.execute('UPDATE users SET password=? WHERE id=?',
                    (hash_password(plaintext), user_id))
@@ -272,6 +276,41 @@ def _maybe_upgrade_password_hash(db, user_id: int, plaintext: str, stored: str):
 def add_notification(db, user_id, message):
     db.execute('INSERT INTO notifications (user_id, message) VALUES (?,?)',
                (user_id, message))
+
+
+def check_and_award_referral_bonus(db, user_id):
+    user = db.execute('SELECT referred_by, referral_bonus_awarded FROM users WHERE id=?', (user_id,)).fetchone()
+    if not user or not user['referred_by'] or user['referral_bonus_awarded']:
+        return
+
+    balance_row = db.execute('SELECT balance FROM users WHERE id=?', (user_id,)).fetchone()
+    if not balance_row or balance_row['balance'] < REFERRAL_ACTIVATION_FEE:
+        return
+
+    admin = db.execute('SELECT id FROM users WHERE is_admin=1 LIMIT 1').fetchone()
+    if not admin:
+        return
+
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?',
+               (REFERRAL_ACTIVATION_FEE, user_id))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?',
+               (REFERRAL_ACTIVATION_FEE, admin['id']))
+    referred_user = db.execute('SELECT username FROM users WHERE id=?', (user_id,)).fetchone()
+    add_transaction(db, user_id, 'activation_fee', REFERRAL_ACTIVATION_FEE,
+                   f'Referral activation fee for {referred_user["username"]}')
+    add_transaction(db, admin['id'], 'earn', REFERRAL_ACTIVATION_FEE,
+                   f'Referral activation fee from {referred_user["username"]}')
+
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?',
+               (REFERRAL_BONUS, user['referred_by']))
+    db.execute('UPDATE users SET referral_bonus_awarded=1 WHERE id=?', (user_id,))
+    add_notification(
+        db, user['referred_by'],
+        f'🎉 {referred_user["username"]} activated their account! '
+        f'+{CURRENCY_SYMBOL}{REFERRAL_BONUS:.2f} referral bonus earned.'
+    )
+    add_transaction(db, user['referred_by'], 'earn', REFERRAL_BONUS,
+                   f'Referral bonus from {referred_user["username"]}')
 
 
 def add_transaction(db, user_id, type_, amount, description, status='completed'):
@@ -320,18 +359,12 @@ def admin_required(f):
 
 
 def verify_task_completion(ad, proof_link, user_id):
-    """
-    Strict verification of task completion based on platform and task type.
-    Returns {'valid': bool, 'error': str}
-    """
     platform = ad['platform'].lower()
     task_type = ad['task_type'].lower()
 
-    # Basic URL validation
     if not proof_link or not proof_link.startswith(('http://', 'https://')):
         return {'valid': False, 'error': 'Please provide a valid URL as proof.'}
 
-    # Platform-specific validation
     if task_type == 'follow':
         return verify_follow_task(platform, proof_link, ad['target_url'])
     elif task_type == 'like':
@@ -341,59 +374,42 @@ def verify_task_completion(ad, proof_link, user_id):
     elif task_type == 'share':
         return verify_share_task(platform, proof_link)
     else:
-        # For unknown task types, do basic validation
         return {'valid': True, 'error': ''}
 
 
 def verify_follow_task(platform, proof_link, target_url):
-    """Verify follow task completion"""
     if platform == 'instagram':
-        # Check if it's an Instagram URL
         if 'instagram.com/' in proof_link:
             return {'valid': True, 'error': ''}
-        else:
-            return {'valid': False, 'error': 'Please provide an Instagram URL as proof.'}
-
+        return {'valid': False, 'error': 'Please provide an Instagram URL as proof.'}
     elif platform == 'tiktok':
         if 'tiktok.com/' in proof_link:
             return {'valid': True, 'error': ''}
-        else:
-            return {'valid': False, 'error': 'Please provide a TikTok URL as proof.'}
-
-    elif platform == 'twitter' or platform == 'x':
+        return {'valid': False, 'error': 'Please provide a TikTok URL as proof.'}
+    elif platform in ('twitter', 'x'):
         if 'twitter.com/' in proof_link or 'x.com/' in proof_link:
             return {'valid': True, 'error': ''}
-        else:
-            return {'valid': False, 'error': 'Please provide a Twitter/X URL as proof.'}
-
+        return {'valid': False, 'error': 'Please provide a Twitter/X URL as proof.'}
     elif platform == 'facebook':
         if 'facebook.com/' in proof_link:
             return {'valid': True, 'error': ''}
-        else:
-            return {'valid': False, 'error': 'Please provide a Facebook URL as proof.'}
-
+        return {'valid': False, 'error': 'Please provide a Facebook URL as proof.'}
     elif platform == 'youtube':
         if 'youtube.com/' in proof_link or 'youtu.be/' in proof_link:
             return {'valid': True, 'error': ''}
-        else:
-            return {'valid': False, 'error': 'Please provide a YouTube URL as proof.'}
-
-    # For other platforms, basic validation
+        return {'valid': False, 'error': 'Please provide a YouTube URL as proof.'}
     return {'valid': True, 'error': ''}
 
 
 def verify_like_task(platform, proof_link):
-    """Verify like task completion"""
     return verify_follow_task(platform, proof_link, '')
 
 
 def verify_comment_task(platform, proof_link):
-    """Verify comment task completion"""
     return verify_follow_task(platform, proof_link, '')
 
 
 def verify_share_task(platform, proof_link):
-    """Verify share task completion"""
     return verify_follow_task(platform, proof_link, '')
 
 
@@ -411,70 +427,10 @@ def inject_user():
         'current_user': get_current_user(),
         'CURRENCY_SYMBOL': CURRENCY_SYMBOL,
         'CURRENCY_CODE': CURRENCY_CODE,
-        'PAYSTACK_PUBLIC_KEY': PAYSTACK_PUBLIC_KEY,
-        'PAYSTACK_ENABLED': bool(PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY),
-        'PAYSTACK_TRANSFERS_ENABLED': bool(PAYSTACK_SECRET_KEY),
-        'MOMO_PROVIDERS': MOMO_PROVIDERS,
+        'CRYPTO_NETWORKS': CRYPTO_NETWORKS,
+        'CRYPTO_WALLETS': CRYPTO_WALLETS,
+        'CRYPTO_ENABLED': any(CRYPTO_WALLETS.values()),
     }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Paystack API helpers
-# ─────────────────────────────────────────────────────────────────────────────
-PAYSTACK_BASE = 'https://api.paystack.co'
-PAYSTACK_TIMEOUT = 15  # seconds
-
-
-def _paystack_headers():
-    return {
-        'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}',
-        'Content-Type': 'application/json',
-    }
-
-
-def paystack_post(path, payload):
-    """POST helper that normalises (ok, data_or_error) responses."""
-    try:
-        r = requests.post(
-            PAYSTACK_BASE + path, headers=_paystack_headers(),
-            json=payload, timeout=PAYSTACK_TIMEOUT,
-        )
-        body = r.json()
-    except requests.RequestException:
-        return False, 'Could not reach Paystack. Please try again.'
-    except ValueError:
-        return False, 'Unexpected response from Paystack.'
-    if not body.get('status'):
-        return False, body.get('message', 'Paystack request failed.')
-    return True, body.get('data') or {}
-
-
-def paystack_get(path):
-    try:
-        r = requests.get(
-            PAYSTACK_BASE + path, headers=_paystack_headers(),
-            timeout=PAYSTACK_TIMEOUT,
-        )
-        body = r.json()
-    except requests.RequestException:
-        return False, 'Could not reach Paystack.'
-    except ValueError:
-        return False, 'Unexpected response from Paystack.'
-    if not body.get('status'):
-        return False, body.get('message', 'Paystack request failed.')
-    return True, body.get('data') or {}
-
-
-def _verify_paystack_signature(raw_body: bytes, signature: str) -> bool:
-    """Webhooks are signed with HMAC-SHA512 of the raw request body using the
-    secret key. If the signature doesn't match, the request wasn't really from
-    Paystack and must be discarded."""
-    if not signature or not PAYSTACK_SECRET_KEY:
-        return False
-    computed = hmac.new(
-        PAYSTACK_SECRET_KEY.encode('utf-8'), raw_body, hashlib.sha512
-    ).hexdigest()
-    return hmac.compare_digest(computed, signature)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -530,15 +486,11 @@ def signup():
         db.commit()
         user = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
         if referrer:
-            db.execute('UPDATE users SET balance=balance+? WHERE id=?',
-                       (REFERRAL_BONUS, referrer['id']))
             add_notification(
                 db, referrer['id'],
-                f'🎉 {username} signed up using your referral! '
-                f'+{CURRENCY_SYMBOL}{REFERRAL_BONUS:.2f} added.'
+                f'👤 {username} signed up using your referral code! '
+                f'Bonus will be awarded when they activate their account by spending {CURRENCY_SYMBOL}1.'
             )
-            add_transaction(db, referrer['id'], 'earn', REFERRAL_BONUS,
-                            f'Referral bonus from {username}')
         add_notification(db, user['id'], '👋 Welcome to DUYS Boost! Your account is ready.')
         db.commit()
         session['user_id'] = user['id']
@@ -557,7 +509,7 @@ def login():
             (identifier.lower(), identifier)
         ).fetchone()
         if not user or not verify_password(password, user['password']):
-            return jsonify({'success': False, 'errors': ['Invalid credentials.']})
+            return jsonify({'success': False, 'errors': ['Invalid credentials.']}), 401
         _maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
         session['user_id'] = user['id']
@@ -628,9 +580,8 @@ def dashboard():
     ads = db.execute(
         'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC LIMIT 5', (uid,)
     ).fetchall()
-    # Convert Row objects to dicts for JSON serialization
     ads = [dict(ad) for ad in ads]
-    
+
     recent_tasks = db.execute(
         'SELECT tc.*, a.title as ad_title FROM task_completions tc '
         'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=? '
@@ -655,9 +606,8 @@ def dashboard():
         'ORDER BY created_at DESC LIMIT 10',
         (uid, uid)
     ).fetchall()
-    # Convert available_ads Row objects to dicts
     available_ads = [dict(ad) for ad in available_ads]
-    
+
     return render_template(
         'dashboard.html',
         ads=ads, recent_tasks=recent_tasks,
@@ -720,13 +670,13 @@ def create_ad():
         'SELECT * FROM ads WHERE user_id=? ORDER BY id DESC LIMIT 1', (uid,)
     ).fetchone()
     add_transaction(db, uid, 'spend', budget, f'Budget for ad: {ad["title"]}')
+    check_and_award_referral_bonus(db, uid)
     add_notification(db, uid, f'📢 Ad "{ad["title"]}" is now live!')
-    
-    # Notify all other users about the new task
+
     users = db.execute('SELECT id FROM users WHERE id != ?', (uid,)).fetchall()
-    for user in users:
-        add_notification(db, user['id'], f'📢 New task available: "{ad["title"]}" on {ad["platform"]}')
-    
+    for u in users:
+        add_notification(db, u['id'], f'📢 New task available: "{ad["title"]}" on {ad["platform"]}')
+
     db.commit()
     return jsonify({'success': True})
 
@@ -794,40 +744,26 @@ def submit_task():
     now = datetime.now(timezone.utc).isoformat()
     reward = WORKER_REWARD_PER_TASK
 
-    # Strict verification: Check proof link validity based on platform and task type
     verification_result = verify_task_completion(ad, proof_link, uid)
-
     if not verification_result['valid']:
         return jsonify({'success': False, 'error': verification_result['error']})
 
-    # Award reward immediately for valid submissions
     db.execute(
         'INSERT INTO task_completions (ad_id,worker_id,proof_link,status,reward,reviewed_at) '
         'VALUES (?,?,?,?,?,?)',
         (ad_id, uid, proof_link, 'completed', reward, now)
     )
-
-    # Update ad budget and follower count
     db.execute(
         'UPDATE ads SET budget_spent=budget_spent+?, followers_gained=followers_gained+1 '
         'WHERE id=?',
         (LISTER_COST_PER_TASK, ad_id)
     )
-
-    # Credit the worker's balance immediately
     db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
-
-    # Add transaction record
     add_transaction(db, uid, 'earn', reward, f'Task completed: {ad["title"]}')
-
-    # Notify user of successful completion
     add_notification(db, uid,
                      f'✅ Task completed! +{CURRENCY_SYMBOL}{reward:.2f} added to your wallet for "{ad["title"]}"')
-
-    # Notify ad owner of new follower gained
     add_notification(db, ad['user_id'],
                      f'📈 New follower gained for "{ad["title"]}"!')
-
     db.commit()
     return jsonify({'success': True, 'message': f'Task completed! +{CURRENCY_SYMBOL}{reward:.2f} added to your wallet'})
 
@@ -844,124 +780,102 @@ def wallet():
     wdrs = db.execute(
         'SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
-    return render_template('wallet.html', transactions=txs, withdrawals=wdrs)
+    pending_deposits = db.execute(
+        'SELECT * FROM crypto_deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 10', (uid,)
+    ).fetchall()
+    return render_template('wallet.html', transactions=txs, withdrawals=wdrs,
+                           pending_deposits=pending_deposits)
 
 
 @app.route('/wallet/deposit', methods=['POST'])
 @login_required
 def deposit():
-    """Verify a Paystack transaction reference and credit the user's wallet."""
-    if not PAYSTACK_SECRET_KEY:
-        return jsonify({'success': False,
-                        'error': 'Deposits are not available. Paystack is not configured.'}), 503
+    """
+    Manual crypto deposit submission. User submits their TX hash after
+    sending USDT to the platform wallet. Admin confirms and credits the wallet.
+    Alternatively, can be auto-confirmed by a webhook from a crypto payment processor.
+    """
     db = get_db()
     uid = session['user_id']
     payload = request.get_json(silent=True) or {}
-    reference = (payload.get('reference') or '').strip()
+    network = (payload.get('network') or '').strip().lower()
+    tx_hash = (payload.get('tx_hash') or '').strip()
     declared_amount = safe_float(payload.get('amount'), 0)
-    if not reference or declared_amount <= 0:
-        return jsonify({'success': False, 'error': 'Invalid deposit payload.'}), 400
-    ok, data = paystack_get(f'/transaction/verify/{reference}')
-    if not ok:
-        return jsonify({'success': False, 'error': data}), 502
-    if not data.get('status'):
-        return jsonify({'success': False, 'error': 'Unable to verify payment.'}), 400
-    if data.get('status') != 'success' or data.get('currency') != CURRENCY_CODE:
-        return jsonify({'success': False, 'error': 'Payment not successful.'}), 400
-    paid_amount = (data.get('amount') or 0) / 100.0
-    if paid_amount <= 0:
-        return jsonify({'success': False,
-                        'error': 'Invalid amount from payment gateway.'}), 400
-    # Prevent double-credit: match by the unique reference tag in description.
+
+    if network not in CRYPTO_NETWORKS:
+        return jsonify({'success': False, 'error': 'Invalid network selected.'}), 400
+    if not tx_hash or len(tx_hash) < 10:
+        return jsonify({'success': False, 'error': 'Please enter a valid transaction hash.'}), 400
+    if declared_amount <= 0:
+        return jsonify({'success': False, 'error': 'Please enter a valid amount.'}), 400
+
+    # Check for duplicate tx_hash
     existing = db.execute(
-        'SELECT id FROM transactions WHERE user_id=? AND description LIKE ?',
-        (uid, f'%{reference}%')
+        'SELECT id FROM crypto_deposits WHERE tx_hash=?', (tx_hash,)
     ).fetchone()
     if existing:
-        user = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
-        return jsonify({'success': True, 'balance': user['balance']})
-    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (paid_amount, uid))
-    add_transaction(db, uid, 'deposit', paid_amount, f'Paystack deposit {reference}')
-    add_notification(
-        db, uid,
-        f'💳 {CURRENCY_SYMBOL}{paid_amount:.2f} deposited to your wallet via Paystack.'
-    )
-    db.commit()
-    user = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
-    return jsonify({'success': True, 'balance': user['balance']})
+        return jsonify({'success': False, 'error': 'This transaction has already been submitted.'}), 400
 
-
-@app.route('/wallet/recipient', methods=['POST'])
-@login_required
-def add_recipient():
-    """Register the user's Mobile Money account with Paystack as a transfer
-    recipient. The recipient_code is saved on the user record and reused for
-    all future withdrawals until the user changes it."""
-    if not PAYSTACK_SECRET_KEY:
-        return jsonify({'success': False,
-                        'error': 'Payouts are not configured.'}), 503
-    db = get_db()
-    uid = session['user_id']
-    name = request.form.get('account_name', '').strip()
-    phone = request.form.get('phone', '').strip().replace(' ', '')
-    provider = request.form.get('provider', '').strip().upper()
-
-    # Normalise Ghanaian local format (0XXXXXXXXX) or international (+233XXXXXXXXX / 233XXXXXXXXX)
-    if phone.startswith('+233'):
-        phone = '0' + phone[4:]
-    elif phone.startswith('233') and len(phone) == 12:
-        phone = '0' + phone[3:]
-
-    if not name or len(name) < 2:
-        return jsonify({'success': False, 'error': 'Enter the account holder name.'})
-    if provider not in MOMO_PROVIDERS:
-        return jsonify({'success': False, 'error': 'Choose a valid mobile money provider.'})
-    if not phone.isdigit() or len(phone) != 10 or not phone.startswith('0'):
-        return jsonify({'success': False,
-                        'error': 'Enter a valid 10-digit Ghana mobile number (e.g. 0241234567).'})
-
-    ok, data = paystack_post('/transferrecipient', {
-        'type': 'mobile_money',
-        'name': name,
-        'account_number': phone,
-        'bank_code': provider,
-        'currency': CURRENCY_CODE,
-    })
-    if not ok:
-        return jsonify({'success': False, 'error': data}), 400
-
-    recipient_code = data.get('recipient_code')
-    if not recipient_code:
-        return jsonify({'success': False,
-                        'error': 'Paystack did not return a recipient code.'}), 502
-
+    # Record as pending — admin will confirm and credit via /admin
     db.execute(
-        'UPDATE users SET paystack_recipient=?, recipient_provider=?, '
-        'recipient_account=?, recipient_name=? WHERE id=?',
-        (recipient_code, provider, phone, name, uid)
+        'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status) VALUES (?,?,?,?,?)',
+        (uid, network, tx_hash, declared_amount, 'pending')
     )
     add_notification(db, uid,
-                     f'✅ Payout account saved: {MOMO_PROVIDERS[provider]} • {phone}')
+        f'⏳ Crypto deposit of ${declared_amount:.2f} USDT ({CRYPTO_NETWORKS[network]["label"]}) submitted. '
+        f'Awaiting confirmation.')
+
+    # Notify admin
+    admin = db.execute('SELECT id FROM users WHERE is_admin=1 LIMIT 1').fetchone()
+    if admin:
+        add_notification(db, admin['id'],
+            f'💰 New crypto deposit pending: ${declared_amount:.2f} USDT via {CRYPTO_NETWORKS[network]["label"]} '
+            f'from user #{uid}. TX: {tx_hash[:20]}...')
+
+    db.commit()
+    return jsonify({'success': True, 'message': 'Deposit submitted for confirmation.'})
+
+
+@app.route('/wallet/crypto_address', methods=['POST'])
+@login_required
+def save_crypto_address():
+    """Save the user's crypto withdrawal address."""
+    db = get_db()
+    uid = session['user_id']
+    network = request.form.get('network', '').strip().lower()
+    address = request.form.get('address', '').strip()
+    name = request.form.get('name', '').strip()
+
+    if network not in CRYPTO_NETWORKS:
+        return jsonify({'success': False, 'error': 'Invalid network selected.'})
+    if not address or len(address) < 10:
+        return jsonify({'success': False, 'error': 'Please enter a valid wallet address.'})
+    if not name or len(name) < 2:
+        return jsonify({'success': False, 'error': 'Please enter the account holder name.'})
+
+    db.execute(
+        'UPDATE users SET crypto_network=?, crypto_address=?, crypto_name=? WHERE id=?',
+        (network, address, name, uid)
+    )
+    add_notification(db, uid,
+        f'✅ Withdrawal address saved: {CRYPTO_NETWORKS[network]["label"]} • {address[:12]}...')
     db.commit()
     return jsonify({
         'success': True,
-        'provider': provider,
-        'provider_label': MOMO_PROVIDERS[provider],
-        'account': phone,
+        'network': network,
+        'network_label': CRYPTO_NETWORKS[network]['label'],
+        'address': address,
         'name': name,
     })
 
 
-@app.route('/wallet/recipient', methods=['DELETE'])
+@app.route('/wallet/crypto_address', methods=['DELETE'])
 @login_required
-def remove_recipient():
-    """Clear the user's saved payout recipient. Doesn't delete it on Paystack's
-    side (Paystack keeps recipients around so you can reuse them), just forgets
-    it locally so the user can add a different one."""
+def remove_crypto_address():
+    """Clear the user's saved crypto withdrawal address."""
     db = get_db()
     db.execute(
-        'UPDATE users SET paystack_recipient=NULL, recipient_provider=NULL, '
-        'recipient_account=NULL, recipient_name=NULL WHERE id=?',
+        'UPDATE users SET crypto_network=NULL, crypto_address=NULL, crypto_name=NULL WHERE id=?',
         (session['user_id'],)
     )
     db.commit()
@@ -979,34 +893,29 @@ def withdraw():
 
     if amount <= 0:
         return jsonify({'success': False, 'error': 'Enter a valid amount.'})
-    # Paystack minimum transfer is 1 GHS
     if amount < 1:
         return jsonify({'success': False,
                         'error': f'Minimum withdrawal is {CURRENCY_SYMBOL}1.00.'})
-    if not user['paystack_recipient']:
+    if not user['crypto_address']:
         return jsonify({'success': False,
-                        'error': 'Please add a payout account first.'}), 400
+                        'error': 'Please add a crypto withdrawal address first.'}), 400
     if amount > user['balance']:
         return jsonify({'success': False, 'error': 'Insufficient balance.'})
 
-    provider_label = MOMO_PROVIDERS.get(user['recipient_provider'],
-                                        user['recipient_provider'] or 'Mobile Money')
-    method = provider_label
-    account = user['recipient_account'] or ''
+    network = user['crypto_network'] or ''
+    network_label = CRYPTO_NETWORKS.get(network, {}).get('label', 'Crypto') if network else 'Crypto'
+    address = user['crypto_address'] or ''
 
-    # Debit the user's balance and record a pending withdrawal. The actual
-    # Paystack transfer only runs when an admin approves it (or you could
-    # call _initiate_transfer here directly for auto-payouts).
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (amount, uid))
     db.execute(
-        'INSERT INTO withdrawals (user_id,amount,method,account) VALUES (?,?,?,?)',
-        (uid, amount, method, account)
+        'INSERT INTO withdrawals (user_id,amount,method,account,network) VALUES (?,?,?,?,?)',
+        (uid, amount, f'USDT ({network_label})', address, network)
     )
     add_transaction(db, uid, 'withdrawal', amount,
-                    f'Withdrawal via {method}', status='pending')
+                    f'Withdrawal via USDT {network_label}', status='pending')
     add_notification(
         db, uid,
-        f'🏦 Withdrawal of {CURRENCY_SYMBOL}{amount:.2f} via {method} submitted.'
+        f'🏦 Withdrawal of {CURRENCY_SYMBOL}{amount:.2f} USDT via {network_label} submitted.'
     )
     db.commit()
     updated = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
@@ -1082,12 +991,10 @@ def admin():
     if not user['is_admin']:
         return redirect(url_for('dashboard'))
     users = db.execute('SELECT * FROM users ORDER BY created_at DESC').fetchall()
-    # Pending + failed → actionable by admin (pending = approve/reject; failed = retry/reject)
     wdrs = db.execute(
         'SELECT w.*, u.username FROM withdrawals w JOIN users u ON w.user_id=u.id '
         'WHERE w.status IN ("pending", "failed") ORDER BY w.created_at DESC'
     ).fetchall()
-    # Recently processed for admin audit
     recent_wdrs = db.execute(
         'SELECT w.*, u.username FROM withdrawals w JOIN users u ON w.user_id=u.id '
         'WHERE w.status IN ("approved", "rejected", "processing") '
@@ -1097,6 +1004,12 @@ def admin():
         'SELECT a.*, u.username as owner_name FROM ads a '
         'JOIN users u ON a.user_id=u.id ORDER BY a.created_at DESC'
     ).fetchall()
+    # Pending crypto deposits
+    pending_deposits = db.execute(
+        'SELECT cd.*, u.username FROM crypto_deposits cd '
+        'JOIN users u ON cd.user_id=u.id '
+        'WHERE cd.status="pending" ORDER BY cd.created_at DESC'
+    ).fetchall()
     total_users = db.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     total_ads = db.execute('SELECT COUNT(*) FROM ads').fetchone()[0]
     total_vol = db.execute(
@@ -1105,39 +1018,59 @@ def admin():
     return render_template(
         'admin.html',
         users=users, withdrawals=wdrs, recent_withdrawals=recent_wdrs, ads=all_ads,
+        pending_deposits=pending_deposits,
         total_users=total_users, total_ads=total_ads, total_vol=total_vol
     )
 
 
-def _initiate_paystack_transfer(db, wr):
-    """Trigger a real Paystack transfer for a withdrawal row. Returns
-    (ok, message, transfer_code). Caller is responsible for the DB commit."""
-    if not PAYSTACK_SECRET_KEY:
-        return False, 'Paystack is not configured on this server.', None
+@app.route('/admin/confirm_deposit/<int:dep_id>', methods=['POST'])
+@admin_required
+def confirm_deposit(dep_id):
+    """Admin confirms a pending crypto deposit and credits the user."""
+    db = get_db()
+    dep = db.execute('SELECT * FROM crypto_deposits WHERE id=?', (dep_id,)).fetchone()
+    if not dep:
+        return jsonify({'success': False, 'error': 'Deposit not found.'}), 404
+    if dep['status'] != 'pending':
+        return jsonify({'success': False, 'error': 'Already processed.'})
 
-    user = db.execute('SELECT * FROM users WHERE id=?',
-                      (wr['user_id'],)).fetchone()
-    if not user or not user['paystack_recipient']:
-        return False, 'User has no saved payout recipient.', None
+    now = datetime.now(timezone.utc).isoformat()
+    network_label = CRYPTO_NETWORKS.get(dep['network'], {}).get('label', dep['network'])
 
-    # Idempotent reference so re-triggering the same withdrawal won't send
-    # money twice (Paystack rejects duplicate references).
-    reference = wr['paystack_reference'] or f'duys_wdr_{wr["id"]}_{secrets.token_hex(4)}'
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (dep['amount'], dep['user_id']))
+    db.execute(
+        'UPDATE crypto_deposits SET status=?, confirmed_at=? WHERE id=?',
+        ('confirmed', now, dep_id)
+    )
+    add_transaction(db, dep['user_id'], 'deposit', dep['amount'],
+                    f'USDT deposit via {network_label} — TX: {dep["tx_hash"][:20]}')
+    add_notification(db, dep['user_id'],
+        f'✅ Your deposit of ${dep["amount"]:.2f} USDT via {network_label} has been confirmed!')
+    db.commit()
+    return jsonify({'success': True})
 
-    ok, data = paystack_post('/transfer', {
-        'source': 'balance',
-        'reason': f'DUYS Boost withdrawal #{wr["id"]}',
-        'amount': int(round(wr['amount'] * 100)),  # pesewas
-        'recipient': user['paystack_recipient'],
-        'currency': CURRENCY_CODE,
-        'reference': reference,
-    })
-    if not ok:
-        return False, data, None
 
-    transfer_code = data.get('transfer_code')
-    status = data.get('status', 'pending')  # pending | otp | success | failed
-    return True, status, transfer_code
+@app.route('/admin/reject_deposit/<int:dep_id>', methods=['POST'])
+@admin_required
+def reject_deposit(dep_id):
+    """Admin rejects a crypto deposit (e.g. invalid TX)."""
+    db = get_db()
+    dep = db.execute('SELECT * FROM crypto_deposits WHERE id=?', (dep_id,)).fetchone()
+    if not dep:
+        return jsonify({'success': False, 'error': 'Deposit not found.'}), 404
+    if dep['status'] != 'pending':
+        return jsonify({'success': False, 'error': 'Already processed.'})
+
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        'UPDATE crypto_deposits SET status=?, confirmed_at=? WHERE id=?',
+        ('rejected', now, dep_id)
+    )
+    add_notification(db, dep['user_id'],
+        f'❌ Your deposit of ${dep["amount"]:.2f} USDT was rejected. '
+        f'Please contact support with your TX hash.')
+    db.commit()
+    return jsonify({'success': True})
 
 
 @app.route('/admin/withdrawal/<int:wdr_id>/<action>', methods=['POST'])
@@ -1163,76 +1096,23 @@ def process_withdrawal(wdr_id, action):
                    (wr['amount'], wr['user_id']))
         add_notification(
             db, wr['user_id'],
-            f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} rejected. '
-            f'Amount refunded.'
+            f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} rejected. Amount refunded.'
         )
         db.commit()
         return jsonify({'success': True, 'status': 'rejected'})
 
-    # ── Approve: actually trigger a Paystack Transfer ───────────────────
-    if not PAYSTACK_SECRET_KEY:
-        # No Paystack configured — fall back to manual approval (old behaviour)
-        db.execute(
-            'UPDATE withdrawals SET status=?, processed_at=? WHERE id=?',
-            ('approved', now, wdr_id)
-        )
-        add_notification(
-            db, wr['user_id'],
-            f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} approved '
-            f'(manual payout).'
-        )
-        db.commit()
-        return jsonify({'success': True, 'status': 'approved', 'manual': True})
-
-    ok, status_or_msg, transfer_code = _initiate_paystack_transfer(db, wr)
-    if not ok:
-        # Mark as failed but keep balance debited; admin can retry or reject.
-        db.execute(
-            'UPDATE withdrawals SET status=?, failure_reason=? WHERE id=?',
-            ('failed', status_or_msg[:500], wdr_id)
-        )
-        db.commit()
-        return jsonify({'success': False, 'error': status_or_msg}), 502
-
-    # Map Paystack's initial status to our withdrawal status.
-    # 'pending' and 'otp' both mean "in flight"; we'll update to approved/failed
-    # when the webhook fires (transfer.success / transfer.failed / transfer.reversed).
-    ps_status = (status_or_msg or 'pending').lower()
-    local_status = 'processing'
-    if ps_status == 'success':
-        local_status = 'approved'
-    elif ps_status == 'failed':
-        local_status = 'failed'
-
+    # Approve: mark as approved for manual crypto payout
     db.execute(
-        'UPDATE withdrawals SET status=?, transfer_code=?, processed_at=? WHERE id=?',
-        (local_status, transfer_code, now, wdr_id)
+        'UPDATE withdrawals SET status=?, processed_at=? WHERE id=?',
+        ('approved', now, wdr_id)
     )
-    if local_status == 'approved':
-        add_notification(
-            db, wr['user_id'],
-            f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} paid out!'
-        )
-    elif ps_status == 'otp':
-        # Paystack is in OTP mode — someone needs to finalize it.
-        add_notification(
-            db, wr['user_id'],
-            f'⏳ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} is being '
-            f'verified by our payment processor.'
-        )
-    else:
-        add_notification(
-            db, wr['user_id'],
-            f'⏳ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} is being '
-            f'processed — you will be notified once it arrives.'
-        )
+    add_notification(
+        db, wr['user_id'],
+        f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} USDT approved. '
+        f'Payment will be sent to your crypto address.'
+    )
     db.commit()
-    return jsonify({
-        'success': True,
-        'status': local_status,
-        'paystack_status': ps_status,
-        'transfer_code': transfer_code,
-    })
+    return jsonify({'success': True, 'status': 'approved'})
 
 
 @app.route('/admin/deposit_user', methods=['POST'])
@@ -1264,22 +1144,20 @@ def send_notification():
     db = get_db()
     message = request.form.get('message', '').strip()
     user_id = safe_int(request.form.get('user_id'), 0)
-    
+
     if not message:
         return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
-    
+
     if user_id:
-        # Send to specific user
         user = db.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
         if not user:
             return jsonify({'success': False, 'error': 'User not found.'}), 404
         add_notification(db, user_id, f'📢 {message}')
     else:
-        # Send to all users
         users = db.execute('SELECT id FROM users').fetchall()
-        for user in users:
-            add_notification(db, user['id'], f'📢 {message}')
-    
+        for u in users:
+            add_notification(db, u['id'], f'📢 {message}')
+
     db.commit()
     return jsonify({'success': True})
 
@@ -1302,212 +1180,95 @@ def activity_feed():
     ])
 
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Paystack webhook
-# ─────────────────────────────────────────────────────────────────────────────
-@app.route('/webhooks/paystack', methods=['POST'])
-def paystack_webhook():
-    """Paystack POSTs here server-to-server whenever a payment or transfer
-    event happens. We verify the HMAC-SHA512 signature, then update wallet
-    balances or withdrawal statuses accordingly.
-
-    Events handled:
-      • charge.success        — a deposit cleared (back-up for the inline flow)
-      • transfer.success      — a withdrawal arrived in the user's MoMo wallet
-      • transfer.failed       — payout failed; we refund the user
-      • transfer.reversed     — successful payout was reversed; we refund too
-
-    All other events are acknowledged with HTTP 200 so Paystack stops retrying.
-    """
-    raw = request.get_data()
-    signature = request.headers.get('x-paystack-signature', '')
-    if not _verify_paystack_signature(raw, signature):
-        # Don't leak whether the secret is configured; just 401.
-        abort(401)
-
-    try:
-        event = json.loads(raw.decode('utf-8'))
-    except (ValueError, UnicodeDecodeError):
-        return '', 400
-
-    event_type = event.get('event', '')
-    data = event.get('data') or {}
-    db = get_db()
-    now = datetime.now(timezone.utc).isoformat()
-
-    # ── Deposit confirmation ─────────────────────────────────────────────
-    if event_type == 'charge.success':
-        reference = (data.get('reference') or '').strip()
-        amount = (data.get('amount') or 0) / 100.0
-        currency = data.get('currency')
-        customer_email = ((data.get('customer') or {}).get('email') or '').lower()
-        if not reference or amount <= 0 or currency != CURRENCY_CODE or not customer_email:
-            return '', 200
-
-        user = db.execute('SELECT id FROM users WHERE email=?',
-                          (customer_email,)).fetchone()
-        if not user:
-            return '', 200
-
-        existing = db.execute(
-            'SELECT id FROM transactions WHERE user_id=? AND description LIKE ?',
-            (user['id'], f'%{reference}%')
-        ).fetchone()
-        if existing:
-            return '', 200  # already credited by the inline callback
-
-        db.execute('UPDATE users SET balance=balance+? WHERE id=?',
-                   (amount, user['id']))
-        add_transaction(db, user['id'], 'deposit', amount,
-                        f'Paystack deposit {reference} (webhook)')
-        add_notification(
-            db, user['id'],
-            f'💳 {CURRENCY_SYMBOL}{amount:.2f} deposited via Paystack.'
-        )
-        db.commit()
-        return '', 200
-
-    # ── Transfer (withdrawal) status updates ─────────────────────────────
-    if event_type in ('transfer.success', 'transfer.failed', 'transfer.reversed'):
-        transfer_code = data.get('transfer_code')
-        if not transfer_code:
-            return '', 200
-
-        wr = db.execute('SELECT * FROM withdrawals WHERE transfer_code=?',
-                        (transfer_code,)).fetchone()
-        if not wr:
-            return '', 200  # probably not one of ours
-
-        # Idempotency — if we already moved past 'processing', ignore duplicate events
-        if wr['status'] in ('approved', 'failed', 'rejected') and \
-                event_type == 'transfer.success' and wr['status'] == 'approved':
-            return '', 200
-        if wr['status'] == 'rejected':
-            return '', 200  # refund already happened via admin rejection
-
-        if event_type == 'transfer.success':
-            db.execute(
-                'UPDATE withdrawals SET status=?, processed_at=? WHERE id=?',
-                ('approved', now, wr['id'])
-            )
-            add_notification(
-                db, wr['user_id'],
-                f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} delivered '
-                f'to your mobile money wallet!'
-            )
-        else:
-            # Failed or reversed — refund the user and mark as failed.
-            reason = (data.get('reason')
-                      or data.get('gateway_response')
-                      or data.get('failure_reason')
-                      or 'Transfer did not complete')
-            # Only refund if we haven't already (status wasn't already failed)
-            if wr['status'] != 'failed':
-                db.execute('UPDATE users SET balance=balance+? WHERE id=?',
-                           (wr['amount'], wr['user_id']))
-            db.execute(
-                'UPDATE withdrawals SET status=?, failure_reason=?, processed_at=? '
-                'WHERE id=?',
-                ('failed', str(reason)[:500], now, wr['id'])
-            )
-            add_notification(
-                db, wr['user_id'],
-                f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} failed: '
-                f'{reason}. Amount refunded to your wallet.'
-            )
-        db.commit()
-        return '', 200
-
-    # Unknown event — acknowledge so Paystack stops retrying.
-    return '', 200
-
-
 # ── Analytics ───────────────────────────────────────────────────────────────
 @app.route('/analytics')
 @login_required
 def analytics():
-    """Main analytics dashboard for advertisers."""
     db = get_db()
     uid = session['user_id']
-    
-    # Fetch all ads created by this user
-    ads = db.execute(
+
+    ads_rows = db.execute(
         'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
-    
+
+    # Convert to dicts for safe JSON serialization in template
+    ads = [dict(a) for a in ads_rows]
+
     if not ads:
-        return render_template('analytics.html', ads=[], summary=None, currency=CURRENCY_SYMBOL)
-    
-    # Calculate aggregate metrics
-    total_budget = sum(float(ad['budget']) for ad in ads)
-    total_spent = sum(float(ad['budget_spent']) or 0 for ad in ads)
-    total_followers = sum(int(ad['followers_gained']) or 0 for ad in ads)
+        return render_template('analytics.html', ads=[], summary=None,
+                               currency=CURRENCY_SYMBOL)
+
+    total_budget = sum(float(ad['budget'] or 0) for ad in ads)
+    total_spent = sum(float(ad['budget_spent'] or 0) for ad in ads)
+    total_followers = sum(int(ad['followers_gained'] or 0) for ad in ads)
     active_campaigns = sum(1 for ad in ads if ad['status'] == 'active')
-    
-    # Total task completions
+
     total_completions = db.execute(
         'SELECT COUNT(*) FROM task_completions WHERE ad_id IN '
-        '(SELECT id FROM ads WHERE user_id=?) AND status="approved"',
+        '(SELECT id FROM ads WHERE user_id=?) AND status="completed"',
         (uid,)
     ).fetchone()[0]
-    
-    # ROI calculation
-    roi = 0
+
+    roi = 0.0
     if total_spent > 0:
-        roi = ((total_followers * LISTER_COST_PER_TASK - total_spent) / total_spent * 100)
-    
+        roi = round((total_followers * LISTER_COST_PER_TASK - total_spent) / total_spent * 100, 2)
+
+    avg_cost = round(total_spent / total_followers, 4) if total_followers > 0 else 0.0
+
     summary = {
         'total_ads': len(ads),
         'active_campaigns': active_campaigns,
-        'total_budget': total_budget,
-        'total_spent': total_spent,
+        'total_budget': round(total_budget, 2),
+        'total_spent': round(total_spent, 2),
         'total_followers': total_followers,
         'total_completions': total_completions,
         'roi': roi,
-        'avg_cost_per_follower': total_spent / total_followers if total_followers > 0 else 0
+        'avg_cost_per_follower': avg_cost,
     }
-    
-    return render_template('analytics.html', ads=ads, summary=summary, 
-                         currency=CURRENCY_SYMBOL, cost_per_task=LISTER_COST_PER_TASK)
+
+    return render_template('analytics.html', ads=ads, summary=summary,
+                           currency=CURRENCY_SYMBOL, cost_per_task=LISTER_COST_PER_TASK)
 
 
 @app.route('/api/analytics/<int:ad_id>')
 @login_required
 def api_analytics(ad_id):
-    """Get detailed analytics for a specific ad."""
     db = get_db()
     uid = session['user_id']
-    
-    # Verify ownership
+
     ad = db.execute('SELECT * FROM ads WHERE id=? AND user_id=?', (ad_id, uid)).fetchone()
     if not ad:
         return jsonify({'success': False, 'error': 'Ad not found'}), 404
-    
-    # Fetch task completions
+
     completions = db.execute(
         'SELECT * FROM task_completions WHERE ad_id=? ORDER BY submitted_at DESC',
         (ad_id,)
     ).fetchall()
-    
-    # Calculate metrics
+
     total_tasks = len(completions)
     completed_tasks = sum(1 for c in completions if c['status'] == 'completed')
     rejected_tasks = sum(1 for c in completions if c['status'] == 'rejected')
-    
-    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-    total_paid = sum(float(c['reward']) or 0 for c in completions if c['status'] == 'completed')
-    
-    # Group by date for trend chart
+
+    completion_rate = round(completed_tasks / total_tasks * 100, 2) if total_tasks > 0 else 0
+    total_paid = sum(float(c['reward'] or 0) for c in completions if c['status'] == 'completed')
+
     trend_data = {}
     for completion in completions:
-        date = completion['submitted_at'][:10]  # YYYY-MM-DD
+        date = completion['submitted_at'][:10]
         if date not in trend_data:
             trend_data[date] = {'total': 0, 'completed': 0}
         trend_data[date]['total'] += 1
         if completion['status'] == 'completed':
             trend_data[date]['completed'] += 1
-    
+
+    budget_spent = float(ad['budget_spent'] or 0)
+    followers_gained = int(ad['followers_gained'] or 0)
+    followers_target = int(ad['followers_target'] or 1)
+
+    roi = 0.0
+    if budget_spent > 0:
+        roi = round((followers_gained * LISTER_COST_PER_TASK - budget_spent) / budget_spent * 100, 2)
+
     return jsonify({
         'success': True,
         'ad': {
@@ -1516,65 +1277,60 @@ def api_analytics(ad_id):
             'platform': ad['platform'],
             'task_type': ad['task_type'],
             'budget': ad['budget'],
-            'budget_spent': ad['budget_spent'] or 0,
-            'followers_target': ad['followers_target'],
-            'followers_gained': ad['followers_gained'] or 0,
-            'status': ad['status']
+            'budget_spent': budget_spent,
+            'followers_target': followers_target,
+            'followers_gained': followers_gained,
+            'status': ad['status'],
         },
         'metrics': {
             'total_tasks': total_tasks,
             'completed_tasks': completed_tasks,
             'rejected_tasks': rejected_tasks,
-            'completion_rate': round(completion_rate, 2),
+            'completion_rate': completion_rate,
             'total_paid': round(total_paid, 2),
-            'avg_reward': round(total_paid / completed_tasks, 2) if completed_tasks > 0 else 0,
-            'target_completion_rate': round((completed_tasks / ad['followers_target'] * 100), 2) if ad['followers_target'] > 0 else 0,
-            'roi': round((ad['followers_gained'] * LISTER_COST_PER_TASK - (ad['budget_spent'] or 0)) / (ad['budget_spent'] or 1) * 100, 2) if ad['budget_spent'] else 0
+            'avg_reward': round(total_paid / completed_tasks, 4) if completed_tasks > 0 else 0,
+            'target_completion_rate': round(followers_gained / followers_target * 100, 2),
+            'roi': roi,
         },
-        'trend': sorted(trend_data.items())
+        'trend': sorted(trend_data.items()),
     })
 
 
 @app.route('/api/analytics/performance')
 @login_required
 def api_analytics_performance():
-    """Get performance comparison across all user ads."""
     db = get_db()
     uid = session['user_id']
-    
-    ads = db.execute(
+
+    ads_rows = db.execute(
         'SELECT id, title, platform, task_type, followers_target, followers_gained, '
         'budget, budget_spent, status FROM ads WHERE user_id=? ORDER BY followers_gained DESC LIMIT 10',
         (uid,)
     ).fetchall()
-    
+
     performance_data = []
-    for ad in ads:
-        completions = db.execute(
-            'SELECT COUNT(*) FROM task_completions WHERE ad_id=? AND status="approved"',
-            (ad['id'],)
-        ).fetchone()[0]
-        
-        roi = 0
-        if ad['budget_spent']:
-            roi = ((ad['followers_gained'] or 0) * LISTER_COST_PER_TASK - ad['budget_spent']) / ad['budget_spent'] * 100
-        
+    for ad in ads_rows:
+        followers_gained = int(ad['followers_gained'] or 0)
+        followers_target = int(ad['followers_target'] or 1)
+        budget_spent = float(ad['budget_spent'] or 0)
+
+        roi = 0.0
+        if budget_spent > 0:
+            roi = round((followers_gained * LISTER_COST_PER_TASK - budget_spent) / budget_spent * 100, 2)
+
         performance_data.append({
             'title': ad['title'],
             'platform': ad['platform'],
-            'followers_target': ad['followers_target'],
-            'followers_gained': ad['followers_gained'] or 0,
-            'completion_rate': round((ad['followers_gained'] or 0) / ad['followers_target'] * 100, 1) if ad['followers_target'] > 0 else 0,
+            'followers_target': followers_target,
+            'followers_gained': followers_gained,
+            'completion_rate': round(followers_gained / followers_target * 100, 1) if followers_target > 0 else 0,
             'budget': ad['budget'],
-            'cost_per_follower': round(ad['budget_spent'] / (ad['followers_gained'] or 1), 2) if ad['followers_gained'] else 0,
-            'roi': round(roi, 2),
-            'status': ad['status']
+            'cost_per_follower': round(budget_spent / followers_gained, 4) if followers_gained > 0 else 0,
+            'roi': roi,
+            'status': ad['status'],
         })
-    
-    return jsonify({
-        'success': True,
-        'performance': performance_data
-    })
+
+    return jsonify({'success': True, 'performance': performance_data})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1584,8 +1340,7 @@ def api_analytics_performance():
 def _not_found(_e):
     if request.path.startswith('/api/'):
         return jsonify({'success': False, 'error': 'Not found'}), 404
-    return render_template('error.html', code=404,
-                           message='Page not found.'), 404
+    return render_template('error.html', code=404, message='Page not found.'), 404
 
 
 @app.errorhandler(500)

@@ -4,7 +4,7 @@
 
 {% block head_extra %}
 <style>
-.recipient-card {
+.crypto-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -14,11 +14,11 @@
   gap: 14px;
   flex-wrap: wrap;
 }
-.recipient-card.empty {
+.crypto-card.empty {
   border-style: dashed;
   background: transparent;
 }
-.recipient-icon {
+.crypto-icon {
   width: 44px; height: 44px;
   border-radius: 12px;
   background: var(--gradient-primary);
@@ -26,37 +26,78 @@
   font-size: 20px;
   flex-shrink: 0;
 }
-.recipient-icon.empty {
+.crypto-icon.empty {
   background: var(--surface-2);
   color: var(--muted);
 }
-.recipient-info { flex: 1; min-width: 0; }
-.recipient-info .provider {
+.crypto-info { flex: 1; min-width: 0; }
+.crypto-info .network-label {
   font-size: 11px; text-transform: uppercase;
   letter-spacing: .08em; color: var(--muted);
   font-weight: 700;
 }
-.recipient-info .account {
+.crypto-info .address {
   font-family: var(--font-display);
-  font-size: clamp(15px, 4vw, 17px);
+  font-size: clamp(13px, 3.5vw, 15px);
   font-weight: 700;
   margin-top: 2px;
   overflow-wrap: anywhere;
+  word-break: break-all;
 }
-.recipient-info .holder {
+.crypto-info .holder {
   font-size: 12.5px; color: var(--muted);
   margin-top: 2px;
-  overflow-wrap: anywhere;
 }
-.recipient-actions {
+.crypto-actions {
   display: flex; gap: 8px;
   width: 100%;
 }
 @media (min-width: 560px) {
-  .recipient-actions { width: auto; margin-left: auto; }
+  .crypto-actions { width: auto; margin-left: auto; }
 }
-.recipient-actions .btn { flex: 1; }
-@media (min-width: 560px) { .recipient-actions .btn { flex: 0 0 auto; } }
+.crypto-actions .btn { flex: 1; }
+@media (min-width: 560px) { .crypto-actions .btn { flex: 0 0 auto; } }
+
+.network-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all var(--transition);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.network-badge:hover { border-color: var(--accent); color: var(--accent); }
+.network-badge.selected { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+.deposit-wallet-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.deposit-wallet-box .wallet-addr {
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--accent);
+  margin-top: 6px;
+}
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color var(--transition);
+}
+.copy-btn:hover { color: var(--accent); }
 </style>
 {% endblock %}
 
@@ -83,51 +124,72 @@
 <div class="split-2">
   <!-- Deposit -->
   <div class="card">
-    <div class="section-title mb-16">💳 Add Funds</div>
-    <form id="deposit-form" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="dep-amount">Amount ({{ CURRENCY_SYMBOL }})</label>
-        <input class="form-input" id="dep-amount" name="amount" type="number" step="0.01" min="1" placeholder="25.00" required inputmode="decimal">
-      </div>
-      <div class="form-grid-2 mb-16">
-        {% for amt in [5, 10, 25, 50] %}
-        <button type="button" class="btn btn-outline btn-sm" onclick="setAmount({{ amt }})">{{ CURRENCY_SYMBOL }}{{ amt }}</button>
+    <div class="section-title mb-16">💳 Add Funds (USDT)</div>
+
+    <div class="info-box mb-16">
+      ℹ️ Send USDT to the platform wallet address below, then submit your transaction hash for confirmation. Supported networks: <strong>Aptos, Avalanche, BSC</strong>.
+    </div>
+
+    <!-- Network Selector -->
+    <div class="form-group">
+      <label class="form-label">Select Network</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="deposit-network-btns">
+        {% for key, net in CRYPTO_NETWORKS.items() %}
+        <button type="button" class="network-badge" data-network="{{ key }}" onclick="selectDepositNetwork('{{ key }}')">
+          {{ net.label }}
+        </button>
         {% endfor %}
       </div>
+    </div>
 
-      {% if PAYSTACK_ENABLED %}
-      <div class="info-box mb-16">
-        ℹ️ Payments are processed securely with Paystack in Ghana Cedis ({{ CURRENCY_CODE }}).
+    <!-- Wallet address display -->
+    <div id="deposit-wallet-display" style="display:none">
+      <div class="deposit-wallet-box">
+        <div class="text-xs text-muted fw-700">SEND USDT TO THIS ADDRESS</div>
+        <div class="wallet-addr" id="deposit-wallet-addr">—</div>
+        <button type="button" class="copy-btn" onclick="copyWalletAddr()" title="Copy address">📋 Copy</button>
       </div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg">Add Funds</button>
-      {% else %}
-      <div class="info-box warning mb-16">
-        ⚠️ Deposits are currently unavailable. Please contact support.
+    </div>
+
+    <div id="no-wallet-warning" style="display:none" class="info-box warning mb-16">
+      ⚠️ No wallet configured for this network. Please contact support.
+    </div>
+
+    <form id="deposit-form" novalidate>
+      <input type="hidden" id="dep-network" name="network" value="">
+      <div class="form-group">
+        <label class="form-label" for="dep-amount">Amount (USDT)</label>
+        <input class="form-input" id="dep-amount" name="amount" type="number" step="0.01" min="1" placeholder="10.00" required inputmode="decimal">
       </div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg" disabled>Add Funds</button>
-      {% endif %}
+      <div class="form-group">
+        <label class="form-label" for="dep-txhash">Transaction Hash</label>
+        <input class="form-input" id="dep-txhash" name="tx_hash" type="text" placeholder="0x... or your TX hash" required autocomplete="off">
+        <div class="text-xs text-muted mt-8">Paste the TX hash after sending USDT to our wallet.</div>
+      </div>
+      <div id="deposit-error" class="error-list" style="display:none"></div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Submit Deposit</button>
     </form>
   </div>
 
   <!-- Withdraw -->
   <div class="card">
-    <div class="section-title mb-16">🏦 Withdraw Funds</div>
+    <div class="section-title mb-16">🏦 Withdraw Funds (USDT)</div>
 
-    {% if current_user.paystack_recipient %}
-    <div class="recipient-card mb-16">
-      <div class="recipient-icon" aria-hidden="true">📱</div>
-      <div class="recipient-info">
-        <div class="provider">{{ MOMO_PROVIDERS.get(current_user.recipient_provider, 'Mobile Money') }}</div>
-        <div class="account">{{ current_user.recipient_account }}</div>
-        <div class="holder">{{ current_user.recipient_name }}</div>
+    {% if current_user.crypto_address %}
+    <div class="crypto-card mb-16">
+      <div class="crypto-icon" aria-hidden="true">🔑</div>
+      <div class="crypto-info">
+        <div class="network-label">{{ CRYPTO_NETWORKS.get(current_user.crypto_network, {}).get('label', 'Crypto') if current_user.crypto_network else 'Crypto' }}</div>
+        <div class="address">{{ current_user.crypto_address }}</div>
+        <div class="holder">{{ current_user.crypto_name }}</div>
       </div>
-      <div class="recipient-actions">
-        <button type="button" class="btn btn-outline btn-sm" onclick="openModal('recipient-modal')">Change</button>
+      <div class="crypto-actions">
+        <button type="button" class="btn btn-outline btn-sm" onclick="openModal('address-modal')">Change</button>
       </div>
     </div>
     <form id="withdraw-form" novalidate>
       <div class="form-group">
-        <label class="form-label" for="wdr-amount">Amount ({{ CURRENCY_SYMBOL }})</label>
+        <label class="form-label" for="wdr-amount">Amount (USDT)</label>
         <input class="form-input" id="wdr-amount" name="amount" type="number" step="0.01" min="1"
                max="{{ '%.2f'|format(current_user.balance) }}"
                placeholder="10.00" required inputmode="decimal">
@@ -136,34 +198,58 @@
         </div>
       </div>
       <div id="withdraw-error" class="error-list" style="display:none"></div>
-      {% if PAYSTACK_TRANSFERS_ENABLED %}
       <button type="submit" class="btn btn-primary btn-block btn-lg">
-        Withdraw to Mobile Money
+        Withdraw to Crypto Wallet
       </button>
-      {% else %}
-      <div class="info-box warning mb-16">
-        ⚠️ Automatic payouts are unavailable. Requests will be processed manually.
-      </div>
-      <button type="submit" class="btn btn-outline btn-block btn-lg">Request Withdrawal</button>
-      {% endif %}
     </form>
     {% else %}
-    <div class="recipient-card empty mb-16">
-      <div class="recipient-icon empty" aria-hidden="true">📱</div>
-      <div class="recipient-info">
-        <div class="provider" style="color:var(--accent)">No payout account</div>
-        <div class="holder">Add your mobile money account to withdraw earnings.</div>
+    <div class="crypto-card empty mb-16">
+      <div class="crypto-icon empty" aria-hidden="true">🔑</div>
+      <div class="crypto-info">
+        <div class="network-label" style="color:var(--accent)">No withdrawal address</div>
+        <div class="holder">Add your USDT wallet address to withdraw earnings.</div>
       </div>
     </div>
-    <button type="button" class="btn btn-primary btn-block btn-lg" onclick="openModal('recipient-modal')">
-      + Add Payout Account
+    <button type="button" class="btn btn-primary btn-block btn-lg" onclick="openModal('address-modal')">
+      + Add Withdrawal Address
     </button>
     {% endif %}
   </div>
 </div>
 
+<!-- Pending Deposits -->
+{% if pending_deposits %}
+<div class="card mt-24">
+  <div class="section-title mb-16">⏳ Pending Deposits</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Network</th>
+          <th>Amount (USDT)</th>
+          <th>TX Hash</th>
+          <th>Status</th>
+          <th class="col-hide-xs">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for dep in pending_deposits %}
+      <tr>
+        <td>{{ CRYPTO_NETWORKS.get(dep.network, {}).get('label', dep.network) }}</td>
+        <td class="fw-700" style="color:var(--green)">${{ '%.2f'|format(dep.amount) }}</td>
+        <td style="font-size:11px;overflow-wrap:anywhere;max-width:160px">{{ dep.tx_hash[:24] }}…</td>
+        <td><span class="badge badge-{{ dep.status }}">{{ dep.status }}</span></td>
+        <td class="col-hide-xs text-muted text-xs">{{ dep.created_at[:16] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <!-- Transaction History -->
-<div class="card">
+<div class="card mt-24">
   <div class="section-title mb-16">Transaction History</div>
   {% if transactions %}
   <div class="table-wrap">
@@ -206,7 +292,7 @@
   {% endif %}
 </div>
 
-<!-- Withdrawal history (shows Paystack transfer statuses) -->
+<!-- Withdrawal history -->
 {% if withdrawals %}
 <div class="card mt-24">
   <div class="section-title mb-16">Withdrawal History</div>
@@ -215,7 +301,7 @@
       <thead>
         <tr>
           <th>Amount</th>
-          <th>Method</th>
+          <th>Network / Address</th>
           <th>Status</th>
           <th class="col-hide-xs">Date</th>
         </tr>
@@ -228,7 +314,7 @@
         </td>
         <td style="font-size:13px;overflow-wrap:anywhere">
           {{ w.method }}<br>
-          <span class="text-xs text-muted">{{ w.account }}</span>
+          <span class="text-xs text-muted">{{ w.account[:20] if w.account else '—' }}{% if w.account and w.account|length > 20 %}…{% endif %}</span>
         </td>
         <td>
           <span class="badge badge-{{ w.status }}">{{ w.status }}</span>
@@ -247,63 +333,64 @@
 {% endblock %}
 
 {% block modals %}
-<!-- Add/Change Payout Account Modal -->
-<div class="modal-overlay" id="recipient-modal" role="dialog" aria-modal="true" aria-labelledby="recipient-title">
+<!-- Add/Change Withdrawal Address Modal -->
+<div class="modal-overlay" id="address-modal" role="dialog" aria-modal="true" aria-labelledby="address-title">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title" id="recipient-title">
-        {{ 'Change Payout Account' if current_user.paystack_recipient else 'Add Payout Account' }}
+      <div class="modal-title" id="address-title">
+        {{ 'Change Withdrawal Address' if current_user.crypto_address else 'Add Withdrawal Address' }}
       </div>
-      <button class="modal-close" onclick="closeModal('recipient-modal')" aria-label="Close">✕</button>
+      <button class="modal-close" onclick="closeModal('address-modal')" aria-label="Close">✕</button>
     </div>
 
     <p class="text-sm text-muted mb-16">
-      Your earnings will be sent to this mobile money account via Paystack.
-      Make sure the details match exactly.
+      Enter your USDT wallet address on one of the supported networks. Withdrawals will be sent here.
     </p>
 
-    <form id="recipient-form" novalidate>
+    <form id="address-form" novalidate>
       <div class="form-group">
-        <label class="form-label" for="rec-name">Account Holder Name</label>
-        <input class="form-input" id="rec-name" name="account_name" type="text"
-               placeholder="Kofi Mensah" required minlength="2" autocomplete="name"
-               value="{{ current_user.recipient_name or '' }}">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="rec-provider">Network</label>
-        <select class="form-input" id="rec-provider" name="provider" required>
-          <option value="">Select network…</option>
-          {% for code, label in MOMO_PROVIDERS.items() %}
-          <option value="{{ code }}" {% if current_user.recipient_provider == code %}selected{% endif %}>{{ label }}</option>
+        <label class="form-label">Network</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;" id="withdraw-network-btns">
+          {% for key, net in CRYPTO_NETWORKS.items() %}
+          <button type="button" class="network-badge{% if current_user.crypto_network == key %} selected{% endif %}"
+                  data-network="{{ key }}" onclick="selectWithdrawNetwork('{{ key }}')">
+            {{ net.label }}
+          </button>
           {% endfor %}
-        </select>
+        </div>
+        <input type="hidden" id="addr-network" name="network" value="{{ current_user.crypto_network or '' }}">
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="rec-phone">Mobile Money Number</label>
-        <input class="form-input" id="rec-phone" name="phone" type="tel"
-               placeholder="0241234567" required inputmode="tel"
-               autocomplete="tel-national" maxlength="14"
-               value="{{ current_user.recipient_account or '' }}">
+        <label class="form-label" for="addr-name">Your Name</label>
+        <input class="form-input" id="addr-name" name="name" type="text"
+               placeholder="John Doe" required minlength="2"
+               value="{{ current_user.crypto_name or '' }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="addr-address">USDT Wallet Address</label>
+        <input class="form-input" id="addr-address" name="address" type="text"
+               placeholder="0x... or your wallet address" required minlength="10"
+               value="{{ current_user.crypto_address or '' }}">
         <div class="text-xs text-muted mt-8">
-          10-digit Ghana number (e.g. 024 123 4567). International format also accepted.
+          Make sure this address is correct — crypto transactions cannot be reversed.
         </div>
       </div>
 
       <div class="info-box mb-16">
-        🔒 Your account details are saved securely with Paystack. You can change them anytime.
+        🔒 Your address is stored securely. Always double-check before saving.
       </div>
 
-      <div id="recipient-error" class="error-list" style="display:none"></div>
+      <div id="address-error" class="error-list" style="display:none"></div>
 
       <button type="submit" class="btn btn-primary btn-block btn-lg">
-        {{ 'Save Changes' if current_user.paystack_recipient else 'Save Account' }}
+        {{ 'Save Changes' if current_user.crypto_address else 'Save Address' }}
       </button>
 
-      {% if current_user.paystack_recipient %}
-      <button type="button" class="btn btn-outline btn-block mt-12" onclick="removeRecipient(this)">
-        Remove Account
+      {% if current_user.crypto_address %}
+      <button type="button" class="btn btn-outline btn-block mt-12" onclick="removeCryptoAddress(this)">
+        Remove Address
       </button>
       {% endif %}
     </form>
@@ -313,127 +400,144 @@
 
 {% block scripts %}
 <script>
-function setAmount(v) {
-  const el = document.querySelector('#deposit-form [name=amount]');
-  if (el) el.value = v;
+// Wallet addresses per network (injected from server)
+const cryptoWallets = {{ CRYPTO_WALLETS | tojson }};
+
+/* ── Deposit: network selection ─────────────────────────────── */
+function selectDepositNetwork(key) {
+  document.querySelectorAll('#deposit-network-btns .network-badge').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`#deposit-network-btns [data-network="${key}"]`);
+  if (btn) btn.classList.add('selected');
+  document.getElementById('dep-network').value = key;
+
+  const addr = cryptoWallets[key] || '';
+  const display = document.getElementById('deposit-wallet-display');
+  const noWarn = document.getElementById('no-wallet-warning');
+
+  if (addr) {
+    document.getElementById('deposit-wallet-addr').textContent = addr;
+    display.style.display = '';
+    noWarn.style.display = 'none';
+  } else {
+    display.style.display = 'none';
+    noWarn.style.display = '';
+  }
 }
 
-/* ── Deposit via Paystack Popup ─────────────────────────────────────── */
-document.getElementById('deposit-form').addEventListener('submit', e => {
+function copyWalletAddr() {
+  const addr = document.getElementById('deposit-wallet-addr').textContent;
+  navigator.clipboard.writeText(addr).then(() => showToast('Address copied!'));
+}
+
+/* ── Deposit form submit ─────────────────────────────────────── */
+document.getElementById('deposit-form').addEventListener('submit', async e => {
   e.preventDefault();
-  {% if not PAYSTACK_ENABLED %}
-  showToast('Deposits are currently unavailable.', 'error');
-  return;
-  {% else %}
-  const amountField = e.target.querySelector('[name=amount]');
-  const amount = parseFloat(amountField.value || '0');
-  if (!amount || amount <= 0) {
-    showToast('Enter a valid amount.', 'error');
-    return;
+  const errBox = document.getElementById('deposit-error');
+  errBox.style.display = 'none';
+
+  const network = document.getElementById('dep-network').value;
+  const amount = parseFloat(document.getElementById('dep-amount').value || '0');
+  const tx_hash = document.getElementById('dep-txhash').value.trim();
+
+  if (!network) { errBox.style.display='block'; errBox.textContent='Please select a network.'; return; }
+  if (!amount || amount <= 0) { errBox.style.display='block'; errBox.textContent='Enter a valid amount.'; return; }
+  if (!tx_hash) { errBox.style.display='block'; errBox.textContent='Enter your transaction hash.'; return; }
+
+  const btn = e.target.querySelector('[type=submit]');
+  const orig = btn.textContent;
+  btn.textContent = 'Submitting…'; btn.disabled = true;
+
+  try {
+    const r = await fetch('/wallet/deposit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ network, amount, tx_hash })
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Deposit submitted! Awaiting confirmation.');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      errBox.style.display = 'block';
+      errBox.textContent = d.error || 'Could not submit deposit.';
+    }
+  } catch (_err) {
+    errBox.style.display = 'block';
+    errBox.textContent = 'Network error. Please try again.';
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
   }
-  if (!window.PaystackPop) {
-    showToast('Payment gateway not loaded. Please try again.', 'error');
-    return;
-  }
-  const handler = PaystackPop.setup({
-    key: {{ PAYSTACK_PUBLIC_KEY|tojson }},
-    email: {{ current_user.email|tojson }},
-    amount: Math.round(amount * 100),
-    currency: {{ CURRENCY_CODE|tojson }},
-    callback: async function (response) {
-      try {
-        const r = await fetch('/wallet/deposit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reference: response.reference, amount: amount })
-        });
-        const d = await r.json();
-        if (d.success) {
-          showToast('Funds added!');
-          setTimeout(() => location.reload(), 900);
-        } else {
-          showToast(d.error || 'Could not confirm payment.', 'error');
-        }
-      } catch (_err) {
-        showToast('Error confirming payment.', 'error');
-      }
-    },
-    onClose: function () { showToast('Payment cancelled.', 'info'); }
-  });
-  handler.openIframe();
-  {% endif %}
 });
 
-/* ── Save / update payout recipient ─────────────────────────────────── */
-const recipientForm = document.getElementById('recipient-form');
-if (recipientForm) {
-  recipientForm.addEventListener('submit', async e => {
+/* ── Withdraw network selection (modal) ─────────────────────── */
+function selectWithdrawNetwork(key) {
+  document.querySelectorAll('#withdraw-network-btns .network-badge').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`#withdraw-network-btns [data-network="${key}"]`);
+  if (btn) btn.classList.add('selected');
+  document.getElementById('addr-network').value = key;
+}
+
+/* ── Save / update withdrawal address ───────────────────────── */
+const addressForm = document.getElementById('address-form');
+if (addressForm) {
+  addressForm.addEventListener('submit', async e => {
     e.preventDefault();
     const form = e.target;
     const btn = form.querySelector('[type=submit]');
-    const original = btn.textContent;
-    btn.textContent = 'Saving…';
-    btn.disabled = true;
-    const errBox = document.getElementById('recipient-error');
+    const orig = btn.textContent;
+    btn.textContent = 'Saving…'; btn.disabled = true;
+    const errBox = document.getElementById('address-error');
     errBox.style.display = 'none';
     try {
-      const r = await fetch('/wallet/recipient', {
-        method: 'POST',
-        body: new FormData(form)
-      });
+      const r = await fetch('/wallet/crypto_address', { method: 'POST', body: new FormData(form) });
       const d = await r.json();
       if (d.success) {
-        showToast('Payout account saved!');
-        closeModal('recipient-modal');
+        showToast('Withdrawal address saved!');
+        closeModal('address-modal');
         setTimeout(() => location.reload(), 700);
       } else {
         errBox.style.display = 'block';
-        errBox.textContent = d.error || 'Could not save account.';
+        errBox.textContent = d.error || 'Could not save address.';
       }
     } catch (_err) {
       errBox.style.display = 'block';
       errBox.textContent = 'Network error. Please try again.';
     } finally {
-      btn.textContent = original;
-      btn.disabled = false;
+      btn.textContent = orig; btn.disabled = false;
     }
   });
 }
 
-async function removeRecipient(btn) {
-  if (!confirm('Remove your saved payout account? You will need to add one again to withdraw.')) return;
-  const original = btn.textContent;
-  btn.textContent = 'Removing…';
-  btn.disabled = true;
+async function removeCryptoAddress(btn) {
+  if (!confirm('Remove your saved withdrawal address? You will need to add one again to withdraw.')) return;
+  const orig = btn.textContent;
+  btn.textContent = 'Removing…'; btn.disabled = true;
   try {
-    const r = await fetch('/wallet/recipient', { method: 'DELETE' });
+    const r = await fetch('/wallet/crypto_address', { method: 'DELETE' });
     const d = await r.json();
     if (d.success) {
-      showToast('Account removed.');
+      showToast('Address removed.');
       setTimeout(() => location.reload(), 600);
     } else {
-      showToast(d.error || 'Could not remove account.', 'error');
-      btn.textContent = original;
-      btn.disabled = false;
+      showToast(d.error || 'Could not remove address.', 'error');
+      btn.textContent = orig; btn.disabled = false;
     }
   } catch (_err) {
     showToast('Network error.', 'error');
-    btn.textContent = original;
-    btn.disabled = false;
+    btn.textContent = orig; btn.disabled = false;
   }
 }
-window.removeRecipient = removeRecipient;
+window.removeCryptoAddress = removeCryptoAddress;
 
-/* ── Withdrawal ─────────────────────────────────────────────────────── */
+/* ── Withdrawal ──────────────────────────────────────────────── */
 const withdrawForm = document.getElementById('withdraw-form');
 if (withdrawForm) {
   withdrawForm.addEventListener('submit', async e => {
     e.preventDefault();
     const form = e.target;
     const btn = form.querySelector('[type=submit]');
-    const original = btn.textContent;
-    btn.textContent = 'Submitting…';
-    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Submitting…'; btn.disabled = true;
     const errBox = document.getElementById('withdraw-error');
     errBox.style.display = 'none';
     try {
@@ -450,8 +554,7 @@ if (withdrawForm) {
       errBox.style.display = 'block';
       errBox.textContent = 'Network error. Please try again.';
     } finally {
-      btn.textContent = original;
-      btn.disabled = false;
+      btn.textContent = orig; btn.disabled = false;
     }
   });
 }
