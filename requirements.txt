@@ -1,4 +1,14 @@
-Flask>=3.1.3
+# Core web framework
+Flask>=3.1.0
 Authlib>=1.3.0
 requests>=2.32.0
 python-dotenv>=1.0.0
+
+# On-chain signing — EVM (BSC / Avalanche)
+# eth-account is the standard Ethereum signing library (ships with web3)
+# Install one of the following; eth-account is preferred:
+eth-account>=0.10.0
+
+# On-chain signing — Aptos
+# aptos-sdk is the official Aptos Python SDK
+aptos-sdk>=0.8.0

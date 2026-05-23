@@ -4,268 +4,491 @@
 
 {% block head_extra %}
 <style>
-/* Landing page owns its own layout — no sidebar / topbar / page-content wrapper */
 body.landing-body { background: var(--bg); }
-.landing {
-  width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--bg);
-  overflow-x: hidden;
-}
-.landing-header {
-  position: sticky; top: 0; z-index: 50;
-  padding: 12px 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+
+/* ── Landing shell ──────────────────────────────────────────────────────── */
+.landing { width: 100%; min-height: 100vh; overflow-x: hidden; }
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.l-header {
+  position: sticky; top: 0; z-index: 80;
+  padding: 14px 20px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
-@media (min-width: 720px) {
-  .landing-header { padding: 16px 32px; }
-}
-.landing-header .logo-row {
-  display: flex; align-items: center; gap: 10px;
-}
-.landing-header .logo-text { font-size: 16px; }
-@media (min-width: 480px) { .landing-header .logo-text { font-size: 18px; } }
+@media (min-width: 720px) { .l-header { padding: 16px 40px; } }
 
-.landing-header-actions { display: flex; align-items: center; gap: 8px; }
+.l-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.l-logo .logo-text { font-size: 17px; }
 
-/* ── Hero ─────────────────────────────────────────────────────────────── */
+.l-nav { display: none; gap: 6px; }
+@media (min-width: 600px) { .l-nav { display: flex; } }
+.l-nav-link {
+  padding: 8px 14px; border-radius: 9px;
+  font-size: 14px; font-weight: 500; color: var(--text-dim);
+  transition: background var(--transition), color var(--transition);
+}
+.l-nav-link:hover { background: var(--surface-2); color: var(--text); }
+
+.l-header-ctas { display: flex; align-items: center; gap: 8px; }
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
 .hero {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
   text-align: center;
-  padding: 56px 20px 72px;
+  padding: 72px 20px 88px;
   overflow: hidden;
-  min-height: calc(100vh - 60px);
-  min-height: calc(100dvh - 60px);
+  min-height: calc(92vh - 62px);
 }
-@media (min-width: 720px) {
-  .hero { padding: 80px 32px 96px; }
-}
+@media (min-width: 720px) { .hero { padding: 96px 40px 112px; } }
 
+/* Multi-layer hero glow */
 .hero::before {
   content: '';
-  position: absolute;
-  width: min(120vw, 900px);
-  height: min(120vw, 900px);
-  background: radial-gradient(circle, rgba(124,77,255,.18) 0%, transparent 65%);
-  top: 45%; left: 50%;
-  transform: translate(-50%, -50%);
+  position: absolute; inset: 0;
+  background: var(--gradient-hero);
   pointer-events: none;
-  z-index: 0;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(44,182,125,.1) 0%, transparent 65%);
+  bottom: -150px; right: -100px;
+  pointer-events: none;
 }
 .hero > * { position: relative; z-index: 1; }
 
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(124,77,255,.1);
-  border: 1px solid rgba(124,77,255,.3);
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(127,90,240,.1);
+  border: 1px solid rgba(127,90,240,.25);
   border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--accent);
-  margin-bottom: 24px;
+  padding: 6px 16px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--accent-light);
+  margin-bottom: 28px;
+  letter-spacing: .02em;
+  animation: fadeUp .6s cubic-bezier(.34,1.4,.64,1) both;
 }
-@media (min-width: 480px) { .hero-badge { font-size: 13px; padding: 6px 16px; } }
+.hero-eyebrow .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(44,182,125,.7);
+  animation: softPulse 2s infinite;
+}
 
 .hero h1 {
-  font-size: clamp(32px, 9vw, 72px);
-  font-weight: 800;
-  line-height: 1.05;
-  margin-bottom: 18px;
-  max-width: 900px;
-  letter-spacing: -.02em;
-  padding: 0 4px;
+  font-size: clamp(34px,8.5vw,76px);
+  font-weight: 800; line-height: 1.05;
+  margin-bottom: 22px;
+  max-width: 880px;
+  letter-spacing: -0.03em;
+  animation: fadeUp .6s .1s cubic-bezier(.34,1.4,.64,1) both;
 }
-.hero h1 span {
+.hero h1 .grad {
   background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  background-clip: text;
+  -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.hero p {
-  font-size: clamp(14.5px, 3.8vw, 18px);
+
+.hero-sub {
+  font-size: clamp(15px,3.5vw,19px);
   color: var(--text-dim);
-  max-width: 560px;
-  line-height: 1.6;
-  margin-bottom: 28px;
-  padding: 0 4px;
+  max-width: 560px; line-height: 1.65;
+  margin-bottom: 36px;
+  animation: fadeUp .6s .2s cubic-bezier(.34,1.4,.64,1) both;
 }
+
 .hero-ctas {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-width: 340px;
+  display: flex; flex-direction: column; gap: 10px;
+  width: 100%; max-width: 340px;
+  animation: fadeUp .6s .3s cubic-bezier(.34,1.4,.64,1) both;
 }
 @media (min-width: 520px) {
-  .hero-ctas {
-    flex-direction: row;
-    justify-content: center;
-    max-width: none;
-    gap: 12px;
-  }
+  .hero-ctas { flex-direction: row; justify-content: center; max-width: none; gap: 12px; }
 }
 
-/* ── Features ─────────────────────────────────────────────────────────── */
-.features {
-  padding: 56px 20px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
-  max-width: 1200px;
-  margin: 0 auto;
+/* Social proof */
+.hero-proof {
+  margin-top: 52px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 24px; flex-wrap: wrap;
+  animation: fadeUp .6s .4s cubic-bezier(.34,1.4,.64,1) both;
 }
-@media (min-width: 560px) {
-  .features { grid-template-columns: 1fr 1fr; gap: 18px; padding: 72px 24px; }
+.proof-stat { text-align: center; }
+.proof-num {
+  font-family: var(--font-display);
+  font-size: 24px; font-weight: 800;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
 }
-@media (min-width: 960px) {
-  .features { grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 96px 32px; }
+.proof-label { font-size: 12px; color: var(--muted); margin-top: 3px; font-weight: 500; }
+.proof-divider { width: 1px; height: 36px; background: var(--border); }
+
+/* ── How it works ────────────────────────────────────────────────────────── */
+.how-section {
+  padding: 72px 20px;
+  max-width: 1100px; margin: 0 auto;
+  text-align: center;
+}
+@media (min-width: 720px) { .how-section { padding: 96px 40px; } }
+
+.section-eyebrow {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--accent-light);
+  margin-bottom: 12px;
+}
+.how-section h2 { margin-bottom: 14px; }
+.how-section .lead {
+  font-size: clamp(14.5px,3vw,17px);
+  color: var(--text-dim); max-width: 540px;
+  margin: 0 auto 52px; line-height: 1.65;
 }
 
-.feature-card {
+.steps {
+  display: grid; grid-template-columns: 1fr; gap: 20px;
+  text-align: left;
+}
+@media (min-width: 640px) { .steps { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 960px) { .steps { grid-template-columns: repeat(4,1fr); gap: 16px; } }
+
+.step {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   padding: 24px 20px;
+  position: relative;
   transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
-@media (min-width: 640px) { .feature-card { padding: 28px 24px; } }
-.feature-card:hover {
+.step:hover {
   transform: translateY(-4px);
-  border-color: var(--accent);
-  box-shadow: var(--shadow);
+  border-color: rgba(127,90,240,.35);
+  box-shadow: var(--glow-accent);
 }
-.feature-icon { font-size: 30px; margin-bottom: 12px; }
-@media (min-width: 640px) { .feature-icon { font-size: 34px; margin-bottom: 14px; } }
-.feature-title {
+.step-num {
   font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 6px;
+  font-size: 11px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--accent-light);
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
 }
-@media (min-width: 480px) { .feature-title { font-size: 17px; } }
-.feature-desc {
-  font-size: 13.5px;
-  color: var(--text-dim);
-  line-height: 1.6;
+.step-num::before {
+  content: attr(data-n);
+  width: 26px; height: 26px;
+  background: rgba(127,90,240,.15);
+  border: 1px solid rgba(127,90,240,.3);
+  border-radius: 8px;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 800;
+  color: var(--accent-light);
 }
-@media (min-width: 480px) { .feature-desc { font-size: 14px; } }
+.step-icon { font-size: 28px; margin-bottom: 12px; }
+.step h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+.step p { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
 
-/* ── CTA section ──────────────────────────────────────────────────────── */
-.cta-section {
-  text-align: center;
-  padding: 56px 20px;
+/* ── Features ────────────────────────────────────────────────────────────── */
+.features-section {
+  padding: 72px 20px;
   background: var(--gradient-subtle);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
-@media (min-width: 720px) { .cta-section { padding: 80px 32px; } }
-.cta-section h2 {
-  font-size: clamp(24px, 6.5vw, 40px);
-  margin-bottom: 12px;
-  letter-spacing: -.01em;
-  padding: 0 4px;
-}
-.cta-section p {
-  color: var(--text-dim);
-  margin: 0 auto 24px;
-  font-size: clamp(13.5px, 3.5vw, 16px);
-  max-width: 500px;
-  line-height: 1.6;
-  padding: 0 4px;
+@media (min-width: 720px) { .features-section { padding: 96px 40px; } }
+.features-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
+.features-inner h2 { margin-bottom: 14px; }
+.features-inner .lead {
+  font-size: clamp(14.5px,3vw,17px); color: var(--text-dim);
+  max-width: 500px; margin: 0 auto 52px; line-height: 1.65;
 }
 
-/* ── Footer ───────────────────────────────────────────────────────────── */
-.landing-footer {
-  padding: 20px 16px;
-  border-top: 1px solid var(--border);
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
+.features-grid {
+  display: grid; grid-template-columns: 1fr; gap: 14px; text-align: left;
 }
-@media (min-width: 720px) { .landing-footer { padding: 28px 32px; font-size: 12.5px; } }
+@media (min-width: 560px) { .features-grid { grid-template-columns: 1fr 1fr; gap: 16px; } }
+@media (min-width: 960px) { .features-grid { grid-template-columns: repeat(3,1fr); } }
+
+.feat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  transition: transform var(--transition), border-color var(--transition);
+}
+.feat:hover { transform: translateY(-3px); border-color: var(--border-strong); }
+.feat-icon {
+  width: 46px; height: 46px;
+  background: var(--gradient-subtle);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: grid; place-items: center;
+  font-size: 22px; margin-bottom: 16px;
+}
+.feat h3 { font-size: 15.5px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.01em; }
+.feat p  { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+
+/* ── Crypto badge strip ──────────────────────────────────────────────────── */
+.crypto-strip {
+  padding: 32px 20px;
+  max-width: 1100px; margin: 0 auto;
+  text-align: center;
+}
+.crypto-strip p { font-size: 13px; color: var(--muted); margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+.crypto-badges { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.crypto-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 8px 18px;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-dim);
+  transition: border-color var(--transition), color var(--transition);
+}
+.crypto-badge:hover { border-color: var(--accent-light); color: var(--accent-light); }
+.crypto-badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-aptos     { background: #00d4aa; box-shadow: 0 0 8px rgba(0,212,170,.5); }
+.dot-avalanche { background: #e84142; box-shadow: 0 0 8px rgba(232,65,66,.5); }
+.dot-bsc       { background: #f0b90b; box-shadow: 0 0 8px rgba(240,185,11,.5); }
+
+/* ── CTA banner ──────────────────────────────────────────────────────────── */
+.cta-banner {
+  margin: 40px 20px 72px;
+  max-width: 860px; margin-left: auto; margin-right: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  padding: 48px 28px;
+  text-align: center;
+  position: relative; overflow: hidden;
+}
+@media (min-width: 720px) { .cta-banner { padding: 64px 48px; margin: 40px auto 72px; } }
+.cta-banner::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--gradient-subtle);
+  pointer-events: none;
+}
+.cta-banner::after {
+  content: '';
+  position: absolute;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(127,90,240,.15) 0%, transparent 65%);
+  top: -100px; right: -80px;
+  pointer-events: none;
+}
+.cta-banner > * { position: relative; z-index: 1; }
+.cta-banner h2 { margin-bottom: 12px; letter-spacing: -0.03em; }
+.cta-banner p {
+  font-size: clamp(14.5px,3vw,17px);
+  color: var(--text-dim); max-width: 440px;
+  margin: 0 auto 28px; line-height: 1.65;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.l-footer {
+  padding: 24px 20px 36px;
+  border-top: 1px solid var(--border);
+  max-width: 1100px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 8px;
+  align-items: center; text-align: center;
+}
+@media (min-width: 720px) {
+  .l-footer {
+    flex-direction: row; justify-content: space-between;
+    text-align: left; padding: 28px 40px;
+  }
+}
+.l-footer-logo { display: flex; align-items: center; gap: 8px; }
+.l-footer-meta { font-size: 12px; color: var(--muted); line-height: 1.65; }
+.l-footer-meta a { color: var(--accent-light); }
+.l-footer-meta a:hover { text-decoration: underline; }
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes softPulse {
+  0%,100% { box-shadow: 0 0 8px rgba(44,182,125,.7); }
+  50%      { box-shadow: 0 0 16px rgba(44,182,125,.9); }
+}
 </style>
 {% endblock %}
 
 {% block layout %}
 <div class="landing">
-  <header class="landing-header">
-    <a href="{{ url_for('index') }}" class="logo-row">
+
+  <!-- Header -->
+  <header class="l-header">
+    <a href="{{ url_for('index') }}" class="l-logo">
       <div class="logo-mark" aria-hidden="true">D</div>
       <div class="logo-text">DUYS Boost</div>
     </a>
-    <div class="landing-header-actions">
-      <a href="{{ url_for('login') }}" class="btn btn-outline btn-sm hide-mobile">Sign In</a>
+    <nav class="l-nav" aria-label="Landing navigation">
+      <a href="#how" class="l-nav-link">How it works</a>
+      <a href="#features" class="l-nav-link">Features</a>
+    </nav>
+    <div class="l-header-ctas">
+      <a href="{{ url_for('login') }}" class="btn btn-ghost btn-sm hide-mobile">Sign In</a>
       <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Get Started</a>
     </div>
   </header>
 
-  <section class="hero">
-    <div class="hero-badge">⚡ Powered by real users</div>
-    <h1>Boost Your <span>Social Media</span><br>Presence Today</h1>
-    <p>Create ad campaigns, earn by completing tasks, and grow your audience — all in one powerful platform built for Ghana.</p>
+  <!-- Hero -->
+  <section class="hero" aria-labelledby="hero-heading">
+    <div class="hero-eyebrow">
+      <span class="dot" aria-hidden="true"></span>
+      Real users. Real engagement. Instant payouts.
+    </div>
+    <h1 id="hero-heading">
+      The smarter way to<br><span class="grad">grow your audience</span>
+    </h1>
+    <p class="hero-sub">
+      Run campaigns to gain real followers, or earn USDT by completing tasks —
+      all verified on-chain with automatic crypto payments.
+    </p>
     <div class="hero-ctas">
-      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Get Started Free →</a>
-      <a href="{{ url_for('login') }}" class="btn btn-outline btn-lg">Sign In</a>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-xl">Start for free →</a>
+      <a href="{{ url_for('login') }}" class="btn btn-ghost btn-xl">Sign in</a>
+    </div>
+    <div class="hero-proof" role="list" aria-label="Platform stats">
+      <div class="proof-stat" role="listitem">
+        <div class="proof-num">10K+</div>
+        <div class="proof-label">Active users</div>
+      </div>
+      <div class="proof-divider" aria-hidden="true"></div>
+      <div class="proof-stat" role="listitem">
+        <div class="proof-num">$50K+</div>
+        <div class="proof-label">Paid out</div>
+      </div>
+      <div class="proof-divider" aria-hidden="true"></div>
+      <div class="proof-stat" role="listitem">
+        <div class="proof-num">500K+</div>
+        <div class="proof-label">Tasks done</div>
+      </div>
+      <div class="proof-divider" aria-hidden="true"></div>
+      <div class="proof-stat" role="listitem">
+        <div class="proof-num">3 chains</div>
+        <div class="proof-label">USDT supported</div>
+      </div>
     </div>
   </section>
 
-  <section class="features">
-    <div class="feature-card">
-      <div class="feature-icon">📢</div>
-      <div class="feature-title">Post Ad Campaigns</div>
-      <div class="feature-desc">Set a budget, choose your platform, and watch real users engage with your content.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">💰</div>
-      <div class="feature-title">Earn by Completing Tasks</div>
-      <div class="feature-desc">Follow, like, subscribe — get paid instantly for every verified task you complete.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">📊</div>
-      <div class="feature-title">Live Analytics</div>
-      <div class="feature-desc">Track followers gained, budget spent, and campaign performance in real time.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🎁</div>
-      <div class="feature-title">Referral Rewards</div>
-      <div class="feature-desc">Invite friends and earn {{ CURRENCY_SYMBOL }}1.00 for every new member who joins with your code.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🌙</div>
-      <div class="feature-title">Light & Dark Mode</div>
-      <div class="feature-desc">Work comfortably day or night with our beautiful adaptive interface.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🔒</div>
-      <div class="feature-title">Secure & Fast</div>
-      <div class="feature-desc">Auto-verified task submissions with instant wallet payouts and admin oversight.</div>
+  <!-- How it works -->
+  <section class="how-section" id="how" aria-labelledby="how-heading">
+    <div class="section-eyebrow">Simple process</div>
+    <h2 id="how-heading">How DUYS Boost works</h2>
+    <p class="lead">Four steps from sign-up to seeing results — whether you're a creator or an earner.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" data-n="1">Step</div>
+        <div class="step-icon">👤</div>
+        <h3>Create your account</h3>
+        <p>Sign up in seconds with email or Google. Your wallet is ready immediately — no KYC needed to start earning.</p>
+      </div>
+      <div class="step">
+        <div class="step-num" data-n="2">Step</div>
+        <div class="step-icon">💳</div>
+        <h3>Deposit or start earning</h3>
+        <p>Fund your wallet with USDT on Aptos, Avalanche or BSC. Or jump straight in — earn by completing tasks for other campaigns.</p>
+      </div>
+      <div class="step">
+        <div class="step-num" data-n="3">Step</div>
+        <div class="step-icon">🚀</div>
+        <h3>Launch a campaign</h3>
+        <p>Set your platform, target count and budget. Your campaign goes live instantly and real users start engaging.</p>
+      </div>
+      <div class="step">
+        <div class="step-num" data-n="4">Step</div>
+        <div class="step-icon">💸</div>
+        <h3>Get paid automatically</h3>
+        <p>Earnings hit your wallet the moment a task is approved. Withdraw any time — sent on-chain within seconds.</p>
+      </div>
     </div>
   </section>
 
-  <section class="cta-section">
-    <h2>Ready to grow?</h2>
-    <p>Join thousands of creators and marketers already boosting on DUYS.</p>
-    <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg">Create Free Account</a>
+  <!-- Crypto strip -->
+  <div class="crypto-strip">
+    <p>Accepts USDT on</p>
+    <div class="crypto-badges">
+      <span class="crypto-badge"><span class="dot dot-aptos"></span>Aptos</span>
+      <span class="crypto-badge"><span class="dot dot-avalanche"></span>Avalanche</span>
+      <span class="crypto-badge"><span class="dot dot-bsc"></span>BNB Smart Chain</span>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <section class="features-section" id="features" aria-labelledby="feat-heading">
+    <div class="features-inner">
+      <div class="section-eyebrow">Why creators choose us</div>
+      <h2 id="feat-heading">Everything in one place</h2>
+      <p class="lead">No middlemen, no delays. Just transparent, verifiable growth backed by blockchain.</p>
+
+      <div class="features-grid">
+        <div class="feat">
+          <div class="feat-icon">📣</div>
+          <h3>Multi-platform campaigns</h3>
+          <p>Run follower, like, share or comment campaigns across Instagram, TikTok, YouTube, Twitter and Facebook.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">⛓️</div>
+          <h3>On-chain verification</h3>
+          <p>Every deposit is verified against the blockchain in real time. No admin delays, no trust required.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">⚡</div>
+          <h3>Instant payouts</h3>
+          <p>Task rewards land in your wallet the moment they're approved. Withdraw and receive USDT on-chain automatically.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">📊</div>
+          <h3>Live analytics</h3>
+          <p>See followers gained, budget utilization, completion rates and ROI across all your campaigns in real time.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">🎁</div>
+          <h3>Referral rewards</h3>
+          <p>Earn {{ CURRENCY_SYMBOL }}0.50 for every person you refer who activates their account. Share your link and stack up.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">🔒</div>
+          <h3>Non-custodial withdrawals</h3>
+          <p>You own your keys. Withdrawals go directly to your personal wallet — we never hold funds longer than needed.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <footer class="landing-footer">
-    © 2026 DUYS Boost · Built for creators in Ghana<br>
-    Powered By: <a href="https://menositconsult.godaddysites.com" target="_blank" rel="noopener noreferrer">Menos iT Consult</a><br>
-    Finance and Task data are updated every 15 minutes. For help, contact <a href="mailto:duysboost@gmail.com">Support</a>
+  <!-- CTA banner -->
+  <div style="padding: 0 16px;">
+    <div class="cta-banner">
+      <h2>Ready to grow?</h2>
+      <p>Join thousands of creators and earners already on DUYS Boost. It takes less than a minute to start.</p>
+      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-xl">Create free account →</a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="l-footer">
+    <div class="l-footer-logo">
+      <div class="logo-mark" style="width:30px;height:30px;font-size:13px" aria-hidden="true">D</div>
+      <span style="font-family:var(--font-display);font-weight:700;font-size:15px;letter-spacing:-0.02em">DUYS Boost</span>
+    </div>
+    <div class="l-footer-meta">
+      © 2026 DUYS Boost ·
+      Powered by <a href="https://menositconsult.godaddysites.com" target="_blank" rel="noopener">Menos iT Consult</a> ·
+      <a href="mailto:duysboost@gmail.com">Support</a>
+    </div>
   </footer>
 </div>
 {% endblock %}

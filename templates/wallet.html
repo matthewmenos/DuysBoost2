@@ -158,16 +158,18 @@
     <form id="deposit-form" novalidate>
       <input type="hidden" id="dep-network" name="network" value="">
       <div class="form-group">
-        <label class="form-label" for="dep-amount">Amount (USDT)</label>
-        <input class="form-input" id="dep-amount" name="amount" type="number" step="0.01" min="1" placeholder="10.00" required inputmode="decimal">
-      </div>
-      <div class="form-group">
         <label class="form-label" for="dep-txhash">Transaction Hash</label>
-        <input class="form-input" id="dep-txhash" name="tx_hash" type="text" placeholder="0x... or your TX hash" required autocomplete="off">
-        <div class="text-xs text-muted mt-8">Paste the TX hash after sending USDT to our wallet.</div>
+        <input class="form-input" id="dep-txhash" name="tx_hash" type="text"
+               placeholder="0x... or Aptos TX hash" required autocomplete="off" spellcheck="false">
+        <div class="text-xs text-muted mt-8">
+          Paste the TX hash from your wallet after sending USDT. We verify on-chain automatically — no admin approval needed.
+        </div>
       </div>
-      <div id="deposit-error" class="error-list" style="display:none"></div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg">Submit Deposit</button>
+      <div id="deposit-status" class="info-box" style="display:none"></div>
+      <div id="deposit-error"  class="error-list" style="display:none"></div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="dep-submit-btn">
+        Verify &amp; Credit Deposit
+      </button>
     </form>
   </div>
 
@@ -429,43 +431,68 @@ function copyWalletAddr() {
   navigator.clipboard.writeText(addr).then(() => showToast('Address copied!'));
 }
 
-/* ── Deposit form submit ─────────────────────────────────────── */
+/* ── Deposit form submit — automatic on-chain verification ──── */
 document.getElementById('deposit-form').addEventListener('submit', async e => {
   e.preventDefault();
-  const errBox = document.getElementById('deposit-error');
-  errBox.style.display = 'none';
+  const errBox    = document.getElementById('deposit-error');
+  const statusBox = document.getElementById('deposit-status');
+  errBox.style.display    = 'none';
+  statusBox.style.display = 'none';
 
-  const network = document.getElementById('dep-network').value;
-  const amount = parseFloat(document.getElementById('dep-amount').value || '0');
-  const tx_hash = document.getElementById('dep-txhash').value.trim();
+  const network  = document.getElementById('dep-network').value;
+  const tx_hash  = document.getElementById('dep-txhash').value.trim();
 
-  if (!network) { errBox.style.display='block'; errBox.textContent='Please select a network.'; return; }
-  if (!amount || amount <= 0) { errBox.style.display='block'; errBox.textContent='Enter a valid amount.'; return; }
-  if (!tx_hash) { errBox.style.display='block'; errBox.textContent='Enter your transaction hash.'; return; }
+  if (!network) {
+    errBox.style.display = 'block';
+    errBox.textContent = 'Please select a network first.';
+    return;
+  }
+  if (!tx_hash || tx_hash.length < 10) {
+    errBox.style.display = 'block';
+    errBox.textContent = 'Please enter your transaction hash.';
+    return;
+  }
 
-  const btn = e.target.querySelector('[type=submit]');
-  const orig = btn.textContent;
-  btn.textContent = 'Submitting…'; btn.disabled = true;
+  const btn = document.getElementById('dep-submit-btn');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">'
+    + '<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4'
+    + 'M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>'
+    + 'Verifying on-chain…</span>';
+  btn.disabled = true;
+
+  statusBox.style.display = 'block';
+  statusBox.innerHTML = '🔍 Querying the blockchain, please wait…';
+  statusBox.className = 'info-box';
 
   try {
     const r = await fetch('/wallet/deposit', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ network, amount, tx_hash })
+      body: JSON.stringify({ network, tx_hash })
     });
     const d = await r.json();
+
     if (d.success) {
-      showToast('Deposit submitted! Awaiting confirmation.');
-      setTimeout(() => location.reload(), 1200);
+      statusBox.innerHTML = `✅ <strong>Deposit confirmed on-chain!</strong> $${parseFloat(d.amount).toFixed(2)} USDT credited to your balance.`;
+      statusBox.className = 'info-box success';
+      showToast(`$${parseFloat(d.amount).toFixed(2)} USDT deposited!`);
+      setTimeout(() => location.reload(), 2000);
     } else {
+      statusBox.style.display = 'none';
       errBox.style.display = 'block';
-      errBox.textContent = d.error || 'Could not submit deposit.';
+      errBox.textContent = d.error || 'Verification failed.';
     }
   } catch (_err) {
+    statusBox.style.display = 'none';
     errBox.style.display = 'block';
     errBox.textContent = 'Network error. Please try again.';
   } finally {
-    btn.textContent = orig; btn.disabled = false;
+    if (!document.getElementById('deposit-status').className.includes('success')) {
+      btn.innerHTML = orig;
+      btn.disabled = false;
+    }
   }
 });
 
@@ -544,8 +571,15 @@ if (withdrawForm) {
       const r = await fetch('/wallet/withdraw', { method: 'POST', body: new FormData(form) });
       const d = await r.json();
       if (d.success) {
-        showToast('Withdrawal request submitted!');
-        setTimeout(() => location.reload(), 900);
+        showToast(d.message || 'Withdrawal sent on-chain!');
+        if (d.tx_hash) {
+          const txMsg = document.createElement('div');
+          txMsg.className = 'info-box success';
+          txMsg.style.marginTop = '12px';
+          txMsg.innerHTML = `✅ <strong>Sent on-chain!</strong> TX: <code style="font-size:11px;word-break:break-all">${d.tx_hash}</code>`;
+          form.appendChild(txMsg);
+        }
+        setTimeout(() => location.reload(), 2800);
       } else {
         errBox.style.display = 'block';
         errBox.textContent = d.error || 'Could not submit.';

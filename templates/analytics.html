@@ -289,11 +289,11 @@
 
   // Resolve CSS variable to a hex/rgb string for Chart.js
   function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#7c4dff';
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || 'var(--accent)';
   }
 
-  const ACCENT = '#7c4dff';
-  const COLORS = ['#7c4dff', '#ff6b6b', '#51cf66', '#ffd43b', '#74c0fc'];
+  const ACCENT = 'var(--accent)';
+  const COLORS = ['var(--accent)', '#ff6b6b', '#51cf66', '#ffd43b', '#74c0fc'];
 
   // ── Performance Chart (Line) ──────────────────────────────────
   const perfCanvas = document.getElementById('performanceChart');
@@ -307,7 +307,7 @@
           label: 'Followers Gained',
           data: sorted.map(a => a.followers_gained || 0),
           borderColor: ACCENT,
-          backgroundColor: 'rgba(124,77,255,0.1)',
+          backgroundColor: 'rgba(127, 90, 240,0.1)',
           tension: 0.4,
           fill: true,
           pointRadius: 4,

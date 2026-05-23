@@ -12,7 +12,10 @@ import sqlite3
 from datetime import datetime, timezone
 from functools import wraps
 
+import threading
 import requests
+from crypto_engine import verify_deposit as _chain_verify_deposit
+from crypto_engine import send_usdt as _chain_send_usdt
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from flask import (
@@ -62,6 +65,15 @@ CRYPTO_WALLETS = {
     'aptos':     os.environ.get('CRYPTO_WALLET_APTOS', ''),
     'avalanche': os.environ.get('CRYPTO_WALLET_AVALANCHE', ''),
     'bsc':       os.environ.get('CRYPTO_WALLET_BSC', ''),
+}
+
+
+# Hot-wallet private keys for automated withdrawals — KEEP THESE SECRET
+# Each key must control the matching CRYPTO_WALLET_* address above
+WITHDRAWAL_KEYS = {
+    'aptos':     os.environ.get('WITHDRAWAL_KEY_APTOS',     ''),
+    'avalanche': os.environ.get('WITHDRAWAL_KEY_AVALANCHE', ''),
+    'bsc':       os.environ.get('WITHDRAWAL_KEY_BSC',       ''),
 }
 
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -791,49 +803,97 @@ def wallet():
 @login_required
 def deposit():
     """
-    Manual crypto deposit submission. User submits their TX hash after
-    sending USDT to the platform wallet. Admin confirms and credits the wallet.
-    Alternatively, can be auto-confirmed by a webhook from a crypto payment processor.
+    Automatic on-chain deposit verification.
+    User submits their TX hash; we immediately query the chain,
+    verify the USDT transfer reached our wallet, and credit the balance.
+    No admin approval required.
     """
     db = get_db()
     uid = session['user_id']
     payload = request.get_json(silent=True) or {}
-    network = (payload.get('network') or '').strip().lower()
-    tx_hash = (payload.get('tx_hash') or '').strip()
-    declared_amount = safe_float(payload.get('amount'), 0)
+    network  = (payload.get('network')  or '').strip().lower()
+    tx_hash  = (payload.get('tx_hash')  or '').strip()
 
     if network not in CRYPTO_NETWORKS:
         return jsonify({'success': False, 'error': 'Invalid network selected.'}), 400
     if not tx_hash or len(tx_hash) < 10:
         return jsonify({'success': False, 'error': 'Please enter a valid transaction hash.'}), 400
-    if declared_amount <= 0:
-        return jsonify({'success': False, 'error': 'Please enter a valid amount.'}), 400
 
-    # Check for duplicate tx_hash
+    # Guard against double-crediting the same TX
     existing = db.execute(
-        'SELECT id FROM crypto_deposits WHERE tx_hash=?', (tx_hash,)
+        'SELECT id, status FROM crypto_deposits WHERE tx_hash=?', (tx_hash,)
     ).fetchone()
     if existing:
-        return jsonify({'success': False, 'error': 'This transaction has already been submitted.'}), 400
+        if existing['status'] == 'confirmed':
+            return jsonify({'success': False,
+                            'error': 'This transaction has already been credited.'}), 400
+        # Still pending from a previous attempt — allow retry
+        dep_id = existing['id']
+    else:
+        dep_id = None
 
-    # Record as pending — admin will confirm and credit via /admin
-    db.execute(
-        'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status) VALUES (?,?,?,?,?)',
-        (uid, network, tx_hash, declared_amount, 'pending')
-    )
-    add_notification(db, uid,
-        f'⏳ Crypto deposit of ${declared_amount:.2f} USDT ({CRYPTO_NETWORKS[network]["label"]}) submitted. '
-        f'Awaiting confirmation.')
+    platform_wallet = CRYPTO_WALLETS.get(network, '')
+    if not platform_wallet:
+        return jsonify({'success': False,
+                        'error': f'Platform wallet not configured for {network}.'}), 500
 
-    # Notify admin
-    admin = db.execute('SELECT id FROM users WHERE is_admin=1 LIMIT 1').fetchone()
-    if admin:
-        add_notification(db, admin['id'],
-            f'💰 New crypto deposit pending: ${declared_amount:.2f} USDT via {CRYPTO_NETWORKS[network]["label"]} '
-            f'from user #{uid}. TX: {tx_hash[:20]}...')
+    net_label = CRYPTO_NETWORKS[network]['label']
 
+    # ── Insert / update deposit record as 'verifying' ────────────────────
+    now = datetime.now(timezone.utc).isoformat()
+    if dep_id:
+        db.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('verifying', dep_id))
+    else:
+        db.execute(
+            'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status, created_at) '
+            'VALUES (?,?,?,0,?,?)',
+            (uid, network, tx_hash, 'verifying', now)
+        )
+        dep_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
     db.commit()
-    return jsonify({'success': True, 'message': 'Deposit submitted for confirmation.'})
+
+    # ── Hit the chain synchronously (Flask worker thread is fine for this) ─
+    result = _chain_verify_deposit(
+        network=network,
+        tx_hash=tx_hash,
+        expected_recipient=platform_wallet,
+        min_amount_usd=0.01,
+    )
+
+    if not result['ok']:
+        db.execute(
+            'UPDATE crypto_deposits SET status=? WHERE id=?',
+            ('failed', dep_id)
+        )
+        db.commit()
+        return jsonify({'success': False, 'error': result['error']}), 400
+
+    verified_amount = round(result['amount'], 6)
+
+    # ── Credit the user ───────────────────────────────────────────────────
+    db.execute(
+        'UPDATE crypto_deposits SET status=?, amount=?, confirmed_at=? WHERE id=?',
+        ('confirmed', verified_amount, datetime.now(timezone.utc).isoformat(), dep_id)
+    )
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (verified_amount, uid))
+    add_transaction(db, uid, 'deposit', verified_amount,
+                    f'USDT deposit via {net_label} — TX: {tx_hash[:24]}...')
+    check_and_award_referral_bonus(db, uid)
+    add_notification(db, uid,
+        f'✅ Deposit confirmed on-chain! '
+        f'${verified_amount:.2f} USDT via {net_label} added to your balance.')
+    db.commit()
+
+    updated_balance = db.execute(
+        'SELECT balance FROM users WHERE id=?', (uid,)
+    ).fetchone()['balance']
+
+    return jsonify({
+        'success': True,
+        'message': f'${verified_amount:.2f} USDT confirmed and credited to your balance!',
+        'amount': verified_amount,
+        'balance': updated_balance,
+    })
 
 
 @app.route('/wallet/crypto_address', methods=['POST'])
@@ -885,12 +945,18 @@ def remove_crypto_address():
 @app.route('/wallet/withdraw', methods=['POST'])
 @login_required
 def withdraw():
+    """
+    Automatic on-chain withdrawal.
+    Deducts from user balance immediately, then signs and broadcasts a
+    USDT transfer to the user's wallet address on-chain.
+    The TX hash is stored; if broadcast fails the balance is refunded.
+    """
     db = get_db()
     uid = session['user_id']
     amount = safe_float(request.form.get('amount'), 0)
+    user   = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
 
-    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
-
+    # ── Validation ────────────────────────────────────────────────────────
     if amount <= 0:
         return jsonify({'success': False, 'error': 'Enter a valid amount.'})
     if amount < 1:
@@ -902,24 +968,93 @@ def withdraw():
     if amount > user['balance']:
         return jsonify({'success': False, 'error': 'Insufficient balance.'})
 
-    network = user['crypto_network'] or ''
+    network       = user['crypto_network'] or ''
     network_label = CRYPTO_NETWORKS.get(network, {}).get('label', 'Crypto') if network else 'Crypto'
-    address = user['crypto_address'] or ''
+    to_address    = user['crypto_address'] or ''
 
+    if network not in CRYPTO_NETWORKS:
+        return jsonify({'success': False, 'error': 'Invalid withdrawal network on your account.'})
+
+    private_key = WITHDRAWAL_KEYS.get(network, '')
+    if not private_key:
+        return jsonify({'success': False,
+                        'error': (f'Automatic withdrawals via {network_label} are temporarily '
+                                  'unavailable. Please contact support.')}), 503
+
+    # ── Deduct balance & record as processing ─────────────────────────────
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (amount, uid))
     db.execute(
-        'INSERT INTO withdrawals (user_id,amount,method,account,network) VALUES (?,?,?,?,?)',
-        (uid, amount, f'USDT ({network_label})', address, network)
+        'INSERT INTO withdrawals (user_id,amount,method,account,network,status) '
+        'VALUES (?,?,?,?,?,?)',
+        (uid, amount, f'USDT ({network_label})', to_address, network, 'processing')
     )
+    wdr_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
     add_transaction(db, uid, 'withdrawal', amount,
-                    f'Withdrawal via USDT {network_label}', status='pending')
-    add_notification(
-        db, uid,
-        f'🏦 Withdrawal of {CURRENCY_SYMBOL}{amount:.2f} USDT via {network_label} submitted.'
-    )
+                    f'Withdrawal via USDT {network_label}', status='processing')
+    add_notification(db, uid,
+        f'⏳ Sending {CURRENCY_SYMBOL}{amount:.2f} USDT via {network_label} to your wallet…')
     db.commit()
-    updated = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
-    return jsonify({'success': True, 'balance': updated['balance']})
+
+    # ── Broadcast on-chain ────────────────────────────────────────────────
+    # Run in the same request — typical EVM broadcast is <2 s
+    result = _chain_send_usdt(
+        network=network,
+        private_key=private_key,
+        to_address=to_address,
+        amount_usd=amount,
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    if result['ok']:
+        tx_hash = result['tx_hash']
+        db.execute(
+            'UPDATE withdrawals SET status=?, tx_hash=?, processed_at=? WHERE id=?',
+            ('approved', tx_hash, now, wdr_id)
+        )
+        # Update matching transaction record to completed
+        db.execute(
+            "UPDATE transactions SET status='completed' "
+            "WHERE user_id=? AND type='withdrawal' AND status='processing' "
+            "ORDER BY id DESC LIMIT 1",
+            (uid,)
+        )
+        add_notification(db, uid,
+            f'✅ {CURRENCY_SYMBOL}{amount:.2f} USDT sent on {network_label}! '
+            f'TX: {tx_hash[:24]}...')
+        db.commit()
+
+        updated_balance = db.execute(
+            'SELECT balance FROM users WHERE id=?', (uid,)
+        ).fetchone()['balance']
+        return jsonify({
+            'success': True,
+            'message': f'{CURRENCY_SYMBOL}{amount:.2f} USDT sent successfully!',
+            'tx_hash': tx_hash,
+            'balance': updated_balance,
+        })
+    else:
+        # Broadcast failed — refund balance
+        db.execute(
+            'UPDATE withdrawals SET status=?, failure_reason=?, processed_at=? WHERE id=?',
+            ('failed', result['error'], now, wdr_id)
+        )
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount, uid))
+        db.execute(
+            "UPDATE transactions SET status='failed' "
+            "WHERE user_id=? AND type='withdrawal' AND status='processing' "
+            "ORDER BY id DESC LIMIT 1",
+            (uid,)
+        )
+        add_notification(db, uid,
+            f'❌ Withdrawal of {CURRENCY_SYMBOL}{amount:.2f} USDT failed: {result["error"][:80]}. '
+            f'Your balance has been refunded.')
+        db.commit()
+
+        return jsonify({
+            'success': False,
+            'error': f'On-chain transfer failed: {result["error"]}',
+        }), 502
 
 
 # ── Notifications ────────────────────────────────────────────────────────────
@@ -1004,11 +1139,11 @@ def admin():
         'SELECT a.*, u.username as owner_name FROM ads a '
         'JOIN users u ON a.user_id=u.id ORDER BY a.created_at DESC'
     ).fetchall()
-    # Pending crypto deposits
+    # Recent crypto deposits (auto-verified — shown for audit purposes)
     pending_deposits = db.execute(
         'SELECT cd.*, u.username FROM crypto_deposits cd '
         'JOIN users u ON cd.user_id=u.id '
-        'WHERE cd.status="pending" ORDER BY cd.created_at DESC'
+        'ORDER BY cd.created_at DESC LIMIT 50'
     ).fetchall()
     total_users = db.execute('SELECT COUNT(*) FROM users').fetchone()[0]
     total_ads = db.execute('SELECT COUNT(*) FROM ads').fetchone()[0]
@@ -1023,54 +1158,6 @@ def admin():
     )
 
 
-@app.route('/admin/confirm_deposit/<int:dep_id>', methods=['POST'])
-@admin_required
-def confirm_deposit(dep_id):
-    """Admin confirms a pending crypto deposit and credits the user."""
-    db = get_db()
-    dep = db.execute('SELECT * FROM crypto_deposits WHERE id=?', (dep_id,)).fetchone()
-    if not dep:
-        return jsonify({'success': False, 'error': 'Deposit not found.'}), 404
-    if dep['status'] != 'pending':
-        return jsonify({'success': False, 'error': 'Already processed.'})
-
-    now = datetime.now(timezone.utc).isoformat()
-    network_label = CRYPTO_NETWORKS.get(dep['network'], {}).get('label', dep['network'])
-
-    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (dep['amount'], dep['user_id']))
-    db.execute(
-        'UPDATE crypto_deposits SET status=?, confirmed_at=? WHERE id=?',
-        ('confirmed', now, dep_id)
-    )
-    add_transaction(db, dep['user_id'], 'deposit', dep['amount'],
-                    f'USDT deposit via {network_label} — TX: {dep["tx_hash"][:20]}')
-    add_notification(db, dep['user_id'],
-        f'✅ Your deposit of ${dep["amount"]:.2f} USDT via {network_label} has been confirmed!')
-    db.commit()
-    return jsonify({'success': True})
-
-
-@app.route('/admin/reject_deposit/<int:dep_id>', methods=['POST'])
-@admin_required
-def reject_deposit(dep_id):
-    """Admin rejects a crypto deposit (e.g. invalid TX)."""
-    db = get_db()
-    dep = db.execute('SELECT * FROM crypto_deposits WHERE id=?', (dep_id,)).fetchone()
-    if not dep:
-        return jsonify({'success': False, 'error': 'Deposit not found.'}), 404
-    if dep['status'] != 'pending':
-        return jsonify({'success': False, 'error': 'Already processed.'})
-
-    now = datetime.now(timezone.utc).isoformat()
-    db.execute(
-        'UPDATE crypto_deposits SET status=?, confirmed_at=? WHERE id=?',
-        ('rejected', now, dep_id)
-    )
-    add_notification(db, dep['user_id'],
-        f'❌ Your deposit of ${dep["amount"]:.2f} USDT was rejected. '
-        f'Please contact support with your TX hash.')
-    db.commit()
-    return jsonify({'success': True})
 
 
 @app.route('/admin/withdrawal/<int:wdr_id>/<action>', methods=['POST'])

@@ -26,31 +26,42 @@
 </div>
 
 <div class="split-2">
-  <!-- Pending Crypto Deposits -->
+  <!-- Deposit History (auto-verified on-chain) -->
   <div class="card">
-    <div class="section-title mb-16">💰 Pending Crypto Deposits</div>
+    <div class="section-title mb-16">💰 Recent Deposit Activity</div>
     {% if pending_deposits %}
-    <div class="flex flex-col gap-12">
-    {% for dep in pending_deposits %}
-    <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px" id="dep-row-{{ dep.id }}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-        <div>
-          <div class="fw-700">{{ dep.username }} — ${{ '%.2f'|format(dep.amount) }} USDT</div>
-          <div class="text-xs text-muted mt-4">Network: {{ dep.network }} &bull; TX: {{ dep.tx_hash[:30] }}… &bull; {{ dep.created_at[:16] }}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0">
-          <button class="btn btn-sm" style="background:var(--green);color:#fff"
-            onclick="adminDepAction({{ dep.id }},'confirm')">Confirm</button>
-          <button class="btn btn-outline btn-sm"
-            onclick="adminDepAction({{ dep.id }},'reject')">Reject</button>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Amount (USDT)</th>
+            <th>Network</th>
+            <th>TX Hash</th>
+            <th>Status</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for dep in pending_deposits %}
+        <tr>
+          <td class="fw-600">{{ dep.username }}</td>
+          <td class="fw-700" style="color:var(--green)">${{ '%.2f'|format(dep.amount) }}</td>
+          <td>{{ dep.network }}</td>
+          <td style="font-size:11px;font-family:monospace;max-width:160px;overflow-wrap:anywhere">{{ dep.tx_hash[:28] }}…</td>
+          <td><span class="badge badge-{{ dep.status }}">{{ dep.status }}</span></td>
+          <td class="text-muted text-xs">{{ dep.created_at[:16] }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
     {% else %}
-    <div class="text-muted text-sm">No pending crypto deposits.</div>
+    <div class="text-muted text-sm">No deposit records yet.</div>
     {% endif %}
+    <div class="info-box mt-16" style="font-size:12px">
+      ℹ️ Deposits are automatically verified on-chain when users submit a TX hash. No manual action needed.
+    </div>
   </div>
 
   <!-- Actionable Withdrawals (pending + failed) -->
@@ -328,25 +339,5 @@ document.getElementById('admin-deposit-form').addEventListener('submit', async e
   }
 });
 
-async function adminDepAction(depId, action) {
-  const row = document.getElementById(`dep-row-${depId}`);
-  const btns = row ? row.querySelectorAll('button') : [];
-  btns.forEach(b => { b.disabled = true; });
-  try {
-    const r = await fetch(`/admin/${action}_deposit/${depId}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.success) {
-      showToast(action === 'confirm' ? 'Deposit confirmed & credited!' : 'Deposit rejected.');
-      if (row) row.remove();
-    } else {
-      showToast(d.error || 'Action failed.', 'error');
-      btns.forEach(b => { b.disabled = false; });
-    }
-  } catch (_err) {
-    showToast('Network error.', 'error');
-    btns.forEach(b => { b.disabled = false; });
-  }
-}
-window.adminDepAction = adminDepAction;
 </script>
 {% endblock %}

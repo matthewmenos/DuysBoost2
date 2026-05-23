@@ -720,3 +720,4 @@ def get_evm_address_from_key(private_key_hex: str) -> str | None:
         return '0x' + keccak256(pub)[-20:].hex()
     except ImportError:
         return None
+    
