@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "post_card.html" import render_post %}
+{% block title %}#{{ tag }} — DUYS Boost{% endblock %}
+{% block page_title %}#{{ tag }}{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+  <div class="feed-col">
+    <div class="card mb-0" style="border-radius:var(--radius-lg) var(--radius-lg) 0 0;border-bottom:none;padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:48px;height:48px;border-radius:14px;background:var(--gradient-primary);display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;font-family:var(--font-display)">#</div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.02em">#{{ tag }}</div>
+          <div class="text-muted text-sm">{{ posts|length }} post{{ 's' if posts|length != 1 else '' }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if posts %}
+      {% for post in posts %}{{ render_post(post) }}{% endfor %}
+    {% else %}
+      <div class="empty-state" style="background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg)">
+        <div class="empty-icon">🏷</div>
+        <div class="empty-title">No posts for #{{ tag }} yet</div>
+        <div class="empty-text">Be the first to use this hashtag.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <aside class="feed-sidebar">
+    {% if trending_tags %}
+    <div class="sidebar-widget">
+      <div class="widget-title">Trending hashtags</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        {% for t in trending_tags %}
+        <a href="{{ url_for('hashtag_feed', tag=t.name) }}"
+           class="trending-tag-pill {% if t.name == tag %}active{% endif %}">
+          #{{ t.name }}
+          <span class="trending-tag-cnt">{{ t.cnt }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleLike(postId, btn) {
+  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.liked ? '❤️' : '🤍';
+  btn.classList.toggle('liked', d.liked);
+  const cnt = document.getElementById('like-count-' + postId);
+  if (cnt) cnt.textContent = d.like_count || '';
+}
+window.toggleLike = toggleLike;
+async function toggleBookmark(postId, btn) {
+  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.saved ? '🔖' : '🏷';
+  showToast(d.saved ? 'Bookmarked!' : 'Removed');
+}
+window.toggleBookmark = toggleBookmark;
+function openReplyModal(p,u){ window.location.href='/post/'+p; }
+window.openReplyModal = openReplyModal;
+function openRepostModal(){}
+window.openRepostModal = openRepostModal;
+function togglePostMenu(postId, e) {
+  e.stopPropagation();
+  const m = document.getElementById('post-menu-' + postId);
+  if (!m) return;
+  document.querySelectorAll('.post-menu-dropdown').forEach(x => x.style.display='none');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+window.togglePostMenu = togglePostMenu;
+document.addEventListener('click', () => {
+  document.querySelectorAll('.post-menu-dropdown').forEach(m => m.style.display='none');
+});
+async function earnEngagement(postId, type, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/post/${postId}/earn`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    const banner = document.getElementById('boost-banner-' + postId);
+    if (banner) { banner.innerHTML = `<span style="color:var(--green);font-weight:700">✅ +$${d.reward.toFixed(2)} earned!</span>`; setTimeout(()=>banner.style.display='none',2500); }
+    showToast(`+$${d.reward.toFixed(2)} earned!`);
+  } else { showToast(d.error, 'error'); btn.disabled=false; }
+}
+window.earnEngagement = earnEngagement;
+function openBoostModal(postId) {
+  document.getElementById('boost-post-id').value = postId;
+  openModal('boost-modal');
+}
+window.openBoostModal = openBoostModal;
+function copyPostLink(id){ navigator.clipboard.writeText(location.origin+'/post/'+id); showToast('Copied!'); }
+window.copyPostLink = copyPostLink;
+async function deletePost(postId) {
+  if(!confirm('Delete?')) return;
+  const r = await fetch(`/post/${postId}/delete`,{method:'POST'});
+  const d = await r.json();
+  if(d.success){ const c=document.querySelector(`[data-post-id="${postId}"]`); if(c){c.style.opacity='0';setTimeout(()=>c.remove(),300);} }
+  else showToast(d.error,'error');
+}
+window.deletePost = deletePost;
+</script>
+{% endblock %}

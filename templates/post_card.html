@@ -1,0 +1,155 @@
+{# ── Reusable post card macro ─────────────────────────────────────────────── #}
+{% macro render_post(post, show_thread=False, compact=False) %}
+{% set p = post %}
+{% set a = p.author %}
+<article class="post-card{% if compact %} post-compact{% endif %}{% if p.active_boost %} post-boosted{% endif %}"
+         data-post-id="{{ p.id }}">
+
+  {# Repost label #}
+  {% if p.repost_of_id and not p.body %}
+  <div class="post-repost-label">
+    <span class="icon-sm">🔁</span>
+    <a href="{{ url_for('profile', username=a.username) }}" class="text-muted hover-accent">
+      {{ a.display_name or a.username }} reposted
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="post-inner">
+    {# Avatar #}
+    <div class="post-avatar-col">
+      <a href="{{ url_for('profile', username=a.username) }}">
+        <div class="avatar avatar-md">
+          {% if a.avatar_url %}<img src="{{ a.avatar_url }}" alt="{{ a.username }}" loading="lazy">
+          {% else %}{{ (a.display_name or a.username or '?')[0].upper() }}{% endif %}
+        </div>
+      </a>
+      {% if show_thread %}<div class="thread-line"></div>{% endif %}
+    </div>
+
+    {# Content #}
+    <div class="post-content-col">
+      {# Header #}
+      <div class="post-header">
+        <div class="post-author-info">
+          <a href="{{ url_for('profile', username=a.username) }}" class="post-display-name">
+            {{ a.display_name or a.username }}
+            {% if a.is_verified %}<span class="verified-badge" title="Verified">✓</span>{% endif %}
+          </a>
+          <a href="{{ url_for('profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
+          <span class="post-dot" aria-hidden="true">·</span>
+          <time class="post-time" datetime="{{ p.created_at }}" title="{{ p.created_at }}">
+            {{ p.created_at[:10] }}
+          </time>
+        </div>
+        <div class="post-menu-wrap" style="margin-left:auto;position:relative">
+          <button class="btn-ghost-icon post-menu-btn" aria-label="More options"
+                  onclick="togglePostMenu({{ p.id }}, event)">⋯</button>
+          <div class="post-menu-dropdown" id="post-menu-{{ p.id }}" style="display:none">
+            {% if current_user and (current_user.id == p.user_id or current_user.is_admin) %}
+            <button class="post-menu-item danger" onclick="deletePost({{ p.id }})">🗑 Delete post</button>
+            {% endif %}
+            {% if current_user and current_user.id == p.user_id %}
+            <button class="post-menu-item" onclick="openBoostModal({{ p.id }})">📣 Boost this post</button>
+            {% endif %}
+            <a class="post-menu-item" href="{{ url_for('post_detail', post_id=p.id) }}">🔗 View post</a>
+            <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
+          </div>
+        </div>
+      </div>
+
+      {# Reply context #}
+      {% if p.reply_to_username %}
+      <div class="post-reply-context">
+        Replying to <a href="{{ url_for('profile', username=p.reply_to_username) }}"
+                       class="text-accent">@{{ p.reply_to_username }}</a>
+      </div>
+      {% endif %}
+
+      {# Body with hashtag links #}
+      {# Subscriber-only badge #}
+      {% if p.is_subscriber_only %}
+      <div class="post-sponsored-badge sub-only-badge">🔒 Subscribers only</div>
+      {% endif %}
+      {% if p.body and not p.locked %}
+      <div class="post-body">{{ p.body | linkify_tags | safe }}</div>
+      {% elif p.locked %}
+      <div class="post-body-locked">🔒 Subscriber-only content.</div>
+      {% endif %}
+
+      {# Quoted repost #}
+      {% if p.repost_of %}
+      <a href="{{ url_for('post_detail', post_id=p.repost_of.id) }}" class="post-quote">
+        <div class="post-quote-header">
+          <div class="avatar avatar-xs">
+            {% if p.repost_of.author.avatar_url %}<img src="{{ p.repost_of.author.avatar_url }}" alt="">
+            {% else %}{{ (p.repost_of.author.display_name or p.repost_of.author.username or '?')[0].upper() }}{% endif %}
+          </div>
+          <span class="fw-700">{{ p.repost_of.author.display_name or p.repost_of.author.username }}</span>
+          <span class="text-muted text-xs">@{{ p.repost_of.author.username }}</span>
+        </div>
+        <div class="post-quote-body">{{ p.repost_of.body[:120] }}{% if p.repost_of.body|length > 120 %}…{% endif %}</div>
+      </a>
+      {% endif %}
+
+      {# ── Boost earn banner ────────────────────────────────────────── #}
+      {% if p.active_boost %}
+      <div class="boost-earn-banner" id="boost-banner-{{ p.id }}">
+        <div class="boost-earn-info">
+          <span class="boost-earn-badge">📣 Boosted</span>
+          <span class="boost-earn-action">
+            {{ p.active_boost.engage_type | capitalize }} this post
+          </span>
+          <span class="boost-earn-reward">${{ '%.2f'|format(p.active_boost.reward_per_engage) }}</span>
+        </div>
+        <button class="btn btn-green btn-sm boost-earn-btn"
+                id="earn-btn-{{ p.id }}"
+                onclick="earnEngagement({{ p.id }}, '{{ p.active_boost.engage_type }}', this)">
+          Earn
+        </button>
+      </div>
+      {% endif %}
+
+      {# Actions bar #}
+      <div class="post-actions">
+        <button class="post-action-btn reply-btn"
+                onclick="openReplyModal({{ p.id }}, '{{ a.username | e }}')" aria-label="Reply">
+          <span class="action-icon">💬</span>
+          <span class="action-count" id="reply-count-{{ p.id }}">{{ p.reply_count or '' }}</span>
+        </button>
+        <button class="post-action-btn repost-btn"
+                onclick="openRepostModal({{ p.id }})" aria-label="Repost">
+          <span class="action-icon">🔁</span>
+          <span class="action-count" id="repost-count-{{ p.id }}">{{ p.repost_count or '' }}</span>
+        </button>
+        <button class="post-action-btn like-btn {% if p.liked %}liked{% endif %}"
+                onclick="toggleLike({{ p.id }}, this)" aria-label="Like"
+                aria-pressed="{{ 'true' if p.liked else 'false' }}">
+          <span class="action-icon">{{ '❤️' if p.liked else '🤍' }}</span>
+          <span class="action-count" id="like-count-{{ p.id }}">{{ p.like_count or '' }}</span>
+        </button>
+        <button class="post-action-btn bookmark-btn {% if p.bookmarked %}bookmarked{% endif %}"
+                onclick="toggleBookmark({{ p.id }}, this)" aria-label="Bookmark"
+                aria-pressed="{{ 'true' if p.bookmarked else 'false' }}">
+          <span class="action-icon">{{ '🔖' if p.bookmarked else '🏷' }}</span>
+        </button>
+        {% if current_user and current_user.id == p.user_id %}
+        <button class="post-action-btn" onclick="openBoostModal({{ p.id }})" aria-label="Boost">
+          <span class="action-icon">📣</span>
+        </button>
+        {% endif %}
+      </div>
+    </div>{# /.post-content-col #}
+  </div>{# /.post-inner #}
+  {% if p.locked %}
+  <div class="post-locked-overlay">
+    <div class="post-locked-inner">
+      <div class="post-locked-icon">🔒</div>
+      <div class="post-locked-title">Subscribers only</div>
+      <div class="post-locked-sub">Subscribe to @{{ a.username }} to unlock.</div>
+      <a href="{{ url_for('profile', username=a.username) }}" class="btn btn-primary btn-sm">View subscription →</a>
+    </div>
+  </div>
+  {% endif %}
+</article>
+{% endmacro %}

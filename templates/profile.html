@@ -1,0 +1,365 @@
+{% extends "base.html" %}
+{% from "post_card.html" import render_post %}
+{% block title %}{{ target.display_name or target.username }} (@{{ target.username }}) — DUYS Boost{% endblock %}
+{% block page_title %}Profile{% endblock %}
+
+{% block head_extra %}
+<style>
+.profile-banner {
+  height: 160px; background: var(--gradient-primary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden; position: relative;
+}
+@media (min-width: 640px) { .profile-banner { height: 200px; } }
+.profile-banner img { width:100%; height:100%; object-fit:cover; }
+.profile-header-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 0 20px 20px;
+  margin-bottom: 16px;
+}
+.profile-avatar-row {
+  display: flex; align-items: flex-end;
+  justify-content: space-between;
+  margin-top: -40px; margin-bottom: 14px;
+  gap: 10px;
+}
+.profile-avatar-wrap .avatar { width:80px; height:80px; font-size:32px; border:4px solid var(--surface); }
+.profile-name { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.profile-handle { color: var(--muted); font-size: 14px; margin-top: 1px; }
+.profile-bio { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; margin: 10px 0; }
+.profile-meta { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.profile-meta span { display: flex; align-items: center; gap: 5px; }
+.profile-stats { display: flex; gap: 20px; font-size: 14px; }
+.profile-stat-val { font-weight: 800; font-family: var(--font-display); }
+.profile-stat-label { color: var(--muted); }
+.profile-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+.profile-tab {
+  padding: 12px 20px; font-size: 14px; font-weight: 600;
+  color: var(--muted); border-bottom: 2px solid transparent;
+  margin-bottom: -1px; transition: color var(--transition), border-color var(--transition);
+}
+.profile-tab:hover { color: var(--text); }
+.profile-tab.active { color: var(--text); border-color: var(--accent); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+  <div class="feed-col">
+    <!-- Banner + header -->
+    <div class="profile-banner">
+      {% if target.banner_url %}<img src="{{ target.banner_url }}" alt="">{% endif %}
+    </div>
+    <div class="profile-header-card">
+      <div class="profile-avatar-row">
+        <div class="profile-avatar-wrap">
+          <div class="avatar avatar-xl">
+            {% if target.avatar_url %}<img src="{{ target.avatar_url }}" alt="{{ target.username }}">
+            {% else %}{{ (target.display_name or target.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          {% if is_own %}
+            <a href="{{ url_for('edit_profile') }}" class="btn btn-outline btn-sm">Edit profile</a>
+          {% else %}
+            <button class="btn {% if is_following %}btn-ghost{% else %}btn-primary{% endif %} btn-sm"
+                    id="profile-follow-btn"
+                    data-username="{{ target.username }}"
+                    onclick="profileFollow('{{ target.username }}', this)">
+              {{ 'Following' if is_following else 'Follow' }}
+            </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="profile-name">
+        {{ target.display_name or target.username }}
+        {% if target.is_verified %}<span class="verified-badge" title="Verified">✓</span>{% endif %}
+      </div>
+      <div class="profile-handle">@{{ target.username }}</div>
+
+      {% if target.bio %}
+        <div class="profile-bio">{{ target.bio }}</div>
+      {% endif %}
+
+      <div class="profile-meta">
+        {% if target.location %}<span>📍 {{ target.location }}</span>{% endif %}
+        {% if target.website %}
+          <span>🔗 <a href="{{ target.website }}" target="_blank" rel="noopener" class="text-accent">
+            {{ target.website | replace('https://','') | replace('http://','') | truncate(30, True, '…') }}
+          </a></span>
+        {% endif %}
+        <span>📅 Joined {{ target.created_at[:7] }}</span>
+      </div>
+
+      <div class="profile-stats">
+        <a href="{{ url_for('following_list', username=target.username) }}" class="profile-stat">
+          <span class="profile-stat-val">{{ target.following_count or 0 }}</span>
+          <span class="profile-stat-label">Following</span>
+        </a>
+        <a href="{{ url_for('follower_list', username=target.username) }}" class="profile-stat">
+          <span class="profile-stat-val">{{ target.follower_count or 0 }}</span>
+          <span class="profile-stat-label">Followers</span>
+        </a>
+        <div class="profile-stat">
+          <span class="profile-stat-val">{{ target.post_count or 0 }}</span>
+          <span class="profile-stat-label">Posts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="profile-tabs">
+      <a href="{{ url_for('profile', username=target.username, tab='posts') }}"
+         class="profile-tab {% if tab=='posts' %}active{% endif %}">Posts</a>
+      <a href="{{ url_for('profile', username=target.username, tab='replies') }}"
+         class="profile-tab {% if tab=='replies' %}active{% endif %}">Replies</a>
+      <a href="{{ url_for('profile', username=target.username, tab='likes') }}"
+         class="profile-tab {% if tab=='likes' %}active{% endif %}">Likes</a>
+      {% if tier %}
+      <a href="{{ url_for('profile', username=target.username, tab='exclusive') }}"
+         class="profile-tab {% if tab=='exclusive' %}active{% endif %}">🔒 Exclusive</a>
+      {% endif %}
+    </div>
+
+    <!-- Posts -->
+    {% if posts %}
+      {% for post in posts %}
+        {{ render_post(post) }}
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:48px 20px">
+        <div class="empty-icon">📭</div>
+        <div class="empty-title">Nothing here yet</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Right sidebar -->
+  <aside class="feed-sidebar">
+
+    <!-- Creator subscription widget -->
+    {% if tier and not is_own %}
+    <div class="sidebar-widget creator-tier-widget">
+      <div class="widget-title">⭐ {{ tier.title }}</div>
+      <div class="tier-price-line">
+        <span class="tier-big-price">${{ '%.2f'|format(tier.price_usd) }}</span>
+        <span class="text-muted text-sm">/month</span>
+      </div>
+      {% if tier.description %}
+      <p class="text-sm text-muted" style="margin:8px 0">{{ tier.description }}</p>
+      {% endif %}
+      {% if tier.perks %}
+      <ul class="tier-perks-list">
+        {% for perk in tier.perks.split('
+') if perk.strip() %}
+        <li>✓ {{ perk.strip() }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div style="margin-top:14px">
+        {% if is_subscribed %}
+        <div class="badge badge-active mb-8" style="width:100%;justify-content:center;padding:8px">✓ Subscribed</div>
+        <button class="btn btn-ghost btn-sm btn-block"
+                onclick="doUnsubscribe('{{ target.username }}', this)">Cancel subscription</button>
+        {% else %}
+        <button class="btn btn-primary btn-block"
+                onclick="doSubscribe('{{ target.username }}', {{ tier.price_usd }}, this)">
+          Subscribe for ${{ '%.2f'|format(tier.price_usd) }}/mo
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Creator setup CTA for own profile -->
+    {% if is_own %}
+    <div class="sidebar-widget">
+      <div class="widget-title">💎 Creator Tools</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <a href="{{ url_for('creator_setup') }}" class="btn btn-outline btn-sm btn-block">
+          {{ '✏️ Edit tier' if tier else '+ Create subscription tier' }}
+        </a>
+        <a href="{{ url_for('creator_earnings') }}" class="btn btn-ghost btn-sm btn-block">📊 Earnings dashboard</a>
+        <a href="{{ url_for('subscriber_list', username=target.username) }}" class="btn btn-ghost btn-sm btn-block">
+          👥 Subscribers ({{ target.subscriber_count or 0 }})
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Tip button (not own profile) -->
+    {% if not is_own %}
+    <div class="sidebar-widget">
+      <div class="widget-title">💰 Send a Tip</div>
+      <p class="text-sm text-muted" style="margin:6px 0 12px">Support @{{ target.username }} directly from your wallet.</p>
+      <button class="btn btn-green btn-sm btn-block"
+              onclick="openTipModal('{{ target.username }}')">Send tip 💸</button>
+    </div>
+    {% endif %}
+
+    <!-- Top tippers -->
+    {% if top_tips %}
+    <div class="sidebar-widget">
+      <div class="widget-title">🏆 Top tippers</div>
+      {% for t in top_tips %}
+      <div class="suggest-row" style="padding:6px 0">
+        <div class="avatar avatar-xs">
+          {% if t.avatar_url %}<img src="{{ t.avatar_url }}" alt="">
+          {% else %}{{ (t.username or '?')[0].upper() }}{% endif %}
+        </div>
+        <a href="{{ url_for('profile', username=t.username) }}" class="suggest-info" style="flex:1">
+          <span class="fw-600">@{{ t.username }}</span>
+        </a>
+        <span class="text-green fw-700 text-sm">${{ '%.2f'|format(t.amount) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not is_own and followers %}
+    <div class="sidebar-widget">
+      <div class="widget-title">Followers you may know</div>
+      {% for f in followers[:3] %}
+      <div class="suggest-row">
+        <a href="{{ url_for('profile', username=f.username) }}" class="suggest-avatar">
+          <div class="avatar avatar-sm">
+            {% if f.avatar_url %}<img src="{{ f.avatar_url }}" alt="">
+            {% else %}{{ (f.display_name or f.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </a>
+        <div class="suggest-info">
+          <a href="{{ url_for('profile', username=f.username) }}" class="fw-700 suggest-name">
+            {{ f.display_name or f.username }}
+          </a>
+          <div class="text-xs text-muted">@{{ f.username }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function profileFollow(username, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.className = `btn ${d.following ? 'btn-ghost' : 'btn-primary'} btn-sm`;
+  }
+  btn.disabled = false;
+}
+window.profileFollow = profileFollow;
+
+/* Subscribe / unsubscribe */
+async function doSubscribe(username, price, btn) {
+  if (!confirm(`Subscribe to @${username} for $${price.toFixed(2)}/month? This will charge your wallet.`)) return;
+  btn.disabled = true; btn.textContent = 'Subscribing…';
+  const r = await fetch(`/user/${username}/subscribe`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) { showToast(d.message); setTimeout(() => location.reload(), 900); }
+  else { showToast(d.error || 'Could not subscribe.', 'error'); btn.disabled=false; btn.textContent=`Subscribe for $${price.toFixed(2)}/mo`; }
+}
+window.doSubscribe = doSubscribe;
+
+async function doUnsubscribe(username, btn) {
+  if (!confirm(`Cancel subscription to @${username}? No refund — access remains until expiry.`)) return;
+  btn.disabled = true; btn.textContent = 'Cancelling…';
+  const r = await fetch(`/user/${username}/unsubscribe`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) { showToast(d.message); setTimeout(() => location.reload(), 900); }
+  else { showToast(d.error || 'Could not cancel.', 'error'); btn.disabled=false; btn.textContent='Cancel subscription'; }
+}
+window.doUnsubscribe = doUnsubscribe;
+
+/* Tip modal */
+function openTipModal(username) {
+  document.getElementById('tip-username').value = username;
+  document.getElementById('tip-target-name').textContent = '@' + username;
+  document.getElementById('tip-amount').value = '';
+  document.getElementById('tip-message').value = '';
+  document.getElementById('tip-error').style.display = 'none';
+  openModal('tip-modal');
+  setTimeout(() => document.getElementById('tip-amount').focus(), 180);
+}
+window.openTipModal = openTipModal;
+
+const tipForm = document.getElementById('tip-user-form');
+if (tipForm) {
+  tipForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = document.getElementById('tip-username').value;
+    const btn = e.target.querySelector('[type=submit]');
+    const err = document.getElementById('tip-error');
+    err.style.display = 'none';
+    const orig = btn.textContent; btn.textContent = 'Sending…'; btn.disabled = true;
+    try {
+      const r = await fetch(`/user/${username}/tip`, { method: 'POST', body: new FormData(e.target) });
+      const d = await r.json();
+      if (d.success) {
+        closeModal('tip-modal');
+        showToast(d.message);
+        const balEl = document.querySelector('.user-balance');
+        if (balEl) balEl.textContent = '$' + d.balance.toFixed(2);
+      } else {
+        err.style.display = 'block'; err.textContent = d.error || 'Could not send tip.';
+      }
+    } catch(_) {
+      err.style.display = 'block'; err.textContent = 'Network error.';
+    } finally { btn.textContent = orig; btn.disabled = false; }
+  });
+}
+</script>
+{% endblock %}
+
+{% block modals %}
+{{ super() }}
+<!-- Tip modal -->
+<div class="modal-overlay" id="tip-modal" role="dialog" aria-modal="true" aria-label="Send tip">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">💰 Send a Tip</div>
+      <button class="modal-close" onclick="closeModal('tip-modal')">✕</button>
+    </div>
+    <p class="text-sm text-muted mb-16">
+      Tip <strong id="tip-target-name"></strong> directly from your wallet balance.
+      <br>Your balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance) }}</strong>
+    </p>
+    <form id="tip-user-form" novalidate>
+      <input type="hidden" id="tip-username" name="username" value="">
+      <div class="form-group">
+        <label class="form-label" for="tip-amount">Amount (USD)</label>
+        <div style="position:relative">
+          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700">$</span>
+          <input class="form-input" id="tip-amount" name="amount" type="number"
+                 step="0.01" min="0.01" placeholder="1.00" required inputmode="decimal"
+                 style="padding-left:28px">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          {% for amt in [1, 2, 5, 10] %}
+          <button type="button" class="btn btn-ghost btn-sm"
+                  onclick="document.getElementById('tip-amount').value='{{ amt }}.00'">
+            ${{ amt }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="tip-message">Message <span class="optional">(optional)</span></label>
+        <input class="form-input" id="tip-message" name="message" type="text"
+               maxlength="120" placeholder="Great content! Keep it up 🔥">
+      </div>
+      <div id="tip-error" class="error-list" style="display:none"></div>
+      <button type="submit" class="btn btn-green btn-block btn-lg">Send tip 💸</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

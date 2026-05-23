@@ -28,20 +28,46 @@
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section">Overview</div>
-      <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🏠</span> Dashboard
+      <div class="nav-section">Social</div>
+      <a href="{{ url_for('feed') }}" class="nav-item {% if request.endpoint=='feed' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🏠</span> Home
+      </a>
+      <a href="{{ url_for('explore') }}" class="nav-item {% if request.endpoint=='explore' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🔍</span> Explore
+      </a>
+      <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🔔</span> Notifications
+        <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
+      </a>
+      <a href="{{ url_for('bookmarks') }}" class="nav-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🔖</span> Bookmarks
+      </a>
+      {% if current_user %}
+      <a href="{{ url_for('profile', username=current_user.username) }}" class="nav-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
+        <span class="icon" aria-hidden="true">👤</span> Profile
+      </a>
+      {% endif %}
+
+      <div class="nav-section">Boost</div>
+      <a href="{{ url_for('feed', tab='earn') }}" class="nav-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">⚡</span> Earn
+      </a>
+      <a href="{{ url_for('my_boosts') }}" class="nav-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">📣</span> My Boosts
       </a>
       <a href="{{ url_for('tasks') }}" class="nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
         <span class="icon" aria-hidden="true">✅</span> Earn Tasks
       </a>
-
-      <div class="nav-section">Campaigns</div>
-      <a href="{{ url_for('ads') }}" class="nav-item {% if request.endpoint=='ads' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📣</span> My Campaigns
-      </a>
       <a href="{{ url_for('analytics') }}" class="nav-item {% if request.endpoint=='analytics' %}active{% endif %}">
         <span class="icon" aria-hidden="true">📊</span> Analytics
+      </a>
+
+      <div class="nav-section">Creator</div>
+      <a href="{{ url_for('creator_earnings') }}" class="nav-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">💎</span> Earnings
+      </a>
+      <a href="{{ url_for('creator_setup') }}" class="nav-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">⭐</span> My Tier
       </a>
 
       <div class="nav-section">Money</div>
@@ -50,10 +76,6 @@
       </a>
       <a href="{{ url_for('referral') }}" class="nav-item {% if request.endpoint=='referral' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🎁</span> Referrals
-      </a>
-      <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔔</span> Notifications
-        <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
       </a>
 
       {% if current_user.is_admin %}
@@ -118,17 +140,17 @@
 
     {% if current_user %}
     <nav class="bottom-nav" aria-label="Bottom navigation">
-      <a href="{{ url_for('dashboard') }}"
-         class="bottom-nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+      <a href="{{ url_for('feed') }}"
+         class="bottom-nav-item {% if request.endpoint=='feed' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🏠</span><span>Home</span>
+      </a>
+      <a href="{{ url_for('explore') }}"
+         class="bottom-nav-item {% if request.endpoint=='explore' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🔍</span><span>Search</span>
       </a>
       <a href="{{ url_for('tasks') }}"
          class="bottom-nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
         <span class="icon" aria-hidden="true">✅</span><span>Earn</span>
-      </a>
-      <a href="{{ url_for('ads') }}"
-         class="bottom-nav-item {% if request.endpoint=='ads' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📣</span><span>Ads</span>
       </a>
       <a href="{{ url_for('wallet') }}"
          class="bottom-nav-item {% if request.endpoint=='wallet' %}active{% endif %}">
@@ -149,6 +171,89 @@
 <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
 {% block modals %}{% endblock %}
 
+{% if current_user %}
+<!-- Global Boost Post Modal -->
+<div class="modal-overlay" id="boost-modal" role="dialog" aria-modal="true" aria-label="Boost post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">📣 Boost this post</div>
+      <button class="modal-close" onclick="closeModal('boost-modal')" aria-label="Close">✕</button>
+    </div>
+    <p class="text-sm text-muted mb-16">
+      Pay from your wallet to surface this post in feeds. Others earn by engaging with it.
+    </p>
+    <div class="info-box mb-16">
+      💳 Wallet balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance) }}</strong>
+    </div>
+    <form id="boost-form" novalidate>
+      <input type="hidden" id="boost-post-id" name="post_id" value="">
+      <div class="form-group">
+        <label class="form-label">Engagement type</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="boost-engage-btns">
+          <button type="button" class="network-badge selected" data-type="like"   onclick="selectEngageType('like',this)">❤️ Like</button>
+          <button type="button" class="network-badge"          data-type="follow" onclick="selectEngageType('follow',this)">👤 Follow</button>
+          <button type="button" class="network-badge"          data-type="comment" onclick="selectEngageType('comment',this)">💬 Comment</button>
+          <button type="button" class="network-badge"          data-type="share"  onclick="selectEngageType('share',this)">🔁 Share</button>
+        </div>
+        <input type="hidden" id="boost-engage-type" name="engage_type" value="like">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="boost-target">Target engagements</label>
+        <input class="form-input" id="boost-target" name="target_count" type="number"
+               min="1" max="10000" placeholder="e.g. 100" required inputmode="numeric">
+        <div class="form-hint">
+          Cost: ${{ '%.2f'|format(0.10) }} per engagement
+          · Total: <strong id="boost-cost-preview">$0.00</strong>
+        </div>
+      </div>
+      <div id="boost-error" class="error-list" style="display:none"></div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="boost-submit-btn">
+        Boost now 🚀
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Global Post Tip Modal -->
+<div class="modal-overlay" id="post-tip-modal" role="dialog" aria-modal="true" aria-label="Tip post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">💸 Tip this post</div>
+      <button class="modal-close" onclick="closeModal('post-tip-modal')">✕</button>
+    </div>
+    <p class="text-sm text-muted mb-16">
+      Tip <strong id="post-tip-username-display"></strong> for this post.
+      <br>Balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance) }}</strong>
+    </p>
+    <form id="post-tip-form" novalidate>
+      <input type="hidden" id="post-tip-post-id" name="post_id" value="">
+      <div class="form-group">
+        <label class="form-label" for="post-tip-amount">Amount (USD)</label>
+        <div style="position:relative">
+          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700">$</span>
+          <input class="form-input" id="post-tip-amount" name="amount" type="number"
+                 step="0.01" min="0.01" placeholder="1.00" required inputmode="decimal"
+                 style="padding-left:28px">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('post-tip-amount').value='1.00'">$1</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('post-tip-amount').value='2.00'">$2</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('post-tip-amount').value='5.00'">$5</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('post-tip-amount').value='10.00'">$10</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="post-tip-message">Message <span class="optional">(optional)</span></label>
+        <input class="form-input" id="post-tip-message" name="message" type="text"
+               maxlength="120" placeholder="Great post! 🔥">
+      </div>
+      <div id="post-tip-error" class="error-list" style="display:none"></div>
+      <button type="submit" class="btn btn-green btn-block btn-lg" id="post-tip-submit">Send tip 💸</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% block scripts %}
 <script>
@@ -163,6 +268,108 @@
       lastY = y;
     }, { passive: true });
   }
+})();
+
+// ── Global boost form wiring (works on any page) ──────────────────────────
+(function() {
+  const COST = 0.10;
+  function selectEngageType(type, btn) {
+    document.querySelectorAll('#boost-engage-btns .network-badge').forEach(b => b.classList.remove('selected'));
+    if (btn) btn.classList.add('selected');
+    const inp = document.getElementById('boost-engage-type');
+    if (inp) inp.value = type;
+  }
+  window.selectEngageType = window.selectEngageType || selectEngageType;
+
+  function openBoostModal(postId) {
+    const pidInp = document.getElementById('boost-post-id');
+    if (pidInp) pidInp.value = postId;
+    const preview = document.getElementById('boost-cost-preview');
+    if (preview) preview.textContent = '$0.00';
+    const err = document.getElementById('boost-error');
+    if (err) err.style.display = 'none';
+    const target = document.getElementById('boost-target');
+    if (target) target.value = '';
+    if (typeof openModal === 'function') openModal('boost-modal');
+    setTimeout(() => { const t = document.getElementById('boost-target'); if(t) t.focus(); }, 180);
+  }
+  window.openBoostModal = window.openBoostModal || openBoostModal;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const boostTarget = document.getElementById('boost-target');
+    if (boostTarget) {
+      boostTarget.addEventListener('input', () => {
+        const n = parseInt(boostTarget.value || '0');
+        const p = document.getElementById('boost-cost-preview');
+        if (p) p.textContent = '$' + (n > 0 ? (n * COST).toFixed(2) : '0.00');
+      });
+    }
+    const boostForm = document.getElementById('boost-form');
+    if (boostForm) {
+      boostForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn  = document.getElementById('boost-submit-btn');
+        const err  = document.getElementById('boost-error');
+        const postId = document.getElementById('boost-post-id').value;
+        if (err) err.style.display = 'none';
+        if (btn) { btn.textContent = 'Boosting…'; btn.disabled = true; }
+        try {
+          const r = await fetch('/post/' + postId + '/boost', { method: 'POST', body: new FormData(boostForm) });
+          const d = await r.json();
+          if (d.success) {
+            if (typeof closeModal === 'function') closeModal('boost-modal');
+            if (typeof showToast === 'function') showToast('Post boosted! $' + d.budget.toFixed(2) + ' budget active.');
+            setTimeout(() => location.reload(), 1000);
+          } else {
+            if (err) { err.style.display = 'block'; err.textContent = d.error || 'Could not boost post.'; }
+          }
+        } catch(_) {
+          if (err) { err.style.display = 'block'; err.textContent = 'Network error.'; }
+        } finally {
+          if (btn) { btn.textContent = 'Boost now 🚀'; btn.disabled = false; }
+        }
+      });
+    }
+  });
+
+    // ── Post tip modal ──────────────────────────────────────────────────
+    function openPostTipModal(postId, username) {
+      document.getElementById('post-tip-post-id').value = postId;
+      document.getElementById('post-tip-username-display').textContent = '@' + username;
+      document.getElementById('post-tip-amount').value = '';
+      document.getElementById('post-tip-message').value = '';
+      document.getElementById('post-tip-error').style.display = 'none';
+      if (typeof openModal === 'function') openModal('post-tip-modal');
+      setTimeout(() => { const a = document.getElementById('post-tip-amount'); if(a) a.focus(); }, 180);
+    }
+    window.openPostTipModal = openPostTipModal;
+
+    const postTipForm = document.getElementById('post-tip-form');
+    if (postTipForm) {
+      postTipForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const postId = document.getElementById('post-tip-post-id').value;
+        const btn    = document.getElementById('post-tip-submit');
+        const err    = document.getElementById('post-tip-error');
+        err.style.display = 'none';
+        const orig = btn.textContent; btn.textContent = 'Sending…'; btn.disabled = true;
+        try {
+          const r = await fetch(`/post/${postId}/tip`, { method:'POST', body: new FormData(e.target) });
+          const d = await r.json();
+          if (d.success) {
+            if (typeof closeModal === 'function') closeModal('post-tip-modal');
+            if (typeof showToast === 'function') showToast(d.message);
+            const balEl = document.querySelector('.user-balance');
+            if (balEl) balEl.textContent = '$' + parseFloat(d.balance).toFixed(2);
+          } else {
+            err.style.display = 'block'; err.textContent = d.error || 'Could not send tip.';
+          }
+        } catch(_) {
+          err.style.display = 'block'; err.textContent = 'Network error.';
+        } finally { btn.textContent = orig; btn.disabled = false; }
+      });
+    }
+  });
 })();
 </script>
 {% endblock %}

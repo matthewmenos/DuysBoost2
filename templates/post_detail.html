@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% from "post_card.html" import render_post %}
+{% block title %}Post by @{{ post.author.username }} — DUYS Boost{% endblock %}
+{% block page_title %}Post{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+  <div class="feed-col">
+    <div style="margin-bottom:4px">
+      <a href="javascript:history.back()" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    <!-- Main post (expanded) -->
+    <div class="post-card post-expanded card">
+      <div class="post-inner" style="gap:14px">
+        <div class="post-avatar-col">
+          <a href="{{ url_for('profile', username=post.author.username) }}">
+            <div class="avatar avatar-md">
+              {% if post.author.avatar_url %}<img src="{{ post.author.avatar_url }}" alt="">
+              {% else %}{{ (post.author.display_name or post.author.username or '?')[0].upper() }}{% endif %}
+            </div>
+          </a>
+        </div>
+        <div class="post-content-col" style="flex:1">
+          <div class="post-header">
+            <div>
+              <a href="{{ url_for('profile', username=post.author.username) }}"
+                 class="post-display-name" style="font-size:16px">
+                {{ post.author.display_name or post.author.username }}
+                {% if post.author.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+              </a>
+              <div class="post-username text-muted" style="font-size:14px">@{{ post.author.username }}</div>
+            </div>
+            {% if current_user and (current_user.id == post.user_id or current_user.is_admin) %}
+            <button class="btn btn-danger btn-sm" style="margin-left:auto"
+                    onclick="deletePost({{ post.id }})">Delete</button>
+            {% endif %}
+          </div>
+          <div class="post-body" style="font-size:18px;line-height:1.6;margin:12px 0">
+            {{ post.body | nl2br }}
+          </div>
+          <div class="text-muted text-sm" style="margin-bottom:14px">
+            {{ post.created_at[:16].replace('T',' ') }} UTC
+          </div>
+          <div class="post-stats-row">
+            <span><strong>{{ post.like_count or 0 }}</strong> <span class="text-muted">Likes</span></span>
+            <span><strong>{{ post.reply_count or 0 }}</strong> <span class="text-muted">Replies</span></span>
+            <span><strong>{{ post.repost_count or 0 }}</strong> <span class="text-muted">Reposts</span></span>
+          </div>
+          <div class="post-actions" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+            <button class="post-action-btn reply-btn"
+                    onclick="openReplyModal({{ post.id }}, '{{ post.author.username | e }}')"
+                    aria-label="Reply">
+              <span class="action-icon">💬</span>
+              <span>Reply</span>
+            </button>
+            <button class="post-action-btn repost-btn"
+                    onclick="openRepostModal({{ post.id }})" aria-label="Repost">
+              <span class="action-icon">🔁</span><span>Repost</span>
+            </button>
+            <button class="post-action-btn like-btn {% if post.liked %}liked{% endif %}"
+                    onclick="toggleLike({{ post.id }}, this)" aria-label="Like">
+              <span class="action-icon">{{ '❤️' if post.liked else '🤍' }}</span>
+              <span id="like-count-{{ post.id }}">{{ post.like_count or 0 }}</span>
+            </button>
+            <button class="post-action-btn bookmark-btn {% if post.bookmarked %}bookmarked{% endif %}"
+                    onclick="toggleBookmark({{ post.id }}, this)" aria-label="Bookmark">
+              <span class="action-icon">{{ '🔖' if post.bookmarked else '🏷' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Replies -->
+    {% if replies %}
+    <div style="margin-top:4px">
+      {% for reply in replies %}
+        {{ render_post(reply) }}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:40px 20px">
+      <div class="empty-icon">💬</div>
+      <div class="empty-title">No replies yet</div>
+      <div class="empty-text">Be the first to reply.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <aside class="feed-sidebar">
+    <div class="sidebar-widget">
+      <div class="widget-title">About @{{ post.author.username }}</div>
+      <a href="{{ url_for('profile', username=post.author.username) }}" class="suggest-row" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:4px 0">
+        <div class="avatar avatar-sm">
+          {% if post.author.avatar_url %}<img src="{{ post.author.avatar_url }}" alt="">
+          {% else %}{{ (post.author.display_name or post.author.username or '?')[0].upper() }}{% endif %}
+        </div>
+        <div>
+          <div class="fw-700">{{ post.author.display_name or post.author.username }}</div>
+          <div class="text-xs text-muted">@{{ post.author.username }}</div>
+        </div>
+      </a>
+      {% if not (current_user and current_user.username == post.author.username) %}
+      <button class="btn btn-primary btn-sm btn-block mt-12"
+              onclick="followUser('{{ post.author.username }}', this)">Follow</button>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+
+<!-- Modals reused from feed.html logic -->
+<div class="modal-overlay" id="reply-modal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Reply</div>
+      <button class="modal-close" onclick="closeModal('reply-modal')">✕</button>
+    </div>
+    <div class="reply-context text-muted text-sm mb-12" id="reply-context"></div>
+    <textarea class="form-input" id="reply-input" placeholder="Post your reply…" maxlength="500" rows="3"></textarea>
+    <input type="hidden" id="reply-post-id" value="{{ post.id }}">
+    <button class="btn btn-primary btn-block mt-12" onclick="submitReply()">Reply</button>
+  </div>
+</div>
+<div class="modal-overlay" id="repost-modal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Repost</div>
+      <button class="modal-close" onclick="closeModal('repost-modal')">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-outline btn-block" onclick="quickRepost()">🔁 Repost</button>
+      <button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="quote-modal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Quote Post</div>
+      <button class="modal-close" onclick="closeModal('quote-modal')">✕</button>
+    </div>
+    <textarea class="form-input" id="quote-input" placeholder="Add a comment…" maxlength="500" rows="3" style="margin-bottom:12px"></textarea>
+    <input type="hidden" id="repost-target-id" value="{{ post.id }}">
+    <button class="btn btn-primary btn-block" onclick="submitQuote()">Post</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _repostTargetId = {{ post.id }};
+
+function openReplyModal(postId, username) {
+  document.getElementById('reply-post-id').value = postId;
+  document.getElementById('reply-context').textContent = 'Replying to @' + username;
+  openModal('reply-modal');
+  setTimeout(() => document.getElementById('reply-input').focus(), 200);
+}
+window.openReplyModal = openReplyModal;
+
+async function submitReply() {
+  const postId = document.getElementById('reply-post-id').value;
+  const body   = document.getElementById('reply-input').value.trim();
+  if (!body) return;
+  const fd = new FormData();
+  fd.append('body', body);
+  fd.append('reply_to_id', postId);
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  closeModal('reply-modal');
+  if (d.success) { location.reload(); }
+  else showToast(d.error || 'Error.', 'error');
+}
+window.submitReply = submitReply;
+
+function openRepostModal(postId) { _repostTargetId = postId; openModal('repost-modal'); }
+window.openRepostModal = openRepostModal;
+
+async function quickRepost() {
+  const fd = new FormData();
+  fd.append('repost_of_id', _repostTargetId);
+  fd.append('body', '');
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  closeModal('repost-modal');
+  if (d.success) showToast('Reposted!');
+  else showToast(d.error, 'error');
+}
+window.quickRepost = quickRepost;
+
+function openQuoteModal() { closeModal('repost-modal'); openModal('quote-modal'); }
+window.openQuoteModal = openQuoteModal;
+
+async function submitQuote() {
+  const postId = document.getElementById('repost-target-id').value;
+  const body   = document.getElementById('quote-input').value.trim();
+  const fd     = new FormData();
+  fd.append('repost_of_id', postId); fd.append('body', body);
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  closeModal('quote-modal');
+  if (d.success) location.reload();
+  else showToast(d.error, 'error');
+}
+window.submitQuote = submitQuote;
+
+async function toggleLike(postId, btn) {
+  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.liked ? '❤️' : '🤍';
+  btn.classList.toggle('liked', d.liked);
+  const cnt = document.getElementById('like-count-' + postId);
+  if (cnt) cnt.textContent = d.like_count;
+}
+window.toggleLike = toggleLike;
+
+async function toggleBookmark(postId, btn) {
+  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.saved ? '🔖' : '🏷';
+  showToast(d.saved ? 'Bookmarked!' : 'Removed');
+}
+window.toggleBookmark = toggleBookmark;
+
+async function deletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  const r = await fetch(`/post/${postId}/delete`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) { location.href = '/feed'; }
+  else showToast(d.error, 'error');
+}
+window.deletePost = deletePost;
+
+async function followUser(username, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) { btn.textContent = d.following ? 'Following' : 'Follow'; }
+  btn.disabled = false;
+}
+window.followUser = followUser;
+</script>
+{% endblock %}

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Creator Earnings — DUYS Boost{% endblock %}
+{% block page_title %}Creator Earnings{% endblock %}
+
+{% block content %}
+<!-- Top stats -->
+<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+  <div class="stat-card">
+    <div class="stat-label">Tips Received</div>
+    <div class="stat-value green">${{ '%.2f'|format(total_tips) }}</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Sub Revenue</div>
+    <div class="stat-value purple">${{ '%.2f'|format(sub_revenue) }}</div>
+    <div class="stat-sub">All time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Monthly Recurring</div>
+    <div class="stat-value cyan">${{ '%.2f'|format(monthly_subs) }}</div>
+    <div class="stat-sub">{{ subscribers|length }} active subscriber{{ 's' if subscribers|length != 1 else '' }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Boost Earnings</div>
+    <div class="stat-value orange">${{ '%.2f'|format(boost_earned) }}</div>
+    <div class="stat-sub">From engaging with boosts</div>
+  </div>
+</div>
+
+<div class="split-2">
+  <!-- Subscription tier card -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">💎 Your Tier</div>
+      <a href="{{ url_for('creator_setup') }}" class="btn btn-outline btn-sm">
+        {{ 'Edit' if tier else 'Set up' }}
+      </a>
+    </div>
+
+    {% if tier %}
+    <div class="tier-preview-card">
+      <div class="tier-preview-header">
+        <div class="tier-preview-badge">⭐ {{ tier.title }}</div>
+        <div class="tier-preview-price">
+          ${{ '%.2f'|format(tier.price_usd) }}<span class="text-muted text-sm">/mo</span>
+        </div>
+      </div>
+      {% if tier.description %}
+      <p class="text-sm text-muted" style="margin:8px 0">{{ tier.description }}</p>
+      {% endif %}
+      {% if tier.perks %}
+      <ul class="tier-perks-list">
+        {% for perk in tier.perks.split('\n') if perk.strip() %}
+        <li>✓ {{ perk.strip() }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <div style="margin-top:12px">
+        <span class="badge {% if tier.is_active %}badge-active{% else %}badge-paused{% endif %}">
+          {{ 'Active' if tier.is_active else 'Inactive' }}
+        </span>
+        <span class="text-sm text-muted ml-8">
+          {{ subscribers|length }} subscriber{{ 's' if subscribers|length != 1 else '' }}
+        </span>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:28px 20px">
+      <div class="empty-icon">💎</div>
+      <div class="empty-title">No tier yet</div>
+      <div class="empty-text">Set up a subscription tier to earn recurring income from your followers.</div>
+      <a href="{{ url_for('creator_setup') }}" class="btn btn-primary mt-16">Create tier →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Active subscribers -->
+  <div class="card">
+    <div class="section-header">
+      <div class="section-title">👥 Active Subscribers</div>
+      {% if me.username %}
+      <a href="{{ url_for('subscriber_list', username=me.username) }}" class="btn btn-ghost btn-sm">See all</a>
+      {% endif %}
+    </div>
+    {% if subscribers %}
+    <div class="flex flex-col gap-12">
+      {% for s in subscribers[:6] %}
+      <div class="suggest-row">
+        <a href="{{ url_for('profile', username=s.username) }}">
+          <div class="avatar avatar-sm">
+            {% if s.avatar_url %}<img src="{{ s.avatar_url }}" alt="">
+            {% else %}{{ (s.display_name or s.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </a>
+        <div class="suggest-info">
+          <a href="{{ url_for('profile', username=s.username) }}" class="fw-700 suggest-name">
+            {{ s.display_name or s.username }}
+          </a>
+          <div class="text-xs text-muted">{{ s.tier_title }} · ${{ '%.2f'|format(s.price_usd) }}/mo · since {{ s.started_at[:10] }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:28px 20px">
+      <div class="empty-icon">👥</div>
+      <div class="empty-title">No subscribers yet</div>
+      <div class="empty-text">Share your profile link and set up a tier to get started.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tips received -->
+<div class="card mt-16">
+  <div class="section-title mb-16">💰 Tips Received</div>
+  {% if tips_received %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>From</th>
+          <th>Amount</th>
+          <th>Message</th>
+          <th class="col-hide-xs">Post</th>
+          <th class="col-hide-sm">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for t in tips_received %}
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="avatar avatar-xs">
+              {% if t.sender_avatar %}<img src="{{ t.sender_avatar }}" alt="">
+              {% else %}{{ (t.sender_name or '?')[0].upper() }}{% endif %}
+            </div>
+            <a href="{{ url_for('profile', username=t.sender_name) }}" class="fw-600">@{{ t.sender_name }}</a>
+          </div>
+        </td>
+        <td class="fw-800 text-green">${{ '%.2f'|format(t.amount) }}</td>
+        <td class="text-muted text-sm">{{ t.message or '—' }}</td>
+        <td class="col-hide-xs text-muted text-xs">
+          {% if t.post_id %}
+          <a href="{{ url_for('post_detail', post_id=t.post_id) }}" class="text-accent">View →</a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="col-hide-sm text-muted text-xs">{{ t.created_at[:10] }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding:32px 20px">
+    <div class="empty-icon">💰</div>
+    <div class="empty-title">No tips yet</div>
+    <div class="empty-text">Tips from other users will appear here.</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

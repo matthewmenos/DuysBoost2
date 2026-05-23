@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}My Boosts — DUYS Boost{% endblock %}
+{% block page_title %}My Boosts{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid-3" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-label">Total Budget Spent</div>
+    <div class="stat-value purple">${{ '%.2f'|format(total_spent) }}</div>
+    <div class="stat-sub">of ${{ '%.2f'|format(total_budget) }} allocated</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Engagements</div>
+    <div class="stat-value cyan">{{ total_engaged }}</div>
+    <div class="stat-sub">across all boosts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Earned from Boosts</div>
+    <div class="stat-value green">${{ '%.2f'|format(earned_from_boosts) }}</div>
+    <div class="stat-sub">by engaging with others</div>
+  </div>
+</div>
+
+<!-- Boosts list -->
+<div class="card">
+  <div class="section-header">
+    <div class="section-title">📣 Boost history</div>
+    <a href="{{ url_for('feed') }}" class="btn btn-ghost btn-sm">← Back to feed</a>
+  </div>
+
+  {% if boosts %}
+  <div class="flex flex-col" style="gap:12px">
+  {% for b in boosts %}
+  <div class="boost-row" id="boost-row-{{ b.id }}">
+    <div class="boost-row-meta">
+      <span class="badge badge-{{ b.status }}">{{ b.status }}</span>
+      <span class="text-sm fw-700">{{ b.engage_type | capitalize }}</span>
+      <span class="text-muted text-xs">{{ b.created_at[:10] }}</span>
+    </div>
+    <div class="boost-row-body text-sm text-muted" style="margin:4px 0">
+      "{{ b.body[:80] if b.body else '(empty)' }}{% if b.body and b.body|length > 80 %}…{% endif %}"
+    </div>
+    <div class="boost-row-stats">
+      <div class="boost-stat">
+        <div class="boost-stat-val">{{ b.engaged_count }}/{{ b.target_count }}</div>
+        <div class="boost-stat-label">Engagements</div>
+      </div>
+      <div class="boost-stat">
+        <div class="boost-stat-val">${{ '%.2f'|format(b.budget_spent) }}</div>
+        <div class="boost-stat-label">Spent</div>
+      </div>
+      <div class="boost-stat">
+        <div class="boost-stat-val">${{ '%.2f'|format(b.budget) }}</div>
+        <div class="boost-stat-label">Budget</div>
+      </div>
+      <div class="boost-stat" style="flex:2">
+        <div class="progress-bar" style="margin-top:6px">
+          <div class="progress-fill" style="width:{{ [(b.budget_spent/b.budget*100)|int if b.budget else 0,100]|min }}%"></div>
+        </div>
+        <div class="boost-stat-label">{{ '%.0f'|format(b.budget_spent/b.budget*100 if b.budget else 0) }}% used</div>
+      </div>
+    </div>
+    {% if b.status == 'active' %}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <a href="{{ url_for('post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm">View post ↗</a>
+      <button class="btn btn-danger btn-sm" onclick="cancelBoost({{ b.post_id }}, {{ b.id }}, this)">
+        Cancel &amp; Refund
+      </button>
+    </div>
+    {% else %}
+    <a href="{{ url_for('post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm" style="margin-top:10px">View post ↗</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📣</div>
+    <div class="empty-title">No boosts yet</div>
+    <div class="empty-text">
+      Tap ⋯ on any of your posts and choose "Boost this post" to get started.
+    </div>
+    <a href="{{ url_for('feed') }}" class="btn btn-primary mt-16">Go to feed →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function cancelBoost(postId, boostId, btn) {
+  if (!confirm('Cancel this boost and refund unspent budget?')) return;
+  btn.disabled = true; btn.textContent = 'Cancelling…';
+  try {
+    const r = await fetch(`/post/${postId}/boost/cancel`, { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      showToast(d.refund > 0 ? `Cancelled. $${d.refund.toFixed(2)} refunded.` : 'Cancelled.');
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast(d.error || 'Could not cancel.', 'error');
+      btn.disabled = false; btn.textContent = 'Cancel & Refund';
+    }
+  } catch(_) {
+    showToast('Network error.', 'error');
+    btn.disabled = false; btn.textContent = 'Cancel & Refund';
+  }
+}
+window.cancelBoost = cancelBoost;
+</script>
+{% endblock %}

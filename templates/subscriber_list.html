@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Subscribers — @{{ creator.username }} — DUYS Boost{% endblock %}
+{% block page_title %}Subscribers{% endblock %}
+
+{% block content %}
+<div style="max-width:700px;margin:0 auto">
+  <div class="stats-grid-3 mb-16">
+    <div class="stat-card">
+      <div class="stat-label">Active Subscribers</div>
+      <div class="stat-value green">{{ active_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Monthly Recurring</div>
+      <div class="stat-value purple">${{ '%.2f'|format(monthly_revenue) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Subscribers</div>
+      <div class="stat-value cyan">{{ subs|length }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header mb-16">
+      <div class="section-title">All Subscribers</div>
+      <a href="{{ url_for('profile', username=creator.username) }}" class="btn btn-ghost btn-sm">← Profile</a>
+    </div>
+    {% if subs %}
+    <div class="flex flex-col gap-12">
+      {% for s in subs %}
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <a href="{{ url_for('profile', username=s.username) }}">
+          <div class="avatar avatar-md">
+            {% if s.avatar_url %}<img src="{{ s.avatar_url }}" alt="">
+            {% else %}{{ (s.display_name or s.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </a>
+        <div style="flex:1;min-width:0">
+          <a href="{{ url_for('profile', username=s.username) }}" class="fw-700">
+            {{ s.display_name or s.username }}
+          </a>
+          <div class="text-xs text-muted">@{{ s.username }} · {{ s.tier_title }} · ${{ '%.2f'|format(s.price_usd) }}/mo</div>
+          <div class="text-xs text-muted">Since {{ s.started_at[:10] }}{% if s.expires_at %} · Expires {{ s.expires_at[:10] }}{% endif %}</div>
+        </div>
+        <span class="badge badge-{{ s.status }}">{{ s.status }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">👥</div>
+      <div class="empty-title">No subscribers yet</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

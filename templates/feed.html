@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+{% from "post_card.html" import render_post %}
+{% block title %}Home — DUYS Boost{% endblock %}
+{% block page_title %}Home{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+  <!-- Main feed column -->
+  <div class="feed-col">
+    <!-- Compose box -->
+    <div class="compose-box card">
+      <div class="compose-inner">
+        <div class="avatar avatar-md flex-shrink-0">
+          {% if current_user.avatar_url %}
+            <img src="{{ current_user.avatar_url }}" alt="">
+          {% else %}
+            {{ current_user.username[0].upper() }}
+          {% endif %}
+        </div>
+        <div class="compose-right">
+          <textarea class="compose-input" id="compose-input"
+                    placeholder="What's happening?"
+                    maxlength="500" rows="1"
+                    aria-label="Compose post"></textarea>
+          <div class="compose-footer">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="compose-chars" id="compose-chars">500</span>
+              <button type="button" class="sub-only-pill" id="sub-only-pill" title="Toggle audience">🌐 Public</button>
+              <input type="checkbox" id="compose-sub-only" style="display:none">
+            </div>
+            <button class="btn btn-primary btn-sm" id="compose-submit">Post</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feed tabs -->
+    <div class="feed-tabs">
+      <a href="{{ url_for('feed', tab='for_you') }}"
+         class="feed-tab {% if tab=='for_you' %}active{% endif %}">For You</a>
+      <a href="{{ url_for('feed', tab='following') }}"
+         class="feed-tab {% if tab=='following' %}active{% endif %}">Following</a>
+      <a href="{{ url_for('feed', tab='earn') }}"
+         class="feed-tab earn-tab {% if tab=='earn' %}active{% endif %}">
+        ⚡ Earn
+      </a>
+    </div>
+
+    <!-- Posts -->
+    <div id="feed-list">
+      {% if posts %}
+        {% for post in posts %}
+          {{ render_post(post) }}
+        {% endfor %}
+        {% if has_more %}
+        <div class="load-more-wrap">
+          <button class="btn btn-outline btn-sm" id="load-more-btn"
+                  data-page="{{ page + 1 }}" data-tab="{{ tab }}">
+            Load more
+          </button>
+        </div>
+        {% endif %}
+      {% else %}
+        <div class="empty-state" style="padding:56px 20px">
+          <div class="empty-icon">🌱</div>
+          <div class="empty-title">
+            {% if tab == 'following' %}Nothing from people you follow yet{% else %}No posts yet{% endif %}
+          </div>
+          <div class="empty-text">
+            {% if tab == 'following' %}Follow some people to see their posts here.
+            {% else %}Be the first to post something!{% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right sidebar -->
+  <aside class="feed-sidebar">
+    <!-- Search shortcut -->
+    <a href="{{ url_for('explore') }}" class="search-bar-link">
+      <div class="search-bar-fake">
+        <span class="search-icon">🔍</span>
+        <span class="text-muted">Search people &amp; posts…</span>
+      </div>
+    </a>
+
+    <!-- Who to follow -->
+    {% if suggestions %}
+    <div class="sidebar-widget">
+      <div class="widget-title">Who to follow</div>
+      {% for u in suggestions %}
+      <div class="suggest-row" id="suggest-{{ u.id }}">
+        <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
+          <div class="avatar avatar-sm">
+            {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
+            {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </a>
+        <div class="suggest-info">
+          <a href="{{ url_for('profile', username=u.username) }}" class="suggest-name fw-700">
+            {{ u.display_name or u.username }}
+            {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+          </a>
+          <div class="text-xs text-muted">@{{ u.username }}</div>
+        </div>
+        <button class="btn btn-outline btn-sm follow-btn"
+                data-username="{{ u.username }}"
+                onclick="followUser('{{ u.username }}', this)">Follow</button>
+      </div>
+      {% endfor %}
+      <a href="{{ url_for('explore') }}" class="text-accent text-sm" style="display:block;padding:10px 0">
+        Show more →
+      </a>
+    </div>
+    {% endif %}
+
+    <!-- Trending -->
+    {% if trending %}
+    <div class="sidebar-widget">
+      <div class="widget-title">Trending today</div>
+      {% for t in trending %}
+      <a href="{{ url_for('post_detail', post_id=t.id) }}" class="trending-row">
+        <div class="trending-body">{{ t.body[:80] }}{% if t.body|length > 80 %}…{% endif %}</div>
+        <div class="trending-meta text-xs text-muted">❤️ {{ t.like_count }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Boost shortcut -->
+    <div class="sidebar-widget boost-cta">
+      <div class="widget-title">📣 Boost a post</div>
+      <p class="text-sm text-muted" style="margin:6px 0 12px">
+        Pay to surface any of your posts in the feed. Others earn by engaging.
+      </p>
+      <a href="{{ url_for('my_boosts') }}" class="btn btn-primary btn-sm btn-block">My boosts →</a>
+    </div>
+
+    <!-- Trending tags -->
+    <div class="sidebar-widget" id="trending-tags-widget" style="display:none">
+      <div class="widget-title">Trending tags</div>
+      <div id="trending-tags-list"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- Reply modal -->
+<div class="modal-overlay" id="reply-modal" role="dialog" aria-modal="true" aria-label="Reply">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Reply</div>
+      <button class="modal-close" onclick="closeModal('reply-modal')">✕</button>
+    </div>
+    <div class="reply-context text-muted text-sm mb-12" id="reply-context"></div>
+    <div class="compose-inner">
+      <div class="avatar avatar-md flex-shrink-0">
+        {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
+        {% else %}{{ current_user.username[0].upper() }}{% endif %}
+      </div>
+      <div class="compose-right" style="flex:1">
+        <textarea class="compose-input" id="reply-input"
+                  placeholder="Post your reply…" maxlength="500" rows="3"></textarea>
+        <input type="hidden" id="reply-post-id" value="">
+        <div class="compose-footer">
+          <span class="compose-chars" id="reply-chars">500</span>
+          <button class="btn btn-primary btn-sm" onclick="submitReply()">Reply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Repost modal -->
+<div class="modal-overlay" id="repost-modal" role="dialog" aria-modal="true" aria-label="Repost">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Repost</div>
+      <button class="modal-close" onclick="closeModal('repost-modal')">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-outline btn-block" onclick="quickRepost()">🔁 Repost</button>
+      <button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote &amp; comment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quote modal -->
+<div class="modal-overlay" id="quote-modal" role="dialog" aria-modal="true" aria-label="Quote post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Quote Post</div>
+      <button class="modal-close" onclick="closeModal('quote-modal')">✕</button>
+    </div>
+    <textarea class="compose-input form-input" id="quote-input"
+              placeholder="Add a comment…" maxlength="500" rows="3"
+              style="margin-bottom:12px"></textarea>
+    <input type="hidden" id="repost-target-id" value="">
+    <button class="btn btn-primary btn-block" onclick="submitQuote()">Post</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Compose + Phase 2 earn ───────────────────────────────────────────────────
+const composeInput  = document.getElementById('compose-input');
+const composeChars  = document.getElementById('compose-chars');
+const composeSubmit = document.getElementById('compose-submit');
+
+if (composeInput) {
+  composeInput.addEventListener('input', () => {
+    const left = 500 - composeInput.value.length;
+    composeChars.textContent = left;
+    composeChars.style.color = left < 20 ? 'var(--red)' : 'var(--muted)';
+    composeInput.style.height = 'auto';
+    composeInput.style.height = composeInput.scrollHeight + 'px';
+  });
+  // Subscriber-only toggle
+  const subPill = document.getElementById('sub-only-pill');
+  const subCheck = document.getElementById('compose-sub-only');
+  if (subPill && subCheck) {
+    subPill.addEventListener('click', () => {
+      subCheck.checked = !subCheck.checked;
+      subPill.textContent = subCheck.checked ? '🔒 Subscribers' : '🌐 Public';
+      subPill.style.color = subCheck.checked ? 'var(--accent-light)' : 'var(--muted)';
+    });
+  }
+
+  composeSubmit.addEventListener('click', async () => {
+    const body = composeInput.value.trim();
+    if (!body) return;
+    composeSubmit.disabled = true;
+    composeSubmit.textContent = 'Posting…';
+    try {
+      const fd = new FormData();
+      fd.append('body', body);
+      if (subCheck && subCheck.checked) fd.append('subscriber_only', '1');
+      const r  = await fetch('/post', { method: 'POST', body: fd });
+      const d  = await r.json();
+      if (d.success) {
+        composeInput.value = '';
+        composeChars.textContent = 500;
+        composeInput.style.height = 'auto';
+        prependPost(d.post);
+        showToast('Posted!');
+      } else {
+        showToast(d.error || 'Could not post.', 'error');
+      }
+    } finally {
+      composeSubmit.disabled = false;
+      composeSubmit.textContent = 'Post';
+    }
+  });
+}
+
+// ── Reply ───────────────────────────────────────────────────────────────────
+const replyInput = document.getElementById('reply-input');
+const replyChars = document.getElementById('reply-chars');
+if (replyInput) {
+  replyInput.addEventListener('input', () => {
+    const left = 500 - replyInput.value.length;
+    replyChars.textContent = left;
+    replyChars.style.color = left < 20 ? 'var(--red)' : 'var(--muted)';
+  });
+}
+
+function openReplyModal(postId, username) {
+  document.getElementById('reply-post-id').value = postId;
+  document.getElementById('reply-context').textContent = 'Replying to @' + username;
+  document.getElementById('reply-input').value = '';
+  openModal('reply-modal');
+  setTimeout(() => document.getElementById('reply-input').focus(), 200);
+}
+window.openReplyModal = openReplyModal;
+
+async function submitReply() {
+  const postId = document.getElementById('reply-post-id').value;
+  const body   = replyInput.value.trim();
+  if (!body) return;
+  const fd = new FormData();
+  fd.append('body', body);
+  fd.append('reply_to_id', postId);
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  if (d.success) {
+    closeModal('reply-modal');
+    const cnt = document.getElementById('reply-count-' + postId);
+    if (cnt) cnt.textContent = parseInt(cnt.textContent || '0') + 1;
+    showToast('Reply posted!');
+  } else {
+    showToast(d.error || 'Could not reply.', 'error');
+  }
+}
+window.submitReply = submitReply;
+
+// ── Repost ───────────────────────────────────────────────────────────────────
+let _repostTargetId = null;
+function openRepostModal(postId) {
+  _repostTargetId = postId;
+  document.getElementById('repost-target-id').value = postId;
+  openModal('repost-modal');
+}
+window.openRepostModal = openRepostModal;
+
+async function quickRepost() {
+  const fd = new FormData();
+  fd.append('repost_of_id', _repostTargetId);
+  fd.append('body', '');
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  closeModal('repost-modal');
+  if (d.success) {
+    const cnt = document.getElementById('repost-count-' + _repostTargetId);
+    if (cnt) cnt.textContent = parseInt(cnt.textContent || '0') + 1;
+    showToast('Reposted!');
+  } else {
+    showToast(d.error || 'Could not repost.', 'error');
+  }
+}
+window.quickRepost = quickRepost;
+
+function openQuoteModal() {
+  closeModal('repost-modal');
+  openModal('quote-modal');
+}
+window.openQuoteModal = openQuoteModal;
+
+async function submitQuote() {
+  const postId = document.getElementById('repost-target-id').value;
+  const body   = document.getElementById('quote-input').value.trim();
+  const fd     = new FormData();
+  fd.append('repost_of_id', postId);
+  fd.append('body', body);
+  const r = await fetch('/post', { method: 'POST', body: fd });
+  const d = await r.json();
+  closeModal('quote-modal');
+  if (d.success) { prependPost(d.post); showToast('Quoted!'); }
+  else showToast(d.error || 'Error.', 'error');
+}
+window.submitQuote = submitQuote;
+
+// ── Like ─────────────────────────────────────────────────────────────────────
+async function toggleLike(postId, btn) {
+  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  const icon = btn.querySelector('.action-icon');
+  const cnt  = document.getElementById('like-count-' + postId);
+  icon.textContent = d.liked ? '❤️' : '🤍';
+  btn.classList.toggle('liked', d.liked);
+  btn.setAttribute('aria-pressed', d.liked);
+  if (cnt) cnt.textContent = d.like_count || '';
+}
+window.toggleLike = toggleLike;
+
+// ── Bookmark ─────────────────────────────────────────────────────────────────
+async function toggleBookmark(postId, btn) {
+  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  const icon = btn.querySelector('.action-icon');
+  icon.textContent = d.saved ? '🔖' : '🏷';
+  btn.classList.toggle('bookmarked', d.saved);
+  btn.setAttribute('aria-pressed', d.saved);
+  showToast(d.saved ? 'Bookmarked!' : 'Removed from bookmarks');
+}
+window.toggleBookmark = toggleBookmark;
+
+// ── Follow ────────────────────────────────────────────────────────────────────
+async function followUser(username, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.classList.toggle('btn-outline', !d.following);
+    btn.classList.toggle('btn-ghost', d.following);
+    if (d.following) {
+      const row = document.getElementById('suggest-' + btn.closest('[id^=suggest-]')?.id?.split('-')[1]);
+      setTimeout(() => { if (row) row.style.opacity = '0.5'; }, 500);
+    }
+  }
+  btn.disabled = false;
+}
+window.followUser = followUser;
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  const r = await fetch(`/post/${postId}/delete`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    const card = document.querySelector(`[data-post-id="${postId}"]`);
+    if (card) { card.style.opacity='0'; setTimeout(()=>card.remove(), 300); }
+    showToast('Post deleted.');
+  } else {
+    showToast(d.error || 'Could not delete.', 'error');
+  }
+}
+window.deletePost = deletePost;
+
+// ── Post menu ─────────────────────────────────────────────────────────────────
+function togglePostMenu(postId, e) {
+  e.stopPropagation();
+  const menu = document.getElementById('post-menu-' + postId);
+  if (!menu) return;
+  const open = menu.style.display !== 'none';
+  document.querySelectorAll('.post-menu-dropdown').forEach(m => m.style.display='none');
+  menu.style.display = open ? 'none' : 'block';
+}
+window.togglePostMenu = togglePostMenu;
+document.addEventListener('click', () => {
+  document.querySelectorAll('.post-menu-dropdown').forEach(m => m.style.display='none');
+});
+
+function copyPostLink(postId) {
+  navigator.clipboard.writeText(window.location.origin + '/post/' + postId);
+  showToast('Link copied!');
+}
+window.copyPostLink = copyPostLink;
+
+// ── Load more ──────────────────────────────────────────────────────────────────
+const loadMoreBtn = document.getElementById('load-more-btn');
+if (loadMoreBtn) {
+  loadMoreBtn.addEventListener('click', async () => {
+    const page = loadMoreBtn.dataset.page;
+    const tab  = loadMoreBtn.dataset.tab;
+    loadMoreBtn.textContent = 'Loading…';
+    loadMoreBtn.disabled = true;
+    try {
+      const r = await fetch(`/feed?tab=${tab}&page=${page}`, {
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+      const d = await r.json();
+      d.posts.forEach(p => appendPost(p));
+      if (d.has_more) {
+        loadMoreBtn.dataset.page = parseInt(page) + 1;
+        loadMoreBtn.textContent = 'Load more';
+        loadMoreBtn.disabled = false;
+      } else {
+        loadMoreBtn.closest('.load-more-wrap').remove();
+      }
+    } catch (_) {
+      loadMoreBtn.textContent = 'Load more';
+      loadMoreBtn.disabled = false;
+    }
+  });
+}
+
+// ── DOM post injection ─────────────────────────────────────────────────────
+function prependPost(post) { location.reload(); }
+function appendPost(post)  { location.reload(); }
+
+// ── Earn engagement ──────────────────────────────────────────────────────────
+async function earnEngagement(postId, engageType, btn) {
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`/post/${postId}/earn`, { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      // Animate the banner
+      const banner = document.getElementById('boost-banner-' + postId);
+      if (banner) {
+        banner.classList.add('earn-success');
+        banner.innerHTML = `<span style="font-weight:700;color:var(--green)">✅ +$${d.reward.toFixed(2)} earned!</span>`;
+        setTimeout(() => { if (banner) banner.style.display = 'none'; }, 2500);
+      }
+      showToast(`+$${d.reward.toFixed(2)} added to your wallet!`, 'success');
+      // Update header balance if present
+      const balEl = document.querySelector('.user-balance');
+      if (balEl) balEl.textContent = '$' + parseFloat(d.balance).toFixed(2);
+    } else {
+      showToast(d.error || 'Could not earn.', 'error');
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
+  } catch(_) {
+    showToast('Network error.', 'error');
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+window.earnEngagement = earnEngagement;
+
+// ── Boost modal ──────────────────────────────────────────────────────────────
+const COST_PER_ENGAGE = 0.10;
+
+function openBoostModal(postId) {
+  document.getElementById('boost-post-id').value = postId;
+  document.getElementById('boost-target').value = '';
+  document.getElementById('boost-cost-preview').textContent = '$0.00';
+  document.getElementById('boost-error').style.display = 'none';
+  openModal('boost-modal');
+  setTimeout(() => document.getElementById('boost-target').focus(), 180);
+}
+window.openBoostModal = openBoostModal;
+
+function selectEngageType(type, btn) {
+  document.querySelectorAll('#boost-engage-btns .network-badge').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('boost-engage-type').value = type;
+}
+window.selectEngageType = selectEngageType;
+
+const boostTarget = document.getElementById('boost-target');
+if (boostTarget) {
+  boostTarget.addEventListener('input', () => {
+    const n = parseInt(boostTarget.value || '0');
+    const cost = n > 0 ? (n * COST_PER_ENGAGE).toFixed(2) : '0.00';
+    document.getElementById('boost-cost-preview').textContent = '$' + cost;
+  });
+}
+
+const boostForm = document.getElementById('boost-form');
+if (boostForm) {
+  boostForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn  = document.getElementById('boost-submit-btn');
+    const err  = document.getElementById('boost-error');
+    const postId = document.getElementById('boost-post-id').value;
+    err.style.display = 'none';
+    btn.textContent = 'Boosting…'; btn.disabled = true;
+    try {
+      const r = await fetch(`/post/${postId}/boost`, { method: 'POST', body: new FormData(boostForm) });
+      const d = await r.json();
+      if (d.success) {
+        closeModal('boost-modal');
+        showToast(`Post boosted! $${d.budget.toFixed(2)} budget active.`);
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        err.style.display = 'block';
+        err.textContent = d.error || 'Could not boost post.';
+      }
+    } catch(_) {
+      err.style.display = 'block';
+      err.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.textContent = 'Boost now 🚀'; btn.disabled = false;
+    }
+  });
+}
+
+// ── Trending tags sidebar ─────────────────────────────────────────────────────
+(async function loadTrendingTags() {
+  try {
+    const r = await fetch('/api/trending/tags');
+    const tags = await r.json();
+    if (!tags.length) return;
+    const widget = document.getElementById('trending-tags-widget');
+    const list   = document.getElementById('trending-tags-list');
+    if (!widget || !list) return;
+    list.innerHTML = tags.map(t =>
+      `<a href="/tag/${t.name}" class="trending-tag-pill">#${t.name} <span class="trending-tag-cnt">${t.cnt}</span></a>`
+    ).join('');
+    widget.style.display = '';
+  } catch(_) {}
+})();
+</script>
+{% endblock %}

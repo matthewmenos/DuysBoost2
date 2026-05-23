@@ -22,6 +22,7 @@ from flask import (
     Flask, abort, g, jsonify, redirect, render_template, request, session,
     url_for
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
@@ -34,6 +35,10 @@ if not os.path.exists(dotenv_path):
     if os.path.exists(example_path):
         dotenv_path = example_path
 load_dotenv(dotenv_path, override=False)
+
+# Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For, etc.)
+# This is required for deployments behind reverse proxies (e.g., Render, Heroku, AWS ELB)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
 
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
 
@@ -79,6 +84,11 @@ WITHDRAWAL_KEYS = {
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
+# Allow OAuth over HTTP through proxies (for development/testing on Render, Heroku, etc.)
+# In production with HTTPS, this is automatically false
+if os.environ.get('OAUTHLIB_INSECURE_TRANSPORT') is None:
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' if not os.environ.get('COOKIE_SECURE', '0') == '1' else '0'
+
 oauth = OAuth(app)
 if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
     oauth.register(
@@ -87,6 +97,7 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         client_secret=GOOGLE_CLIENT_SECRET,
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid email profile'},
+        userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
     )
 
 
@@ -201,6 +212,129 @@ def init_db():
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY(user_id) REFERENCES users(id)
     );
+
+    -- ── Social layer ───────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        image_url TEXT,
+        reply_to_id INTEGER,
+        repost_of_id INTEGER,
+        quote_body TEXT,
+        like_count INTEGER DEFAULT 0,
+        reply_count INTEGER DEFAULT 0,
+        repost_count INTEGER DEFAULT 0,
+        is_boosted INTEGER DEFAULT 0,
+        boost_ad_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(reply_to_id) REFERENCES posts(id),
+        FOREIGN KEY(repost_of_id) REFERENCES posts(id)
+    );
+    CREATE TABLE IF NOT EXISTS follows (
+        follower_id INTEGER NOT NULL,
+        following_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY(follower_id, following_id),
+        FOREIGN KEY(follower_id) REFERENCES users(id),
+        FOREIGN KEY(following_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS post_likes (
+        user_id INTEGER NOT NULL,
+        post_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY(user_id, post_id),
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(post_id) REFERENCES posts(id)
+    );
+    CREATE TABLE IF NOT EXISTS bookmarks (
+        user_id INTEGER NOT NULL,
+        post_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY(user_id, post_id),
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(post_id) REFERENCES posts(id)
+    );
+
+    -- ── Phase 2: Boost-in-feed ──────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS post_boosts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        budget REAL NOT NULL,
+        budget_spent REAL DEFAULT 0,
+        reward_per_engage REAL DEFAULT 0.05,
+        engage_type TEXT DEFAULT 'like',
+        target_count INTEGER DEFAULT 0,
+        engaged_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(post_id) REFERENCES posts(id),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS boost_engagements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        boost_id INTEGER NOT NULL,
+        post_id INTEGER NOT NULL,
+        worker_id INTEGER NOT NULL,
+        proof_link TEXT,
+        reward REAL,
+        earned_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(boost_id) REFERENCES post_boosts(id),
+        FOREIGN KEY(post_id) REFERENCES posts(id),
+        FOREIGN KEY(worker_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS hashtags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS post_hashtags (
+        post_id INTEGER NOT NULL,
+        hashtag_id INTEGER NOT NULL,
+        PRIMARY KEY(post_id, hashtag_id),
+        FOREIGN KEY(post_id) REFERENCES posts(id),
+        FOREIGN KEY(hashtag_id) REFERENCES hashtags(id)
+    );
+
+    -- ── Phase 3: Creator monetisation ─────────────────────────────────
+    CREATE TABLE IF NOT EXISTS tips (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_user_id INTEGER NOT NULL,
+        to_user_id   INTEGER NOT NULL,
+        post_id      INTEGER,
+        amount       REAL NOT NULL,
+        message      TEXT,
+        tx_hash      TEXT,
+        created_at   TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(from_user_id) REFERENCES users(id),
+        FOREIGN KEY(to_user_id)   REFERENCES users(id),
+        FOREIGN KEY(post_id)      REFERENCES posts(id)
+    );
+    CREATE TABLE IF NOT EXISTS subscription_tiers (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        creator_id  INTEGER NOT NULL UNIQUE,
+        price_usd   REAL NOT NULL DEFAULT 1.00,
+        title       TEXT NOT NULL DEFAULT 'Supporter',
+        description TEXT,
+        perks       TEXT,
+        is_active   INTEGER DEFAULT 1,
+        created_at  TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(creator_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscriber_id INTEGER NOT NULL,
+        creator_id    INTEGER NOT NULL,
+        tier_id       INTEGER NOT NULL,
+        status        TEXT DEFAULT 'active',
+        started_at    TEXT DEFAULT (datetime('now')),
+        expires_at    TEXT,
+        UNIQUE(subscriber_id, creator_id),
+        FOREIGN KEY(subscriber_id) REFERENCES users(id),
+        FOREIGN KEY(creator_id)    REFERENCES users(id),
+        FOREIGN KEY(tier_id)       REFERENCES subscription_tiers(id)
+    );
     ''')
 
     # ── Migrations for databases created by earlier versions ─────────────
@@ -234,6 +368,47 @@ def init_db():
     _create_index_if_missing('notifications', 'idx_notif_user', 'user_id, read')
     _create_index_if_missing('withdrawals', 'idx_wdr_status', 'status')
     _create_index_if_missing('crypto_deposits', 'idx_cdep_user', 'user_id')
+
+    # Social layer migrations
+    _add_col_if_missing('users', 'bio', 'TEXT')
+    _add_col_if_missing('users', 'avatar_url', 'TEXT')
+    _add_col_if_missing('users', 'banner_url', 'TEXT')
+    _add_col_if_missing('users', 'display_name', 'TEXT')
+    _add_col_if_missing('users', 'website', 'TEXT')
+    _add_col_if_missing('users', 'location', 'TEXT')
+    _add_col_if_missing('users', 'is_verified', 'INTEGER DEFAULT 0')
+    _add_col_if_missing('users', 'follower_count', 'INTEGER DEFAULT 0')
+    _add_col_if_missing('users', 'following_count', 'INTEGER DEFAULT 0')
+    _add_col_if_missing('users', 'post_count', 'INTEGER DEFAULT 0')
+
+    _create_index_if_missing('posts', 'idx_posts_user', 'user_id')
+    _create_index_if_missing('posts', 'idx_posts_created', 'created_at')
+    _create_index_if_missing('posts', 'idx_posts_reply', 'reply_to_id')
+    _create_index_if_missing('follows', 'idx_follows_follower', 'follower_id')
+    _create_index_if_missing('follows', 'idx_follows_following', 'following_id')
+    _create_index_if_missing('post_likes', 'idx_likes_post', 'post_id')
+    _create_index_if_missing('post_likes', 'idx_likes_user', 'user_id')
+    _create_index_if_missing('bookmarks', 'idx_bm_user', 'user_id')
+
+    # Phase 2 migrations
+    _create_index_if_missing('post_boosts', 'idx_pb_post',   'post_id')
+    _create_index_if_missing('post_boosts', 'idx_pb_status', 'status')
+    _create_index_if_missing('boost_engagements', 'idx_be_boost',  'boost_id')
+    _create_index_if_missing('boost_engagements', 'idx_be_worker', 'worker_id')
+    _create_index_if_missing('post_hashtags', 'idx_ph_post',    'post_id')
+    _create_index_if_missing('post_hashtags', 'idx_ph_hashtag', 'hashtag_id')
+    _add_col_if_missing('posts', 'hashtags_cached', 'TEXT')
+
+    # Phase 3 migrations
+    _add_col_if_missing('users', 'total_tips_received', 'REAL DEFAULT 0')
+    _add_col_if_missing('users', 'total_tips_sent',     'REAL DEFAULT 0')
+    _add_col_if_missing('users', 'subscriber_count',    'INTEGER DEFAULT 0')
+    _add_col_if_missing('posts', 'is_subscriber_only',  'INTEGER DEFAULT 0')
+    _create_index_if_missing('tips', 'idx_tips_to',   'to_user_id')
+    _create_index_if_missing('tips', 'idx_tips_from', 'from_user_id')
+    _create_index_if_missing('subscriptions', 'idx_sub_creator',    'creator_id')
+    _create_index_if_missing('subscriptions', 'idx_sub_subscriber', 'subscriber_id')
+
 
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
     if not existing:
@@ -433,6 +608,42 @@ def get_current_user():
     ).fetchone()
 
 
+
+# ── Jinja filters ──────────────────────────────────────────────────────────
+import markupsafe
+
+@app.template_filter('nl2br')
+def nl2br_filter(value):
+    """Convert newlines to <br> tags, safely escaping HTML."""
+    if value is None:
+        return ''
+    escaped = markupsafe.escape(value)
+    return markupsafe.Markup(str(escaped).replace('\n', '<br>'))
+
+
+@app.template_filter('linkify_tags')
+def linkify_tags_filter(value):
+    """Convert #hashtag and @mention in post body to links, safely."""
+    import re as _re
+    if value is None:
+        return ''
+    escaped = str(markupsafe.escape(value))
+    # hashtags → /tag/<name>
+    escaped = _re.sub(
+        r'#(\w+)',
+        lambda m: f'<a href="/tag/{m.group(1).lower()}" class="post-tag">#{m.group(1)}</a>',
+        escaped
+    )
+    # @mentions → /user/<username>
+    escaped = _re.sub(
+        r'@(\w+)',
+        lambda m: f'<a href="/user/{m.group(1)}" class="post-mention">@{m.group(1)}</a>',
+        escaped
+    )
+    # newlines
+    escaped = escaped.replace('\n', '<br>')
+    return markupsafe.Markup(escaped)
+
 @app.context_processor
 def inject_user():
     return {
@@ -451,7 +662,7 @@ def inject_user():
 @app.route('/')
 def index():
     if 'user_id' in session:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('feed'))
     return render_template('index.html')
 
 
@@ -550,8 +761,12 @@ def google_auth_callback():
         return redirect(url_for('login'))
     try:
         token = oauth.google.authorize_access_token()
-        userinfo = oauth.google.parse_id_token(token)
-    except Exception:
+        userinfo = token.get('userinfo')
+        if not userinfo:
+            # Fallback: parse the ID token if userinfo not in token
+            userinfo = oauth.google.parse_id_token(token)
+    except Exception as e:
+        print(f'Google OAuth callback error: {e}')
         return redirect(url_for('login'))
     return _finalize_oauth_login(userinfo, provider='Google')
 
@@ -1419,6 +1634,1287 @@ def api_analytics_performance():
 
     return jsonify({'success': True, 'performance': performance_data})
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _format_post(row, current_uid, db):
+    """Convert a DB row to a plain dict enriched with viewer-specific flags."""
+    if row is None:
+        return None
+    p = dict(row)
+    p['liked']      = bool(db.execute('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?',
+                                       (current_uid, p['id'])).fetchone())
+    p['bookmarked'] = bool(db.execute('SELECT 1 FROM bookmarks WHERE user_id=? AND post_id=?',
+                                       (current_uid, p['id'])).fetchone())
+    author = db.execute('SELECT id,username,display_name,avatar_url,is_verified FROM users WHERE id=?',
+                        (p['user_id'],)).fetchone()
+    p['author'] = dict(author) if author else {}
+
+    # Nested original for reposts
+    if p.get('repost_of_id'):
+        orig_row = db.execute('SELECT * FROM posts WHERE id=?', (p['repost_of_id'],)).fetchone()
+        p['repost_of'] = _format_post(orig_row, current_uid, db) if orig_row else None
+    else:
+        p['repost_of'] = None
+
+    # Parent post stub for replies
+    if p.get('reply_to_id'):
+        parent = db.execute(
+            'SELECT p.id, u.username FROM posts p JOIN users u ON p.user_id=u.id WHERE p.id=?',
+            (p['reply_to_id'],)
+        ).fetchone()
+        p['reply_to_username'] = parent['username'] if parent else None
+    else:
+        p['reply_to_username'] = None
+
+    # Active boost info for earn-while-scrolling
+    boost = db.execute(
+        """SELECT pb.* FROM post_boosts pb
+           WHERE pb.post_id=? AND pb.status='active'
+             AND pb.budget_spent < pb.budget
+             AND pb.user_id != ?
+             AND NOT EXISTS (
+               SELECT 1 FROM boost_engagements be
+               WHERE be.boost_id=pb.id AND be.worker_id=?
+             )
+           ORDER BY pb.created_at DESC LIMIT 1""",
+        (p['id'], current_uid, current_uid)
+    ).fetchone()
+    p['active_boost'] = dict(boost) if boost else None
+
+    # Subscriber-only lock: viewer has no active subscription to this author?
+    if p.get('is_subscriber_only') and p['user_id'] != current_uid:
+        is_subscribed = bool(db.execute(
+            "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+            (current_uid, p['user_id'])
+        ).fetchone())
+        # Check admin
+        viewer = db.execute('SELECT is_admin FROM users WHERE id=?', (current_uid,)).fetchone()
+        is_admin = viewer and viewer['is_admin']
+        p['locked'] = not (is_subscribed or is_admin)
+    else:
+        p['locked'] = False
+
+    return p
+
+
+def _update_counts(db, user_id):
+    """Sync follower/following/post counts for a user from live data."""
+    db.execute("""UPDATE users SET
+        follower_count  = (SELECT COUNT(*) FROM follows WHERE following_id=?),
+        following_count = (SELECT COUNT(*) FROM follows WHERE follower_id=?),
+        post_count      = (SELECT COUNT(*) FROM posts WHERE user_id=? AND reply_to_id IS NULL)
+        WHERE id=?""", (user_id, user_id, user_id, user_id))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Feed (Home)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/feed')
+@login_required
+def feed():
+    db   = get_db()
+    uid  = session['user_id']
+    tab  = request.args.get('tab', 'for_you')   # 'for_you' | 'following'
+    page = safe_int(request.args.get('page'), 1)
+    per  = 20
+    off  = (page - 1) * per
+
+    if tab == 'following':
+        rows = db.execute("""
+            SELECT p.* FROM posts p
+            WHERE p.reply_to_id IS NULL
+              AND p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?)
+            ORDER BY p.created_at DESC LIMIT ? OFFSET ?
+        """, (uid, per, off)).fetchall()
+    elif tab == 'earn':
+        # Only posts with an active boost the viewer can still earn from
+        rows = db.execute("""
+            SELECT DISTINCT p.* FROM posts p
+            JOIN post_boosts pb ON pb.post_id = p.id
+            WHERE pb.status='active'
+              AND pb.budget_spent < pb.budget
+              AND pb.user_id != ?
+              AND NOT EXISTS (
+                SELECT 1 FROM boost_engagements be
+                WHERE be.boost_id=pb.id AND be.worker_id=?
+              )
+            ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT ? OFFSET ?
+        """, (uid, uid, per, off)).fetchall()
+    else:
+        # For-you: mix of recent posts with boosted posts surfaced higher
+        rows = db.execute("""
+            SELECT p.*,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM post_boosts pb
+                WHERE pb.post_id=p.id AND pb.status='active' AND pb.budget_spent < pb.budget
+              ) THEN 1 ELSE 0 END AS has_active_boost
+            FROM posts p
+            WHERE p.reply_to_id IS NULL
+            ORDER BY has_active_boost DESC, p.created_at DESC LIMIT ? OFFSET ?
+        """, (per, off)).fetchall()
+
+    posts    = [_format_post(r, uid, db) for r in rows]
+    has_more = len(rows) == per
+
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify({'posts': posts, 'has_more': has_more})
+
+    # Suggested users to follow (not already following, not self)
+    suggestions = db.execute("""
+        SELECT id, username, display_name, avatar_url, is_verified, follower_count
+        FROM users
+        WHERE id != ?
+          AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        ORDER BY follower_count DESC, id DESC
+        LIMIT 5
+    """, (uid, uid)).fetchall()
+    suggestions = [dict(s) for s in suggestions]
+
+    # Trending — most-liked posts in last 48h
+    trending = db.execute("""
+        SELECT p.*, u.username, u.display_name, u.avatar_url, u.is_verified
+        FROM posts p JOIN users u ON p.user_id=u.id
+        WHERE p.reply_to_id IS NULL
+          AND p.created_at >= datetime('now', '-48 hours')
+        ORDER BY p.like_count DESC LIMIT 5
+    """).fetchall()
+    trending = [dict(t) for t in trending]
+
+    return render_template('feed.html', posts=posts, tab=tab,
+                           page=page, has_more=has_more,
+                           suggestions=suggestions, trending=trending)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Create / delete post
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post', methods=['POST'])
+@login_required
+def create_post():
+    db      = get_db()
+    uid     = session['user_id']
+    body    = (request.form.get('body') or '').strip()
+    reply_to = safe_int(request.form.get('reply_to_id'), 0) or None
+    repost_of = safe_int(request.form.get('repost_of_id'), 0) or None
+    quote_body = (request.form.get('quote_body') or '').strip() or None
+    subscriber_only = 1 if request.form.get('subscriber_only') else 0
+
+    if not body and not repost_of:
+        return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
+    if len(body) > 500:
+        return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    db.execute("""
+        INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body, is_subscriber_only, created_at)
+        VALUES (?,?,?,?,?,?,?)
+    """, (uid, body, reply_to, repost_of, quote_body, subscriber_only, now))
+    post_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    # Update counts
+    if reply_to:
+        db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=?', (reply_to,))
+        # Notify parent author
+        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (reply_to,)).fetchone()
+        if parent and parent['user_id'] != uid:
+            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            add_notification(db, parent['user_id'],
+                f'💬 @{me["username"]} replied to your post.')
+    if repost_of:
+        db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=?', (repost_of,))
+        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (repost_of,)).fetchone()
+        if parent and parent['user_id'] != uid:
+            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            add_notification(db, parent['user_id'],
+                f'🔁 @{me["username"]} reposted your post.')
+
+    # Extract and store hashtags
+    import re as _re
+    tags = list(set(t.lower() for t in _re.findall(r'#(\w+)', body)))
+    for tag in tags[:10]:  # cap at 10 per post
+        db.execute('INSERT OR IGNORE INTO hashtags (name) VALUES (?)', (tag,))
+        ht = db.execute('SELECT id FROM hashtags WHERE name=?', (tag,)).fetchone()
+        if ht:
+            db.execute('INSERT OR IGNORE INTO post_hashtags (post_id,hashtag_id) VALUES (?,?)',
+                       (post_id, ht['id']))
+    if tags:
+        db.execute('UPDATE posts SET hashtags_cached=? WHERE id=?',
+                   (' '.join('#' + t for t in tags), post_id))
+
+    _update_counts(db, uid)
+    db.commit()
+
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    return jsonify({'success': True, 'post': _format_post(post, uid, db)})
+
+
+@app.route('/post/<int:post_id>/delete', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    db  = get_db()
+    uid = session['user_id']
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+    user = db.execute('SELECT is_admin FROM users WHERE id=?', (uid,)).fetchone()
+    if post['user_id'] != uid and not user['is_admin']:
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
+    # Decrement parent counts
+    if post['reply_to_id']:
+        db.execute('UPDATE posts SET reply_count=MAX(0,reply_count-1) WHERE id=?', (post['reply_to_id'],))
+    if post['repost_of_id']:
+        db.execute('UPDATE posts SET repost_count=MAX(0,repost_count-1) WHERE id=?', (post['repost_of_id'],))
+
+    db.execute('DELETE FROM post_likes WHERE post_id=?', (post_id,))
+    db.execute('DELETE FROM bookmarks  WHERE post_id=?', (post_id,))
+    db.execute('DELETE FROM posts      WHERE id=?', (post_id,))
+    _update_counts(db, uid)
+    db.commit()
+    return jsonify({'success': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Single post + replies
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>')
+@login_required
+def post_detail(post_id):
+    db  = get_db()
+    uid = session['user_id']
+    row = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not row:
+        return render_template('error.html', code=404, message='Post not found.'), 404
+    post = _format_post(row, uid, db)
+
+    replies = db.execute("""
+        SELECT * FROM posts WHERE reply_to_id=? ORDER BY created_at ASC
+    """, (post_id,)).fetchall()
+    replies = [_format_post(r, uid, db) for r in replies]
+
+    return render_template('post_detail.html', post=post, replies=replies)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Like / unlike
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/like', methods=['POST'])
+@login_required
+def toggle_like(post_id):
+    db  = get_db()
+    uid = session['user_id']
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+
+    existing = db.execute('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?',
+                          (uid, post_id)).fetchone()
+    if existing:
+        db.execute('DELETE FROM post_likes WHERE user_id=? AND post_id=?', (uid, post_id))
+        db.execute('UPDATE posts SET like_count=MAX(0,like_count-1) WHERE id=?', (post_id,))
+        liked = False
+    else:
+        db.execute('INSERT OR IGNORE INTO post_likes (user_id,post_id) VALUES (?,?)',
+                   (uid, post_id))
+        db.execute('UPDATE posts SET like_count=like_count+1 WHERE id=?', (post_id,))
+        liked = True
+        if post['user_id'] != uid:
+            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            add_notification(db, post['user_id'],
+                f'❤️ @{me["username"]} liked your post.')
+
+    new_count = db.execute('SELECT like_count FROM posts WHERE id=?', (post_id,)).fetchone()['like_count']
+    db.commit()
+    return jsonify({'success': True, 'liked': liked, 'like_count': new_count})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Bookmark
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/bookmark', methods=['POST'])
+@login_required
+def toggle_bookmark(post_id):
+    db  = get_db()
+    uid = session['user_id']
+    existing = db.execute('SELECT 1 FROM bookmarks WHERE user_id=? AND post_id=?',
+                          (uid, post_id)).fetchone()
+    if existing:
+        db.execute('DELETE FROM bookmarks WHERE user_id=? AND post_id=?', (uid, post_id))
+        saved = False
+    else:
+        db.execute('INSERT OR IGNORE INTO bookmarks (user_id,post_id) VALUES (?,?)',
+                   (uid, post_id))
+        saved = True
+    db.commit()
+    return jsonify({'success': True, 'saved': saved})
+
+
+@app.route('/bookmarks')
+@login_required
+def bookmarks():
+    db  = get_db()
+    uid = session['user_id']
+    rows = db.execute("""
+        SELECT p.* FROM posts p
+        JOIN bookmarks b ON b.post_id=p.id
+        WHERE b.user_id=?
+        ORDER BY b.created_at DESC
+    """, (uid,)).fetchall()
+    posts = [_format_post(r, uid, db) for r in rows]
+    return render_template('bookmarks.html', posts=posts)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Follow / unfollow
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/user/<username>/follow', methods=['POST'])
+@login_required
+def toggle_follow(username):
+    db  = get_db()
+    uid = session['user_id']
+    target = db.execute('SELECT id,username FROM users WHERE username=?', (username,)).fetchone()
+    if not target or target['id'] == uid:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+
+    existing = db.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+                          (uid, target['id'])).fetchone()
+    if existing:
+        db.execute('DELETE FROM follows WHERE follower_id=? AND following_id=?',
+                   (uid, target['id']))
+        following = False
+    else:
+        db.execute('INSERT OR IGNORE INTO follows (follower_id,following_id) VALUES (?,?)',
+                   (uid, target['id']))
+        following = True
+        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        add_notification(db, target['id'],
+            f'👤 @{me["username"]} started following you.')
+
+    _update_counts(db, uid)
+    _update_counts(db, target['id'])
+    db.commit()
+
+    new_followers = db.execute('SELECT follower_count FROM users WHERE id=?',
+                               (target['id'],)).fetchone()['follower_count']
+    return jsonify({'success': True, 'following': following, 'follower_count': new_followers})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Profile
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/user/<username>')
+@login_required
+def profile(username):
+    db  = get_db()
+    uid = session['user_id']
+    target = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not target:
+        return render_template('error.html', code=404, message='User not found.'), 404
+
+    tab = request.args.get('tab', 'posts')   # posts | replies | likes | media
+
+    is_following = bool(db.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+                                   (uid, target['id'])).fetchone())
+    is_own = (uid == target['id'])
+
+    if tab == 'replies':
+        rows = db.execute("""
+            SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NOT NULL
+            ORDER BY created_at DESC LIMIT 40
+        """, (target['id'],)).fetchall()
+    elif tab == 'likes':
+        rows = db.execute("""
+            SELECT p.* FROM posts p
+            JOIN post_likes l ON l.post_id=p.id
+            WHERE l.user_id=?
+            ORDER BY l.created_at DESC LIMIT 40
+        """, (target['id'],)).fetchall()
+    else:  # posts
+        rows = db.execute("""
+            SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL
+            ORDER BY created_at DESC LIMIT 40
+        """, (target['id'],)).fetchall()
+
+    posts = [_format_post(r, uid, db) for r in rows]
+
+    followers = db.execute("""
+        SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified
+        FROM follows f JOIN users u ON u.id=f.follower_id
+        WHERE f.following_id=? LIMIT 6
+    """, (target['id'],)).fetchall()
+    followers = [dict(f) for f in followers]
+
+    # Creator monetisation data
+    tier = db.execute(
+        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1",
+        (target['id'],)
+    ).fetchone()
+
+    is_subscribed = False
+    if not is_own and tier:
+        is_subscribed = bool(db.execute(
+            "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+            (uid, target['id'])
+        ).fetchone())
+
+    # Top tippers for profile sidebar
+    top_tips = db.execute("""
+        SELECT t.amount, u.username, u.avatar_url, u.display_name
+        FROM tips t JOIN users u ON u.id=t.from_user_id
+        WHERE t.to_user_id=?
+        ORDER BY t.amount DESC LIMIT 5
+    """, (target['id'],)).fetchall()
+
+    return render_template('profile.html', target=dict(target),
+                           posts=posts, tab=tab,
+                           is_following=is_following, is_own=is_own,
+                           followers=followers,
+                           tier=dict(tier) if tier else None,
+                           is_subscribed=is_subscribed,
+                           top_tips=[dict(t) for t in top_tips])
+
+
+@app.route('/profile/edit', methods=['GET', 'POST'])
+@login_required
+def edit_profile():
+    db  = get_db()
+    uid = session['user_id']
+    if request.method == 'POST':
+        display_name = (request.form.get('display_name') or '').strip()[:60]
+        bio          = (request.form.get('bio')          or '').strip()[:160]
+        website      = (request.form.get('website')      or '').strip()[:120]
+        location     = (request.form.get('location')     or '').strip()[:60]
+        avatar_url   = (request.form.get('avatar_url')   or '').strip()[:300]
+        banner_url   = (request.form.get('banner_url')   or '').strip()[:300]
+
+        db.execute("""UPDATE users SET
+            display_name=?, bio=?, website=?, location=?,
+            avatar_url=?, banner_url=?
+            WHERE id=?""",
+            (display_name or None, bio or None, website or None,
+             location or None, avatar_url or None, banner_url or None, uid))
+        db.commit()
+        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        return jsonify({'success': True, 'redirect': url_for('profile', username=me['username'])})
+
+    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    return render_template('edit_profile.html', user=dict(user))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Explore / Search
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/explore')
+@login_required
+def explore():
+    db  = get_db()
+    uid = session['user_id']
+    q   = request.args.get('q', '').strip()
+
+    if q:
+        # Search posts (body match) and users (username/display_name match)
+        like = f'%{q}%'
+        post_rows = db.execute("""
+            SELECT p.* FROM posts p
+            WHERE p.body LIKE ? AND p.reply_to_id IS NULL
+            ORDER BY p.like_count DESC, p.created_at DESC LIMIT 30
+        """, (like,)).fetchall()
+        posts = [_format_post(r, uid, db) for r in post_rows]
+
+        users = db.execute("""
+            SELECT id, username, display_name, avatar_url, is_verified,
+                   follower_count, bio
+            FROM users WHERE username LIKE ? OR display_name LIKE ?
+            ORDER BY follower_count DESC LIMIT 10
+        """, (like, like)).fetchall()
+        users = [dict(u) for u in users]
+    else:
+        posts = []
+        users = []
+
+    # Trending posts (last 24h, most liked)
+    trending_posts = db.execute("""
+        SELECT p.* FROM posts p
+        WHERE p.reply_to_id IS NULL
+          AND p.created_at >= datetime('now', '-24 hours')
+        ORDER BY p.like_count DESC, p.reply_count DESC LIMIT 10
+    """).fetchall()
+    trending_posts = [_format_post(r, uid, db) for r in trending_posts]
+
+    # Suggested users
+    suggested = db.execute("""
+        SELECT id, username, display_name, avatar_url, is_verified,
+               follower_count, bio
+        FROM users WHERE id != ?
+          AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        ORDER BY follower_count DESC, id DESC LIMIT 8
+    """, (uid, uid)).fetchall()
+    suggested = [dict(u) for u in suggested]
+
+    return render_template('explore.html', q=q, posts=posts,
+                           users=users, trending_posts=trending_posts,
+                           suggested=suggested)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — Follow lists
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/user/<username>/followers')
+@login_required
+def follower_list(username):
+    db  = get_db()
+    uid = session['user_id']
+    target = db.execute('SELECT id,username,display_name FROM users WHERE username=?', (username,)).fetchone()
+    if not target:
+        return render_template('error.html', code=404, message='User not found.'), 404
+    rows = db.execute("""
+        SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
+               u.follower_count, u.bio,
+               EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
+        FROM follows f JOIN users u ON u.id=f.follower_id
+        WHERE f.following_id=? ORDER BY f.created_at DESC LIMIT 100
+    """, (uid, target['id'])).fetchall()
+    return render_template('follow_list.html', target=dict(target),
+                           users=[dict(r) for r in rows], list_type='Followers')
+
+
+@app.route('/user/<username>/following')
+@login_required
+def following_list(username):
+    db  = get_db()
+    uid = session['user_id']
+    target = db.execute('SELECT id,username,display_name FROM users WHERE username=?', (username,)).fetchone()
+    if not target:
+        return render_template('error.html', code=404, message='User not found.'), 404
+    rows = db.execute("""
+        SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
+               u.follower_count, u.bio,
+               EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
+        FROM follows f JOIN users u ON u.id=f.following_id
+        WHERE f.follower_id=? ORDER BY f.created_at DESC LIMIT 100
+    """, (uid, target['id'])).fetchall()
+    return render_template('follow_list.html', target=dict(target),
+                           users=[dict(r) for r in rows], list_type='Following')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Social — redirect / logged-in root now goes to feed
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Boost a post (native post-level boosting)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/boost', methods=['POST'])
+@login_required
+def boost_post(post_id):
+    """Create a post_boost — spend wallet balance to surface a post in feeds."""
+    db  = get_db()
+    uid = session['user_id']
+
+    post = db.execute('SELECT * FROM posts WHERE id=? AND user_id=?', (post_id, uid)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found or not yours.'}), 404
+
+    engage_type   = (request.form.get('engage_type') or 'like').strip().lower()
+    target_count  = safe_int(request.form.get('target_count'), 0)
+    reward_each   = safe_float(request.form.get('reward_each'), WORKER_REWARD_PER_TASK)
+
+    if engage_type not in ('like', 'follow', 'comment', 'share'):
+        return jsonify({'success': False, 'error': 'Invalid engagement type.'}), 400
+    if target_count < 1:
+        return jsonify({'success': False, 'error': 'Target must be at least 1.'}), 400
+    if reward_each < 0.01:
+        return jsonify({'success': False, 'error': 'Reward must be at least $0.01.'}), 400
+
+    budget = round(target_count * reward_each * (1 / WORKER_REWARD_PER_TASK) * LISTER_COST_PER_TASK, 2)
+    # simplified: budget = target * lister cost
+    budget = round(target_count * LISTER_COST_PER_TASK, 2)
+
+    user = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
+    if budget > user['balance']:
+        return jsonify({'success': False,
+                        'error': f'Insufficient balance. Need ${budget:.2f}, have ${user["balance"]:.2f}.'}), 400
+
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (budget, uid))
+    db.execute("""
+        INSERT INTO post_boosts (post_id, user_id, budget, reward_per_engage,
+                                 engage_type, target_count, status)
+        VALUES (?,?,?,?,?,?,'active')
+    """, (post_id, uid, budget, WORKER_REWARD_PER_TASK, engage_type, target_count))
+    boost_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    db.execute('UPDATE posts SET is_boosted=1 WHERE id=?', (post_id,))
+    add_transaction(db, uid, 'spend', budget,
+                    f'Boost post #{post_id} — {target_count}x {engage_type}')
+    add_notification(db, uid,
+        f'📣 Your post is now boosted! ${budget:.2f} budget, {target_count} target engagements.')
+    db.commit()
+
+    return jsonify({'success': True, 'boost_id': boost_id, 'budget': budget})
+
+
+@app.route('/post/<int:post_id>/boost/cancel', methods=['POST'])
+@login_required
+def cancel_boost(post_id):
+    """Cancel an active boost and refund unspent budget."""
+    db  = get_db()
+    uid = session['user_id']
+
+    boost = db.execute(
+        "SELECT * FROM post_boosts WHERE post_id=? AND user_id=? AND status='active'",
+        (post_id, uid)
+    ).fetchone()
+    if not boost:
+        return jsonify({'success': False, 'error': 'No active boost found.'}), 404
+
+    refund = round(float(boost['budget']) - float(boost['budget_spent']), 6)
+    db.execute("UPDATE post_boosts SET status='cancelled' WHERE id=?", (boost['id'],))
+    if refund > 0:
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (refund, uid))
+        add_transaction(db, uid, 'deposit', refund, f'Boost refund for post #{post_id}')
+        add_notification(db, uid, f'↩️ Boost cancelled. ${refund:.2f} refunded to your wallet.')
+
+    # Only un-boost if no other active boosts on this post
+    other = db.execute(
+        "SELECT id FROM post_boosts WHERE post_id=? AND status='active' AND id!=?",
+        (post_id, boost['id'])
+    ).fetchone()
+    if not other:
+        db.execute('UPDATE posts SET is_boosted=0 WHERE id=?', (post_id,))
+    db.commit()
+
+    return jsonify({'success': True, 'refund': refund})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Earn by engaging with boosted posts
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/earn', methods=['POST'])
+@login_required
+def earn_engagement(post_id):
+    """
+    Worker clicks Earn on a boosted post.
+    Validates they haven't already earned from this boost,
+    credits their wallet, debits the boost budget.
+    """
+    db  = get_db()
+    uid = session['user_id']
+
+    # Find an active boost on this post that the worker hasn't completed
+    boost = db.execute("""
+        SELECT pb.* FROM post_boosts pb
+        WHERE pb.post_id=? AND pb.status='active'
+          AND pb.budget_spent < pb.budget
+          AND pb.user_id != ?
+          AND NOT EXISTS (
+            SELECT 1 FROM boost_engagements be
+            WHERE be.boost_id=pb.id AND be.worker_id=?
+          )
+        ORDER BY pb.created_at DESC LIMIT 1
+    """, (post_id, uid, uid)).fetchone()
+
+    if not boost:
+        return jsonify({'success': False,
+                        'error': 'No earnable boost available on this post.'}), 400
+
+    reward = float(boost['reward_per_engage'])
+
+    # Record engagement
+    db.execute("""
+        INSERT INTO boost_engagements (boost_id, post_id, worker_id, reward, earned_at)
+        VALUES (?,?,?,?,datetime('now'))
+    """, (boost['id'], post_id, uid, reward))
+
+    # Update boost budget and counts
+    db.execute("""
+        UPDATE post_boosts
+        SET budget_spent  = budget_spent + ?,
+            engaged_count = engaged_count + 1,
+            status = CASE
+              WHEN budget_spent + ? >= budget THEN 'completed'
+              WHEN engaged_count + 1 >= target_count THEN 'completed'
+              ELSE status
+            END
+        WHERE id=?
+    """, (reward, reward, boost['id']))
+
+    # Credit worker
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
+    add_transaction(db, uid, 'earn', reward,
+                    f'Earned from boosted post #{post_id} ({boost["engage_type"]})')
+
+    # Notify post owner if boost just completed
+    updated_boost = db.execute('SELECT * FROM post_boosts WHERE id=?', (boost['id'],)).fetchone()
+    if updated_boost and updated_boost['status'] == 'completed':
+        db.execute('UPDATE posts SET is_boosted=0 WHERE id=?', (post_id,))
+        add_notification(db, boost['user_id'],
+            f'🎉 Your boost on post #{post_id} completed! '
+            f'{updated_boost["engaged_count"]} engagements reached.')
+
+    check_and_award_referral_bonus(db, uid)
+    db.commit()
+
+    new_balance = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
+    return jsonify({
+        'success': True,
+        'reward': reward,
+        'balance': new_balance,
+        'message': f'+${reward:.2f} earned!'
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Hashtag feeds
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/tag/<tag>')
+@login_required
+def hashtag_feed(tag):
+    db  = get_db()
+    uid = session['user_id']
+    tag = tag.lower().lstrip('#')
+
+    ht = db.execute('SELECT * FROM hashtags WHERE name=?', (tag,)).fetchone()
+    if not ht:
+        posts = []
+    else:
+        rows = db.execute("""
+            SELECT p.* FROM posts p
+            JOIN post_hashtags ph ON ph.post_id=p.id
+            WHERE ph.hashtag_id=? AND p.reply_to_id IS NULL
+            ORDER BY p.created_at DESC LIMIT 40
+        """, (ht['id'],)).fetchall()
+        posts = [_format_post(r, uid, db) for r in rows]
+
+    # Trending hashtags sidebar
+    trending_tags = db.execute("""
+        SELECT h.name, COUNT(ph.post_id) as cnt
+        FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
+        JOIN posts p ON p.id=ph.post_id
+        WHERE p.created_at >= datetime('now', '-7 days')
+        GROUP BY h.id ORDER BY cnt DESC LIMIT 10
+    """).fetchall()
+
+    return render_template('hashtag_feed.html', tag=tag, posts=posts,
+                           trending_tags=[dict(t) for t in trending_tags])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — My boosts dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/boosts')
+@login_required
+def my_boosts():
+    db  = get_db()
+    uid = session['user_id']
+
+    boosts = db.execute("""
+        SELECT pb.*, p.body, p.like_count, p.reply_count
+        FROM post_boosts pb JOIN posts p ON p.id=pb.post_id
+        WHERE pb.user_id=?
+        ORDER BY pb.created_at DESC LIMIT 50
+    """, (uid,)).fetchall()
+
+    total_spent  = sum(float(b['budget_spent']) for b in boosts)
+    total_budget = sum(float(b['budget'])       for b in boosts)
+    total_engaged = sum(int(b['engaged_count']) for b in boosts)
+
+    # Earned from others' boosts
+    earned = db.execute("""
+        SELECT COALESCE(SUM(be.reward),0) as total
+        FROM boost_engagements be WHERE be.worker_id=?
+    """, (uid,)).fetchone()['total']
+
+    return render_template('my_boosts.html',
+                           boosts=[dict(b) for b in boosts],
+                           total_spent=total_spent,
+                           total_budget=total_budget,
+                           total_engaged=total_engaged,
+                           earned_from_boosts=float(earned))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Trending hashtags API (for explore sidebar)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/trending/tags')
+@login_required
+def api_trending_tags():
+    db = get_db()
+    rows = db.execute("""
+        SELECT h.name, COUNT(ph.post_id) as cnt
+        FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
+        JOIN posts p ON p.id=ph.post_id
+        WHERE p.created_at >= datetime('now', '-7 days')
+        GROUP BY h.id ORDER BY cnt DESC LIMIT 15
+    """).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Earn feed API (paginated JSON for infinite scroll)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/earn/posts')
+@login_required
+def api_earn_posts():
+    db   = get_db()
+    uid  = session['user_id']
+    page = safe_int(request.args.get('page'), 1)
+    per  = 10
+    off  = (page - 1) * per
+
+    rows = db.execute("""
+        SELECT DISTINCT p.* FROM posts p
+        JOIN post_boosts pb ON pb.post_id = p.id
+        WHERE pb.status='active'
+          AND pb.budget_spent < pb.budget
+          AND pb.user_id != ?
+          AND NOT EXISTS (
+            SELECT 1 FROM boost_engagements be
+            WHERE be.boost_id=pb.id AND be.worker_id=?
+          )
+        ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT ? OFFSET ?
+    """, (uid, uid, per, off)).fetchall()
+
+    posts    = [_format_post(r, uid, db) for r in rows]
+    has_more = len(rows) == per
+    return jsonify({'posts': posts, 'has_more': has_more})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Tips
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/tip', methods=['POST'])
+@login_required
+def tip_post(post_id):
+    """Send a USDT tip tied to a specific post."""
+    db  = get_db()
+    uid = session['user_id']
+
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found.'}), 404
+    if post['user_id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot tip your own post.'}), 400
+
+    amount  = safe_float(request.form.get('amount'), 0)
+    message = (request.form.get('message') or '').strip()[:120]
+
+    if amount < 0.01:
+        return jsonify({'success': False, 'error': 'Minimum tip is $0.01.'}), 400
+
+    sender = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
+    if amount > sender['balance']:
+        return jsonify({'success': False, 'error': 'Insufficient balance.'}), 400
+
+    # Debit sender, credit recipient
+    db.execute('UPDATE users SET balance=balance-?, total_tips_sent=total_tips_sent+? WHERE id=?',
+               (amount, amount, uid))
+    db.execute('UPDATE users SET balance=balance+?, total_tips_received=total_tips_received+? WHERE id=?',
+               (amount, amount, post['user_id']))
+
+    db.execute("""
+        INSERT INTO tips (from_user_id, to_user_id, post_id, amount, message)
+        VALUES (?,?,?,?,?)
+    """, (uid, post['user_id'], post_id, amount, message or None))
+
+    add_transaction(db, uid, 'tip_sent', amount,
+                    f'Tip to @{db.execute("SELECT username FROM users WHERE id=?", (post["user_id"],)).fetchone()["username"]} on post #{post_id}')
+    add_transaction(db, post['user_id'], 'tip_received', amount,
+                    f'Tip from @{sender["username"]} on post #{post_id}')
+
+    tip_msg = f'💰 @{sender["username"]} tipped you ${amount:.2f} USDT'
+    if message:
+        tip_msg += f': "{message}"'
+    add_notification(db, post['user_id'], tip_msg)
+    db.commit()
+
+    new_bal = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
+    return jsonify({'success': True, 'amount': amount, 'balance': new_bal,
+                    'message': f'${amount:.2f} tip sent!'})
+
+
+@app.route('/user/<username>/tip', methods=['POST'])
+@login_required
+def tip_user(username):
+    """Send a direct USDT tip to a user (not tied to a post)."""
+    db  = get_db()
+    uid = session['user_id']
+
+    target = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not target:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+    if target['id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot tip yourself.'}), 400
+
+    amount  = safe_float(request.form.get('amount'), 0)
+    message = (request.form.get('message') or '').strip()[:120]
+
+    if amount < 0.01:
+        return jsonify({'success': False, 'error': 'Minimum tip is $0.01.'}), 400
+
+    sender = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
+    if amount > sender['balance']:
+        return jsonify({'success': False, 'error': 'Insufficient balance.'}), 400
+
+    db.execute('UPDATE users SET balance=balance-?, total_tips_sent=total_tips_sent+? WHERE id=?',
+               (amount, amount, uid))
+    db.execute('UPDATE users SET balance=balance+?, total_tips_received=total_tips_received+? WHERE id=?',
+               (amount, amount, target['id']))
+
+    db.execute("""
+        INSERT INTO tips (from_user_id, to_user_id, amount, message)
+        VALUES (?,?,?,?)
+    """, (uid, target['id'], amount, message or None))
+
+    add_transaction(db, uid, 'tip_sent', amount, f'Tip to @{username}')
+    add_transaction(db, target['id'], 'tip_received', amount, f'Tip from @{sender["username"]}')
+
+    notif = f'💰 @{sender["username"]} tipped you ${amount:.2f} USDT'
+    if message:
+        notif += f': "{message}"'
+    add_notification(db, target['id'], notif)
+    db.commit()
+
+    new_bal = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
+    return jsonify({'success': True, 'amount': amount, 'balance': new_bal,
+                    'message': f'${amount:.2f} sent to @{username}!'})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Subscription tiers
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/creator/setup', methods=['GET', 'POST'])
+@login_required
+def creator_setup():
+    """Create or update the current user's subscription tier."""
+    db  = get_db()
+    uid = session['user_id']
+
+    if request.method == 'POST':
+        price       = safe_float(request.form.get('price_usd'), 0)
+        title       = (request.form.get('title') or '').strip()[:60]
+        description = (request.form.get('description') or '').strip()[:300]
+        perks       = (request.form.get('perks') or '').strip()[:500]
+        is_active   = 1 if request.form.get('is_active') else 0
+
+        if price < 0.10:
+            return jsonify({'success': False,
+                            'error': 'Minimum subscription price is $0.10/month.'}), 400
+        if not title:
+            return jsonify({'success': False, 'error': 'Tier title is required.'}), 400
+
+        existing = db.execute(
+            'SELECT id FROM subscription_tiers WHERE creator_id=?', (uid,)
+        ).fetchone()
+
+        if existing:
+            db.execute("""
+                UPDATE subscription_tiers
+                SET price_usd=?, title=?, description=?, perks=?, is_active=?
+                WHERE creator_id=?
+            """, (price, title, description, perks, is_active, uid))
+        else:
+            db.execute("""
+                INSERT INTO subscription_tiers
+                    (creator_id, price_usd, title, description, perks, is_active)
+                VALUES (?,?,?,?,?,?)
+            """, (uid, price, title, description, perks, is_active))
+
+        db.commit()
+        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        return jsonify({'success': True,
+                        'redirect': url_for('profile', username=me['username'])})
+
+    tier = db.execute(
+        'SELECT * FROM subscription_tiers WHERE creator_id=?', (uid,)
+    ).fetchone()
+    return render_template('creator_setup.html', tier=dict(tier) if tier else None)
+
+
+@app.route('/user/<username>/subscribe', methods=['POST'])
+@login_required
+def subscribe(username):
+    """Subscribe to a creator — charge wallet monthly rate immediately."""
+    db  = get_db()
+    uid = session['user_id']
+
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not creator:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+    if creator['id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot subscribe to yourself.'}), 400
+
+    tier = db.execute(
+        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1",
+        (creator['id'],)
+    ).fetchone()
+    if not tier:
+        return jsonify({'success': False,
+                        'error': 'This creator has no active subscription tier.'}), 400
+
+    existing = db.execute(
+        "SELECT * FROM subscriptions WHERE subscriber_id=? AND creator_id=?",
+        (uid, creator['id'])
+    ).fetchone()
+    if existing and existing['status'] == 'active':
+        return jsonify({'success': False, 'error': 'Already subscribed.'}), 400
+
+    subscriber = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
+    price = float(tier['price_usd'])
+    if price > subscriber['balance']:
+        return jsonify({'success': False,
+                        'error': f'Insufficient balance. Need ${price:.2f}.'}), 400
+
+    from datetime import timedelta
+    now     = datetime.now(timezone.utc)
+    expires = (now + timedelta(days=30)).isoformat()
+
+    # Charge subscriber
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (price, uid))
+    # Pay creator (platform takes 0% — creators keep everything)
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (price, creator['id']))
+
+    if existing:
+        db.execute("""
+            UPDATE subscriptions SET status='active', started_at=?, expires_at=?, tier_id=?
+            WHERE subscriber_id=? AND creator_id=?
+        """, (now.isoformat(), expires, tier['id'], uid, creator['id']))
+    else:
+        db.execute("""
+            INSERT INTO subscriptions (subscriber_id, creator_id, tier_id, started_at, expires_at)
+            VALUES (?,?,?,?,?)
+        """, (uid, creator['id'], tier['id'], now.isoformat(), expires))
+        # Update creator subscriber count
+        db.execute("""
+            UPDATE users SET subscriber_count=(
+                SELECT COUNT(*) FROM subscriptions
+                WHERE creator_id=? AND status='active'
+            ) WHERE id=?
+        """, (creator['id'], creator['id']))
+
+    add_transaction(db, uid, 'subscription', price,
+                    f'Subscription to @{username} ({tier["title"]})')
+    add_transaction(db, creator['id'], 'earn', price,
+                    f'Subscription from @{subscriber["username"]} ({tier["title"]})')
+    add_notification(db, creator['id'],
+        f'🎉 @{subscriber["username"]} subscribed to your {tier["title"]} tier — '
+        f'${price:.2f}/month!')
+    add_notification(db, uid,
+        f'✅ You\'re subscribed to @{username}\'s {tier["title"]} tier. Expires in 30 days.')
+    db.commit()
+
+    return jsonify({'success': True, 'price': price,
+                    'message': f'Subscribed to @{username}!'})
+
+
+@app.route('/user/<username>/unsubscribe', methods=['POST'])
+@login_required
+def unsubscribe(username):
+    """Cancel a subscription (no refund — access remains until expiry)."""
+    db  = get_db()
+    uid = session['user_id']
+
+    creator = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    if not creator:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+
+    sub = db.execute(
+        "SELECT * FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+        (uid, creator['id'])
+    ).fetchone()
+    if not sub:
+        return jsonify({'success': False, 'error': 'No active subscription found.'}), 404
+
+    db.execute(
+        "UPDATE subscriptions SET status='cancelled' WHERE subscriber_id=? AND creator_id=?",
+        (uid, creator['id'])
+    )
+    db.execute("""
+        UPDATE users SET subscriber_count=(
+            SELECT COUNT(*) FROM subscriptions WHERE creator_id=? AND status='active'
+        ) WHERE id=?
+    """, (creator['id'], creator['id']))
+    add_notification(db, uid,
+        f'↩️ Subscription to @{username} cancelled. Access lasts until {sub["expires_at"][:10]}.')
+    db.commit()
+
+    return jsonify({'success': True, 'expires_at': sub['expires_at'][:10],
+                    'message': f'Subscription cancelled. Access until {sub["expires_at"][:10]}.'})
+
+
+@app.route('/user/<username>/subscribers')
+@login_required
+def subscriber_list(username):
+    """Show a creator's subscriber list (visible to creator + admin only)."""
+    db  = get_db()
+    uid = session['user_id']
+
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not creator:
+        return render_template('error.html', code=404, message='User not found.'), 404
+
+    viewer = db.execute('SELECT is_admin FROM users WHERE id=?', (uid,)).fetchone()
+    if creator['id'] != uid and not viewer['is_admin']:
+        return render_template('error.html', code=403, message='Access denied.'), 403
+
+    subs = db.execute("""
+        SELECT s.*, u.username, u.display_name, u.avatar_url, u.is_verified,
+               u.follower_count, t.title as tier_title, t.price_usd
+        FROM subscriptions s
+        JOIN users u ON u.id=s.subscriber_id
+        JOIN subscription_tiers t ON t.id=s.tier_id
+        WHERE s.creator_id=?
+        ORDER BY s.started_at DESC
+    """, (creator['id'],)).fetchall()
+
+    active_count    = sum(1 for s in subs if s['status'] == 'active')
+    monthly_revenue = sum(float(s['price_usd']) for s in subs if s['status'] == 'active')
+
+    return render_template('subscriber_list.html',
+                           creator=dict(creator),
+                           subs=[dict(s) for s in subs],
+                           active_count=active_count,
+                           monthly_revenue=monthly_revenue)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Creator earnings dashboard
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/creator/earnings')
+@login_required
+def creator_earnings():
+    db  = get_db()
+    uid = session['user_id']
+
+    tier = db.execute(
+        'SELECT * FROM subscription_tiers WHERE creator_id=?', (uid,)
+    ).fetchone()
+
+    # Tips received
+    tips_received = db.execute("""
+        SELECT t.*, u.username as sender_name, u.avatar_url as sender_avatar,
+               p.body as post_body
+        FROM tips t
+        JOIN users u ON u.id=t.from_user_id
+        LEFT JOIN posts p ON p.id=t.post_id
+        WHERE t.to_user_id=?
+        ORDER BY t.created_at DESC LIMIT 50
+    """, (uid,)).fetchall()
+
+    # Tips sent
+    tips_sent = db.execute("""
+        SELECT t.*, u.username as recipient_name
+        FROM tips t JOIN users u ON u.id=t.to_user_id
+        WHERE t.from_user_id=? ORDER BY t.created_at DESC LIMIT 20
+    """, (uid,)).fetchall()
+
+    # Active subscribers
+    subscribers = db.execute("""
+        SELECT s.*, u.username, u.display_name, u.avatar_url,
+               t.title as tier_title, t.price_usd
+        FROM subscriptions s
+        JOIN users u ON u.id=s.subscriber_id
+        JOIN subscription_tiers t ON t.id=s.tier_id
+        WHERE s.creator_id=? AND s.status='active'
+        ORDER BY s.started_at DESC
+    """, (uid,)).fetchall()
+
+    # Subscription revenue (all time)
+    sub_revenue = db.execute("""
+        SELECT COALESCE(SUM(amount),0) FROM transactions
+        WHERE user_id=? AND type='earn'
+          AND description LIKE 'Subscription from %'
+    """, (uid,)).fetchone()[0]
+
+    # Boost earnings (engaging with others)
+    boost_earned = db.execute("""
+        SELECT COALESCE(SUM(reward),0) FROM boost_engagements WHERE worker_id=?
+    """, (uid,)).fetchone()[0]
+
+    me = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    total_tips_received = float(me['total_tips_received'] or 0)
+    monthly_subs = sum(float(s['price_usd']) for s in subscribers)
+
+    return render_template('creator_earnings.html',
+                           tier=dict(tier) if tier else None,
+                           tips_received=[dict(t) for t in tips_received],
+                           tips_sent=[dict(t) for t in tips_sent],
+                           subscribers=[dict(s) for s in subscribers],
+                           total_tips=total_tips_received,
+                           sub_revenue=float(sub_revenue),
+                           boost_earned=float(boost_earned),
+                           monthly_subs=monthly_subs,
+                           me=dict(me))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Creator stats API (for profile sidebar)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/creator/stats/<username>')
+@login_required
+def api_creator_stats(username):
+    db = get_db()
+    uid = session['user_id']
+
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not creator:
+        return jsonify({'success': False}), 404
+
+    tier = db.execute(
+        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1",
+        (creator['id'],)
+    ).fetchone()
+
+    is_subscribed = bool(db.execute(
+        "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+        (uid, creator['id'])
+    ).fetchone()) if uid != creator['id'] else False
+
+    top_tips = db.execute("""
+        SELECT t.amount, t.message, u.username, u.avatar_url
+        FROM tips t JOIN users u ON u.id=t.from_user_id
+        WHERE t.to_user_id=?
+        ORDER BY t.amount DESC LIMIT 3
+    """, (creator['id'],)).fetchall()
+
+    return jsonify({
+        'success': True,
+        'tier': dict(tier) if tier else None,
+        'is_subscribed': is_subscribed,
+        'subscriber_count': creator['subscriber_count'] or 0,
+        'total_tips': float(creator['total_tips_received'] or 0),
+        'top_tips': [dict(t) for t in top_tips],
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Upgrade post creation to support subscriber-only posts
+# ─────────────────────────────────────────────────────────────────────────────
+# (handled via is_subscriber_only flag in create_post — injected below)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Error handlers

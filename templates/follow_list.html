@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ list_type }} — @{{ target.username }} — DUYS Boost{% endblock %}
+{% block page_title %}{{ list_type }}{% endblock %}
+{% block content %}
+<div style="max-width:600px;margin:0 auto">
+  <div class="card mb-12" style="padding:14px 20px">
+    <div class="section-title">
+      <a href="{{ url_for('profile', username=target.username) }}"
+         class="text-accent">@{{ target.username }}</a>'s {{ list_type }}
+    </div>
+  </div>
+  {% if users %}
+  {% for u in users %}
+  <div class="card mb-8" style="padding:14px 18px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="{{ url_for('profile', username=u.username) }}">
+        <div class="avatar avatar-md">
+          {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
+          {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
+        </div>
+      </a>
+      <div style="flex:1;min-width:0">
+        <a href="{{ url_for('profile', username=u.username) }}" class="fw-700">
+          {{ u.display_name or u.username }}
+          {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+        </a>
+        <div class="text-xs text-muted">@{{ u.username }} · {{ u.follower_count or 0 }} followers</div>
+        {% if u.bio %}<div class="text-sm text-muted mt-4">{{ u.bio[:80] }}</div>{% endif %}
+      </div>
+      {% if not u.you_follow %}
+      <button class="btn btn-primary btn-sm" onclick="followUser('{{ u.username }}', this)">Follow</button>
+      {% else %}
+      <button class="btn btn-ghost btn-sm" onclick="followUser('{{ u.username }}', this)">Following</button>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty-state"><div class="empty-icon">👤</div>
+    <div class="empty-title">No {{ list_type | lower }} yet</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function followUser(username, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.className = `btn ${d.following ? 'btn-ghost' : 'btn-primary'} btn-sm`;
+  }
+  btn.disabled = false;
+}
+window.followUser = followUser;
+</script>
+{% endblock %}

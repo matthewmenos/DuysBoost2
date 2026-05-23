@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Creator Setup — DUYS Boost{% endblock %}
+{% block page_title %}Creator Setup{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:0 auto">
+  <div class="card">
+    <div class="section-title mb-4">🎨 Creator Subscription Tier</div>
+    <p class="text-muted text-sm mb-20">
+      Set up a monthly subscription that your followers can join to access exclusive posts and support your work.
+      You keep 100% of subscription revenue — no platform cut.
+    </p>
+
+    <form id="creator-form" novalidate>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label" for="tier-title">Tier name</label>
+          <input class="form-input" id="tier-title" name="title" type="text"
+                 maxlength="60" required
+                 value="{{ tier.title if tier else 'Supporter' }}"
+                 placeholder="e.g. Supporter, VIP, Inner Circle">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="tier-price">Monthly price (USD)</label>
+          <div style="position:relative">
+            <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700">$</span>
+            <input class="form-input" id="tier-price" name="price_usd" type="number"
+                   step="0.01" min="0.10" required inputmode="decimal"
+                   value="{{ '%.2f'|format(tier.price_usd) if tier else '5.00' }}"
+                   style="padding-left:28px">
+          </div>
+          <div class="form-hint">Minimum $0.10 / month</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="tier-desc">Description</label>
+        <textarea class="form-input" id="tier-desc" name="description"
+                  maxlength="300" rows="2"
+                  placeholder="What is this tier about?">{{ tier.description or '' if tier else '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="tier-perks">Perks <span class="optional">(one per line)</span></label>
+        <textarea class="form-input" id="tier-perks" name="perks"
+                  maxlength="500" rows="4"
+                  placeholder="Exclusive posts&#10;Early access to content&#10;Direct message priority">{{ tier.perks or '' if tier else '' }}</textarea>
+        <div class="form-hint">Subscribers will see this list on your profile.</div>
+      </div>
+
+      <div class="form-group" style="display:flex;align-items:center;gap:12px">
+        <input type="checkbox" id="tier-active" name="is_active"
+               {% if not tier or tier.is_active %}checked{% endif %}
+               style="width:18px;height:18px;accent-color:var(--accent)">
+        <label for="tier-active" style="font-size:14px;font-weight:600;cursor:pointer">
+          Tier is active (subscribers can join)
+        </label>
+      </div>
+
+      <div class="info-box mb-16">
+        🔒 Once you post with "Subscribers only", only active subscribers can see those posts.
+        Existing posts are unaffected.
+      </div>
+
+      <div id="creator-error" class="error-list" style="display:none"></div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary btn-lg">
+          {{ 'Update tier' if tier else 'Launch tier 🚀' }}
+        </button>
+        <a href="{{ url_for('creator_earnings') }}" class="btn btn-ghost btn-lg">View earnings →</a>
+      </div>
+    </form>
+  </div>
+
+  {% if tier %}
+  <div class="card mt-16">
+    <div class="section-title mb-12">Preview — what subscribers see</div>
+    <div class="tier-preview-card">
+      <div class="tier-preview-header">
+        <div class="tier-preview-badge">⭐ {{ tier.title }}</div>
+        <div class="tier-preview-price">${{ '%.2f'|format(tier.price_usd) }}<span class="text-muted text-sm">/mo</span></div>
+      </div>
+      {% if tier.description %}<p class="text-sm text-muted" style="margin:8px 0">{{ tier.description }}</p>{% endif %}
+      {% if tier.perks %}
+      <ul class="tier-perks-list">
+        {% for perk in tier.perks.split('\n') if perk.strip() %}
+        <li>✓ {{ perk.strip() }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('creator-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  const err = document.getElementById('creator-error');
+  err.style.display = 'none';
+  const orig = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
+  try {
+    const r = await fetch('/creator/setup', { method: 'POST', body: new FormData(e.target) });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Tier saved!');
+      setTimeout(() => location.href = d.redirect, 700);
+    } else {
+      err.style.display = 'block'; err.textContent = d.error || 'Could not save.';
+    }
+  } catch(_) {
+    err.style.display = 'block'; err.textContent = 'Network error.';
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Edit Profile — DUYS Boost{% endblock %}
+{% block page_title %}Edit Profile{% endblock %}
+{% block content %}
+<div style="max-width:600px;margin:0 auto">
+  <div class="card">
+    <div class="section-title mb-16">Edit your profile</div>
+    <form id="edit-profile-form" novalidate>
+      <div class="form-group">
+        <label class="form-label">Display name</label>
+        <input class="form-input" name="display_name" type="text" maxlength="60"
+               value="{{ user.display_name or '' }}" placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Bio <span class="optional">(160 chars max)</span></label>
+        <textarea class="form-input" name="bio" maxlength="160" rows="3"
+                  placeholder="Tell people about yourself…">{{ user.bio or '' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" name="location" type="text" maxlength="60"
+               value="{{ user.location or '' }}" placeholder="Where are you?">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Website</label>
+        <input class="form-input" name="website" type="url" maxlength="120"
+               value="{{ user.website or '' }}" placeholder="https://yoursite.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Avatar URL</label>
+        <input class="form-input" name="avatar_url" type="url" maxlength="300"
+               value="{{ user.avatar_url or '' }}" placeholder="https://…/avatar.jpg">
+        <div class="form-hint">Direct image URL (JPG, PNG, WebP)</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Banner URL</label>
+        <input class="form-input" name="banner_url" type="url" maxlength="300"
+               value="{{ user.banner_url or '' }}" placeholder="https://…/banner.jpg">
+        <div class="form-hint">Recommended: 1500 × 500px</div>
+      </div>
+      <div id="edit-error" class="error-list" style="display:none"></div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a href="{{ url_for('profile', username=user.username) }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('edit-profile-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  const orig = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
+  const err = document.getElementById('edit-error'); err.style.display = 'none';
+  try {
+    const r = await fetch('/profile/edit', { method: 'POST', body: new FormData(e.target) });
+    const d = await r.json();
+    if (d.success) { showToast('Profile updated!'); setTimeout(()=>location.href=d.redirect, 800); }
+    else { err.style.display='block'; err.textContent = d.error || 'Could not save.'; }
+  } catch(_){ err.style.display='block'; err.textContent='Network error.'; }
+  finally { btn.textContent=orig; btn.disabled=false; }
+});
+</script>
+{% endblock %}
