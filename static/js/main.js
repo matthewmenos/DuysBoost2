@@ -190,6 +190,26 @@
       setInterval(loadNotifications, 30000);
     }
 
+    // ── DM unread count polling ─────────────────────────────────────────
+    async function loadDmCount() {
+      try {
+        const r = await fetch('/api/messages/unread');
+        const d = await r.json();
+        const cnt = d.count || 0;
+        const bottomDmBadge  = document.getElementById('bottom-dm-badge');
+        const sidebarDmBadge = document.getElementById('sidebar-dm-badge');
+        [bottomDmBadge, sidebarDmBadge].forEach(function(el) {
+          if (!el) return;
+          el.textContent = cnt;
+          el.style.display = cnt > 0 ? 'inline-flex' : 'none';
+        });
+      } catch(_) {}
+    }
+    if (notifBtn) {
+      loadDmCount();
+      setInterval(loadDmCount, 15000);
+    }
+
     // ── Modal helpers ───────────────────────────────────────────────────
     function openModal(id) {
       const m = document.getElementById(id);
@@ -251,4 +271,63 @@
       return { level: score, label: labels[score] };
     }
   });
+})();
+
+// ── Phase 4: Autocomplete keyboard navigation ─────────────────────────────
+(function() {
+  document.addEventListener('keydown', function(e) {
+    const dropdown = document.getElementById('ac-dropdown');
+    if (!dropdown || !dropdown.classList.contains('open')) return;
+    const items = Array.from(dropdown.querySelectorAll('.ac-item'));
+    if (!items.length) return;
+    const current = dropdown.querySelector('.ac-item.selected');
+    let idx = items.indexOf(current);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (current) current.classList.remove('selected');
+      idx = (idx + 1) % items.length;
+      items[idx].classList.add('selected');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (current) current.classList.remove('selected');
+      idx = (idx - 1 + items.length) % items.length;
+      items[idx].classList.add('selected');
+      items[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && current) {
+      e.preventDefault();
+      current.click();
+    }
+  });
+})();
+
+// ── Online heartbeat (runs on every page when logged in) ─────────────────
+(function() {
+  const notifBtn = document.getElementById('notif-btn');
+  if (!notifBtn) return;  // not logged in
+  function heartbeat() {
+    fetch('/api/online/heartbeat', { method: 'POST' }).catch(() => {});
+  }
+  heartbeat();
+  setInterval(heartbeat, 30000);
+})();
+
+// ── Post image lightbox (for feed media images) ───────────────────────────
+(function() {
+  function openPostLightbox(postId) {
+    const card = document.querySelector(`[data-post-id="${postId}"]`);
+    if (!card) return;
+    const img = card.querySelector('.post-media-img');
+    if (!img) return;
+    const lb = document.createElement('div');
+    lb.className = 'post-lightbox';
+    lb.innerHTML = `<img src="${img.src}" alt="">`;
+    lb.addEventListener('click', () => lb.remove());
+    document.addEventListener('keydown', function esc(e) {
+      if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); }
+    });
+    document.body.appendChild(lb);
+  }
+  window.openPostLightbox = openPostLightbox;
 })();

@@ -1,45 +1,143 @@
 {% extends "base.html" %}
 {% block title %}Edit Profile — DUYS Boost{% endblock %}
 {% block page_title %}Edit Profile{% endblock %}
+
+{% block head_extra %}
+<style>
+.photo-picker {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  margin-bottom: 24px;
+}
+.photo-preview-wrap {
+  position: relative; cursor: pointer;
+  transition: opacity var(--transition);
+}
+.photo-preview-wrap:hover { opacity: .88; }
+.photo-preview-wrap:hover .photo-overlay { opacity: 1; }
+.photo-overlay {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity var(--transition);
+  pointer-events: none;
+  font-size: 22px;
+}
+.photo-input { display: none; }
+
+.banner-picker {
+  width: 100%; height: 96px;
+  border-radius: var(--radius);
+  overflow: hidden; cursor: pointer;
+  position: relative;
+  border: 2px dashed var(--border);
+  transition: border-color var(--transition);
+  background: var(--surface-2);
+}
+.banner-picker:hover { border-color: var(--accent); }
+.banner-picker img { width:100%; height:100%; object-fit:cover; display:block; }
+.banner-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity var(--transition);
+  font-size: 15px; font-weight: 600; color: #fff; gap: 6px;
+}
+.banner-picker:hover .banner-overlay { opacity: 1; }
+.banner-empty {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 100%; color: var(--muted); font-size: 14px; font-weight: 600;
+}
+
+.upload-progress {
+  width: 100%; height: 3px; background: var(--border);
+  border-radius: 2px; overflow: hidden; display: none;
+}
+.upload-progress-bar {
+  height: 100%; background: var(--gradient-primary);
+  border-radius: 2px;
+  animation: progressPulse 1s ease-in-out infinite;
+}
+@keyframes progressPulse {
+  0%,100% { opacity: 1; } 50% { opacity: .6; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div style="max-width:600px;margin:0 auto">
   <div class="card">
-    <div class="section-title mb-16">Edit your profile</div>
+    <div class="section-title mb-20">Edit your profile</div>
+
+    <!-- Banner picker -->
+    <div class="form-group">
+      <label class="form-label">Banner photo</label>
+      <div class="banner-picker" id="banner-picker" onclick="document.getElementById('banner-input').click()">
+        {% if user.banner_url %}
+          <img src="{{ user.banner_url }}" alt="Banner" id="banner-preview">
+          <div class="banner-overlay">📷 Change banner</div>
+        {% else %}
+          <div class="banner-empty" id="banner-empty">
+            <span>📷</span> Upload a banner photo
+          </div>
+          <img src="" alt="" id="banner-preview" style="display:none">
+        {% endif %}
+      </div>
+      <input type="file" id="banner-input" class="photo-input"
+             accept="image/jpeg,image/png,image/webp,image/gif">
+      <div class="upload-progress" id="banner-progress"><div class="upload-progress-bar"></div></div>
+    </div>
+
+    <!-- Avatar picker -->
+    <div class="photo-picker">
+      <div class="photo-preview-wrap" onclick="document.getElementById('avatar-input').click()">
+        <div class="avatar" style="width:88px;height:88px;font-size:34px" id="avatar-wrap">
+          {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" alt="{{ user.username }}" id="avatar-preview">
+          {% else %}
+            <span id="avatar-initials">{{ (user.display_name or user.username or '?')[0].upper() }}</span>
+          {% endif %}
+        </div>
+        <div class="photo-overlay">📷</div>
+      </div>
+      <div style="text-align:center">
+        <div class="fw-700" style="font-size:15px">Profile photo</div>
+        <div class="text-xs text-muted mt-4">JPG, PNG, WebP or GIF · max 5 MB</div>
+      </div>
+      <input type="file" id="avatar-input" class="photo-input"
+             accept="image/jpeg,image/png,image/webp,image/gif">
+      <div class="upload-progress" id="avatar-progress"><div class="upload-progress-bar"></div></div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Text fields -->
     <form id="edit-profile-form" novalidate>
       <div class="form-group">
-        <label class="form-label">Display name</label>
-        <input class="form-input" name="display_name" type="text" maxlength="60"
+        <label class="form-label" for="ep-display">Display name</label>
+        <input class="form-input" id="ep-display" name="display_name" type="text" maxlength="60"
                value="{{ user.display_name or '' }}" placeholder="Your name">
       </div>
       <div class="form-group">
-        <label class="form-label">Bio <span class="optional">(160 chars max)</span></label>
-        <textarea class="form-input" name="bio" maxlength="160" rows="3"
+        <label class="form-label" for="ep-bio">Bio <span class="optional">(160 chars)</span></label>
+        <textarea class="form-input" id="ep-bio" name="bio" maxlength="160" rows="3"
                   placeholder="Tell people about yourself…">{{ user.bio or '' }}</textarea>
       </div>
-      <div class="form-group">
-        <label class="form-label">Location</label>
-        <input class="form-input" name="location" type="text" maxlength="60"
-               value="{{ user.location or '' }}" placeholder="Where are you?">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label" for="ep-location">Location</label>
+          <input class="form-input" id="ep-location" name="location" type="text" maxlength="60"
+                 value="{{ user.location or '' }}" placeholder="City, Country">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ep-website">Website</label>
+          <input class="form-input" id="ep-website" name="website" type="url" maxlength="120"
+                 value="{{ user.website or '' }}" placeholder="https://…">
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Website</label>
-        <input class="form-input" name="website" type="url" maxlength="120"
-               value="{{ user.website or '' }}" placeholder="https://yoursite.com">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Avatar URL</label>
-        <input class="form-input" name="avatar_url" type="url" maxlength="300"
-               value="{{ user.avatar_url or '' }}" placeholder="https://…/avatar.jpg">
-        <div class="form-hint">Direct image URL (JPG, PNG, WebP)</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Banner URL</label>
-        <input class="form-input" name="banner_url" type="url" maxlength="300"
-               value="{{ user.banner_url or '' }}" placeholder="https://…/banner.jpg">
-        <div class="form-hint">Recommended: 1500 × 500px</div>
-      </div>
+
       <div id="edit-error" class="error-list" style="display:none"></div>
-      <div style="display:flex;gap:10px">
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" class="btn btn-primary">Save changes</button>
         <a href="{{ url_for('profile', username=user.username) }}" class="btn btn-ghost">Cancel</a>
       </div>
@@ -47,20 +145,97 @@
   </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
+/* ── Photo upload helper ───────────────────────────────────────────────── */
+async function uploadPhoto(file, type) {
+  const prog = document.getElementById(type + '-progress');
+  if (prog) prog.style.display = 'block';
+  const fd = new FormData();
+  fd.append('photo', file);
+  fd.append('type',  type);
+  try {
+    const r = await fetch('/profile/upload-photo', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      showToast(type === 'avatar' ? 'Profile photo updated!' : 'Banner updated!');
+      return d.url;
+    } else {
+      showToast(d.error || 'Upload failed.', 'error');
+      return null;
+    }
+  } catch(_) {
+    showToast('Network error during upload.', 'error');
+    return null;
+  } finally {
+    if (prog) prog.style.display = 'none';
+  }
+}
+
+/* ── Avatar picker ─────────────────────────────────────────────────────── */
+document.getElementById('avatar-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  // Preview immediately
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wrap    = document.getElementById('avatar-wrap');
+    const initials = document.getElementById('avatar-initials');
+    let   preview  = document.getElementById('avatar-preview');
+    if (initials) initials.style.display = 'none';
+    if (!preview) {
+      preview = document.createElement('img');
+      preview.id = 'avatar-preview';
+      wrap.appendChild(preview);
+    }
+    preview.src = e.target.result;
+    preview.style.display = '';
+  };
+  reader.readAsDataURL(file);
+  // Upload
+  await uploadPhoto(file, 'avatar');
+});
+
+/* ── Banner picker ─────────────────────────────────────────────────────── */
+document.getElementById('banner-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const empty   = document.getElementById('banner-empty');
+    let   preview = document.getElementById('banner-preview');
+    if (empty)   empty.style.display = 'none';
+    if (preview) { preview.src = e.target.result; preview.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+  await uploadPhoto(file, 'banner');
+});
+
+/* ── Text fields form ──────────────────────────────────────────────────── */
 document.getElementById('edit-profile-form').addEventListener('submit', async e => {
   e.preventDefault();
-  const btn = e.target.querySelector('[type=submit]');
-  const orig = btn.textContent; btn.textContent = 'Saving…'; btn.disabled = true;
-  const err = document.getElementById('edit-error'); err.style.display = 'none';
+  const btn  = e.target.querySelector('[type=submit]');
+  const err  = document.getElementById('edit-error');
+  const orig = btn.textContent;
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  err.style.display = 'none';
   try {
     const r = await fetch('/profile/edit', { method: 'POST', body: new FormData(e.target) });
     const d = await r.json();
-    if (d.success) { showToast('Profile updated!'); setTimeout(()=>location.href=d.redirect, 800); }
-    else { err.style.display='block'; err.textContent = d.error || 'Could not save.'; }
-  } catch(_){ err.style.display='block'; err.textContent='Network error.'; }
-  finally { btn.textContent=orig; btn.disabled=false; }
+    if (d.success) {
+      showToast('Profile updated!');
+      setTimeout(() => location.href = d.redirect, 700);
+    } else {
+      err.style.display = 'block';
+      err.textContent = d.error || 'Could not save.';
+    }
+  } catch(_) {
+    err.style.display = 'block';
+    err.textContent = 'Network error.';
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
+  }
 });
 </script>
 {% endblock %}

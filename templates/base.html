@@ -35,9 +35,17 @@
       <a href="{{ url_for('explore') }}" class="nav-item {% if request.endpoint=='explore' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔍</span> Explore
       </a>
+      <a href="{{ url_for('trending') }}" class="nav-item {% if request.endpoint=='trending' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">🔥</span> Trending
+      </a>
       <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔔</span> Notifications
         <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
+      </a>
+      <a href="{{ url_for('messages_inbox') }}" class="nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
+         style="position:relative">
+        <span class="icon" aria-hidden="true">💬</span> Messages
+        <span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
       </a>
       <a href="{{ url_for('bookmarks') }}" class="nav-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔖</span> Bookmarks
@@ -49,6 +57,9 @@
       {% endif %}
 
       <div class="nav-section">Boost</div>
+      <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+        <span class="icon" aria-hidden="true">📋</span> Campaign
+      </a>
       <a href="{{ url_for('feed', tab='earn') }}" class="nav-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
         <span class="icon" aria-hidden="true">⚡</span> Earn
       </a>
@@ -139,29 +150,108 @@
     </main>
 
     {% if current_user %}
-    <nav class="bottom-nav" aria-label="Bottom navigation">
+    <nav class="bottom-nav" aria-label="Bottom navigation" id="bottom-nav">
+
+      {# ── Home ─────────────────────────────────────────────────────────── #}
       <a href="{{ url_for('feed') }}"
-         class="bottom-nav-item {% if request.endpoint=='feed' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🏠</span><span>Home</span>
+         class="bottom-nav-item {% if request.endpoint=='feed' %}active{% endif %}"
+         aria-label="Home">
+        <div class="bn-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {% if request.endpoint == 'feed' %}
+            {# Filled house #}
+            <path d="M3 12L12 3l9 9" stroke-width="2"/>
+            <path d="M9 21V12h6v9" fill="currentColor" stroke="var(--accent)"/>
+            <path d="M3 12l9-9 9 9v9a1 1 0 01-1 1H4a1 1 0 01-1-1V12z"
+                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
+            {% else %}
+            {# Outline house #}
+            <path d="M3 12L12 3l9 9v8a1 1 0 01-1 1H4a1 1 0 01-1-1V12z"/>
+            <path d="M9 21V12h6v9"/>
+            {% endif %}
+          </svg>
+        </div>
       </a>
-      <a href="{{ url_for('explore') }}"
-         class="bottom-nav-item {% if request.endpoint=='explore' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔍</span><span>Search</span>
-      </a>
-      <a href="{{ url_for('tasks') }}"
-         class="bottom-nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">✅</span><span>Earn</span>
-      </a>
+
+      {# ── Wallet ───────────────────────────────────────────────────────── #}
       <a href="{{ url_for('wallet') }}"
-         class="bottom-nav-item {% if request.endpoint=='wallet' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">💳</span><span>Wallet</span>
+         class="bottom-nav-item {% if request.endpoint=='wallet' %}active{% endif %}"
+         aria-label="Wallet">
+        <div class="bn-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {% if request.endpoint == 'wallet' %}
+            <rect x="2" y="6" width="20" height="14" rx="3"
+                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
+            <path d="M2 10h20" stroke="var(--accent)" stroke-width="1.7"/>
+            <circle cx="17" cy="15" r="1.5" fill="var(--accent)" stroke="none"/>
+            <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"
+                  stroke="var(--accent)" stroke-width="1.7"/>
+            {% else %}
+            <rect x="2" y="6" width="20" height="14" rx="3"/>
+            <path d="M2 10h20"/>
+            <circle cx="17" cy="15" r="1.5" fill="#7a7a96" stroke="none"/>
+            <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"/>
+            {% endif %}
+          </svg>
+        </div>
       </a>
-      <a href="{{ url_for('notifications') }}"
-         class="bottom-nav-item {% if request.endpoint=='notifications' %}active{% endif %}"
+
+      {# ── Add Post — centre action button ─────────────────────────────── #}
+      <button type="button"
+              class="bn-add-btn"
+              id="bn-add-post"
+              aria-label="Create post"
+              onclick="openBnCompose()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+      </button>
+
+      {# ── Chat / Messages ──────────────────────────────────────────────── #}
+      <a href="{{ url_for('messages_inbox') }}"
+         class="bottom-nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
+         aria-label="Messages"
          style="position:relative">
-        <span class="icon" aria-hidden="true">🔔</span><span>Alerts</span>
-        <span class="bn-badge" id="bottom-notif-badge" style="display:none"></span>
+        <div class="bn-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {% if request.endpoint in ['messages_inbox','message_thread'] %}
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
+            {% else %}
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            {% endif %}
+          </svg>
+        </div>
+        <span class="bn-badge" id="bottom-dm-badge" style="display:none"></span>
       </a>
+
+      {# ── Profile ─────────────────────────────────────────────────────── #}
+      <a href="{% if current_user %}{{ url_for('profile', username=current_user.username) }}{% else %}{{ url_for('login') }}{% endif %}"
+         class="bottom-nav-item {% if request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
+         aria-label="Profile"
+         style="position:relative">
+        <div class="bn-icon">
+          {% if current_user and current_user.avatar_url %}
+          <img src="{{ current_user.avatar_url }}"
+               style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid {% if request.endpoint=='profile' %}var(--accent){% else %}var(--border){% endif %};transition:border-color .2s"
+               alt="">
+          {% else %}
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            {% set is_profile = request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}
+            {% if is_profile %}
+            <circle cx="12" cy="8" r="4"
+                    fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"
+                  stroke="var(--accent)" stroke-width="1.7" fill="none"/>
+            {% else %}
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            {% endif %}
+          </svg>
+          {% endif %}
+        </div>
+      </a>
+
     </nav>
     {% endif %}
   </div>
@@ -170,6 +260,41 @@
 
 <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
 {% block modals %}{% endblock %}
+
+{% if current_user %}
+<!-- Global compose modal (triggered by + button) -->
+<div class="modal-overlay" id="global-compose-modal" role="dialog" aria-modal="true" aria-label="Create post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✍️ New Post</div>
+      <button class="modal-close" onclick="closeModal('global-compose-modal')" aria-label="Close">✕</button>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div class="avatar avatar-sm flex-shrink-0">
+        {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
+        {% else %}{{ current_user.username[0].upper() }}{% endif %}
+      </div>
+      <div style="flex:1;min-width:0">
+        <textarea id="gc-body" class="compose-input form-input"
+                  placeholder="What's happening?"
+                  maxlength="500" rows="3" style="min-height:80px"></textarea>
+        <div id="gc-media-previews" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <button type="button" class="compose-icon-btn" onclick="document.getElementById('gc-media-input').click()" aria-label="Add photo/video">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </button>
+            <input type="file" id="gc-media-input" accept="image/*,video/*" multiple style="display:none">
+            <span id="gc-chars" style="font-size:12px;color:var(--muted)">500</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="gc-submit" onclick="gcSubmit()">Post</button>
+        </div>
+        <div id="gc-error" class="error-list" style="display:none;margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if current_user %}
 <!-- Global Boost Post Modal -->
@@ -255,21 +380,231 @@
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-{% block scripts %}
+
+{# === GLOBAL bottom-nav + compose JS — MUST be outside {% block scripts %} === #}
+{% if current_user %}
 <script>
+/* ── Bottom nav scroll-hide (works on every page) ──────────────────────── */
 (function() {
-  let lastY = window.scrollY;
-  const bn = document.querySelector('.bottom-nav');
-  if (bn) {
-    window.addEventListener('scroll', () => {
-      const y = window.scrollY;
-      if (y > lastY && y > 80) bn.classList.add('hidden');
-      else bn.classList.remove('hidden');
-      lastY = y;
-    }, { passive: true });
+  const bn = document.getElementById('bottom-nav');
+  if (!bn) return;
+
+  let lastY   = 0;
+  let ticking = false;
+
+  function update(y) {
+    const delta = y - lastY;
+    if (delta > 4 && y > 60) {
+      bn.classList.add('hidden');
+    } else if (delta < -4 || y <= 60) {
+      bn.classList.remove('hidden');
+    }
+    lastY = y;
+    ticking = false;
+  }
+
+  function onScroll(y) {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function() { update(y); });
+  }
+
+  // Window scroll
+  window.addEventListener('scroll', function() {
+    onScroll(window.pageYOffset || document.documentElement.scrollTop || 0);
+  }, { passive: true });
+
+  // ANY scrollable element on the page (chat, feed-col, etc.)
+  document.addEventListener('scroll', function(e) {
+    const el = e.target;
+    if (el && el !== document && el !== window && el.scrollTop !== undefined) {
+      onScroll(el.scrollTop);
+    }
+  }, { passive: true, capture: true });
+
+  // Also hide on touchmove just in case (older mobile browsers)
+  let touchStartY = 0;
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches && e.touches[0]) touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchmove', function(e) {
+    if (!e.touches || !e.touches[0]) return;
+    const dy = touchStartY - e.touches[0].clientY;
+    if (dy > 12) bn.classList.add('hidden');
+    else if (dy < -12) bn.classList.remove('hidden');
+  }, { passive: true });
+})();
+
+/* ── + button: open compose ────────────────────────────────────────────── */
+function openBnCompose() {
+  // If on feed page, focus the inline compose
+  const inlineCi = document.getElementById('compose-input');
+  if (inlineCi && window.location.pathname === '/feed') {
+    inlineCi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function() { inlineCi.focus(); }, 300);
+    return;
+  }
+  // Otherwise open the modal
+  const modal = document.getElementById('global-compose-modal');
+  if (!modal) {
+    // Modal not yet in DOM — navigate to feed instead
+    window.location.href = '/feed?compose=1';
+    return;
+  }
+  const gcBody = document.getElementById('gc-body');
+  const gcErr  = document.getElementById('gc-error');
+  if (gcBody) { gcBody.value = ''; gcBody.style.height = 'auto'; }
+  if (gcErr)  gcErr.style.display = 'none';
+  const gcChars = document.getElementById('gc-chars');
+  if (gcChars) gcChars.textContent = '500';
+  // Open modal — fallback to direct activation if openModal not available yet
+  if (typeof window.openModal === 'function') {
+    window.openModal('global-compose-modal');
+  } else {
+    modal.classList.add('active');
+    document.body.classList.add('no-scroll');
+  }
+  setTimeout(function() { if (gcBody) gcBody.focus(); }, 200);
+}
+window.openBnCompose = openBnCompose;
+
+/* ── Auto-open compose if ?compose=1 ───────────────────────────────────── */
+(function() {
+  if (new URLSearchParams(window.location.search).get('compose') !== '1') return;
+  function attempt(tries) {
+    if (tries <= 0) return;
+    const ci = document.getElementById('compose-input');
+    if (ci) {
+      ci.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function() { ci.focus(); }, 200);
+      return;
+    }
+    setTimeout(function() { attempt(tries - 1); }, 200);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setTimeout(function(){ attempt(5); }, 200); });
+  } else {
+    setTimeout(function(){ attempt(5); }, 200);
   }
 })();
 
+/* ── Global compose modal logic ────────────────────────────────────────── */
+let gcMedia = [];
+
+function gcRenderMedia() {
+  const wrap = document.getElementById('gc-media-previews');
+  if (!wrap) return;
+  if (!gcMedia.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = 'flex';
+  wrap.innerHTML = gcMedia.map(function(f, i) {
+    const escUrl = (typeof escapeHtml === 'function' ? escapeHtml(f.dataUrl) : f.dataUrl);
+    const thumb = f.mime.indexOf('video/') === 0
+      ? '<video src="' + escUrl + '" style="width:56px;height:56px;object-fit:cover;border-radius:8px" preload="metadata"></video>'
+      : '<img src="' + escUrl + '" style="width:56px;height:56px;object-fit:cover;border-radius:8px">';
+    return '<div style="position:relative;display:inline-block">' + thumb +
+      '<button type="button" onclick="gcRmMedia(' + i + ')" style="position:absolute;top:1px;right:1px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.7);border:none;cursor:pointer;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">✕</button></div>';
+  }).join('');
+}
+window.gcRmMedia = function(i) { gcMedia.splice(i, 1); gcRenderMedia(); };
+
+async function gcSubmit() {
+  const bodyEl = document.getElementById('gc-body');
+  const body   = (bodyEl ? bodyEl.value : '').trim();
+  const err    = document.getElementById('gc-error');
+  if (err) err.style.display = 'none';
+  if (!body && !gcMedia.length) {
+    if (err) { err.style.display = 'block'; err.textContent = 'Post cannot be empty.'; }
+    return;
+  }
+  const btn  = document.getElementById('gc-submit');
+  const orig = btn ? btn.textContent : 'Post';
+  if (btn) { btn.textContent = 'Posting…'; btn.disabled = true; }
+  try {
+    const fd = new FormData();
+    if (body) fd.append('body', body);
+    if (gcMedia.length) {
+      fd.append('media_data', gcMedia[0].dataUrl);
+      fd.append('media_mime', gcMedia[0].mime);
+    }
+    const r = await fetch('/post', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      if (typeof window.closeModal === 'function') window.closeModal('global-compose-modal');
+      else {
+        const m = document.getElementById('global-compose-modal');
+        if (m) m.classList.remove('active');
+        document.body.classList.remove('no-scroll');
+      }
+      gcMedia = []; gcRenderMedia();
+      if (typeof showToast === 'function') showToast('Posted! ✨');
+      if (window.location.pathname === '/feed') {
+        setTimeout(function() { location.reload(); }, 500);
+      } else {
+        setTimeout(function() { location.href = '/feed'; }, 500);
+      }
+    } else if (err) {
+      err.style.display = 'block';
+      err.textContent = d.error || 'Could not post.';
+    }
+  } catch (_) {
+    if (err) { err.style.display = 'block'; err.textContent = 'Network error.'; }
+  } finally {
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+  }
+}
+window.gcSubmit = gcSubmit;
+
+/* Wire up compose modal inputs once DOM is ready */
+(function wireCompose() {
+  function bind() {
+    const gcInput = document.getElementById('gc-media-input');
+    const bodyEl  = document.getElementById('gc-body');
+    const chars   = document.getElementById('gc-chars');
+    if (gcInput && !gcInput.dataset.bound) {
+      gcInput.dataset.bound = '1';
+      gcInput.addEventListener('change', function() {
+        Array.from(this.files).forEach(function(file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            gcMedia.push({ dataUrl: e.target.result, mime: file.type, name: file.name });
+            gcRenderMedia();
+          };
+          reader.readAsDataURL(file);
+        });
+        this.value = '';
+      });
+    }
+    if (bodyEl && !bodyEl.dataset.bound) {
+      bodyEl.dataset.bound = '1';
+      bodyEl.addEventListener('input', function() {
+        const left = 500 - bodyEl.value.length;
+        if (chars) {
+          chars.textContent = left;
+          chars.style.color = left < 20 ? 'var(--red)' : 'var(--muted)';
+        }
+        bodyEl.style.height = 'auto';
+        bodyEl.style.height = Math.min(bodyEl.scrollHeight, 200) + 'px';
+      });
+      bodyEl.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          gcSubmit();
+        }
+      });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
+})();
+</script>
+{% endif %}
+
+{% block scripts %}
+{% if current_user %}
+<script>
 // ── Global boost form wiring (works on any page) ──────────────────────────
 (function() {
   const COST = 0.10;
@@ -372,6 +707,7 @@
   });
 })();
 </script>
+{% endif %}
 {% endblock %}
 </body>
 </html>

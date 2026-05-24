@@ -7,6 +7,14 @@
 <div class="social-layout">
   <!-- Main feed column -->
   <div class="feed-col">
+    <!-- Mobile search bar (hidden on desktop via CSS) -->
+    <div class="mobile-search-bar">
+      <a href="{{ url_for('explore') }}" class="mobile-search-link" aria-label="Search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span>Search posts, people, tags…</span>
+      </a>
+    </div>
+
     <!-- Compose box -->
     <div class="compose-box card">
       <div class="compose-inner">
@@ -22,8 +30,15 @@
                     placeholder="What's happening?"
                     maxlength="500" rows="1"
                     aria-label="Compose post"></textarea>
+          <!-- Media previews for post attachments -->
+          <div id="post-media-previews" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
           <div class="compose-footer">
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <!-- Photo/Video attach -->
+              <button type="button" class="compose-icon-btn" onclick="document.getElementById('post-media-input').click()" title="Add photo/video" aria-label="Attach photo or video">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </button>
+              <input type="file" id="post-media-input" accept="image/*,video/*" multiple style="display:none">
               <span class="compose-chars" id="compose-chars">500</span>
               <button type="button" class="sub-only-pill" id="sub-only-pill" title="Toggle audience">🌐 Public</button>
               <input type="checkbox" id="compose-sub-only" style="display:none">
@@ -86,47 +101,24 @@
     </a>
 
     <!-- Who to follow -->
-    {% if suggestions %}
-    <div class="sidebar-widget">
-      <div class="widget-title">Who to follow</div>
-      {% for u in suggestions %}
-      <div class="suggest-row" id="suggest-{{ u.id }}">
-        <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
-          <div class="avatar avatar-sm">
-            {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
-            {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
-          </div>
-        </a>
-        <div class="suggest-info">
-          <a href="{{ url_for('profile', username=u.username) }}" class="suggest-name fw-700">
-            {{ u.display_name or u.username }}
-            {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
-          </a>
-          <div class="text-xs text-muted">@{{ u.username }}</div>
-        </div>
-        <button class="btn btn-outline btn-sm follow-btn"
-                data-username="{{ u.username }}"
-                onclick="followUser('{{ u.username }}', this)">Follow</button>
-      </div>
-      {% endfor %}
-      <a href="{{ url_for('explore') }}" class="text-accent text-sm" style="display:block;padding:10px 0">
-        Show more →
+    <!-- Who to follow: loaded dynamically for personalisation -->
+    <div class="sidebar-widget" id="wtf-widget" style="display:none">
+      <div class="widget-title">👥 Who to follow</div>
+      <div id="wtf-list"></div>
+      <a href="{{ url_for('explore') }}" class="text-accent text-sm mt-8" style="display:block">
+        Find more people →
       </a>
     </div>
-    {% endif %}
 
     <!-- Trending -->
-    {% if trending %}
-    <div class="sidebar-widget">
-      <div class="widget-title">Trending today</div>
-      {% for t in trending %}
-      <a href="{{ url_for('post_detail', post_id=t.id) }}" class="trending-row">
-        <div class="trending-body">{{ t.body[:80] }}{% if t.body|length > 80 %}…{% endif %}</div>
-        <div class="trending-meta text-xs text-muted">❤️ {{ t.like_count }}</div>
+    <!-- Trending: loaded dynamically -->
+    <div class="sidebar-widget" id="trending-widget" style="display:none">
+      <div class="widget-title">🔥 Trending</div>
+      <div id="trending-posts-list"></div>
+      <a href="{{ url_for('trending') }}" class="text-accent text-sm mt-8" style="display:block">
+        See all trending →
       </a>
-      {% endfor %}
     </div>
-    {% endif %}
 
     <!-- Boost shortcut -->
     <div class="sidebar-widget boost-cta">
@@ -227,21 +219,56 @@ if (composeInput) {
     });
   }
 
+  // ── Media attach for posts ─────────────────────────────────────────────
+  let postMediaFiles = [];
+  const pmInput = document.getElementById('post-media-input');
+  if (pmInput) {
+    pmInput.addEventListener('change', function() {
+      Array.from(this.files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          postMediaFiles.push({ dataUrl: e.target.result, mime: file.type, name: file.name });
+          renderPostPreviews();
+        };
+        reader.readAsDataURL(file);
+      });
+      this.value = '';
+    });
+  }
+  function renderPostPreviews() {
+    const wrap = document.getElementById('post-media-previews');
+    if (!wrap) return;
+    if (!postMediaFiles.length) { wrap.style.display='none'; wrap.innerHTML=''; return; }
+    wrap.style.display = 'flex';
+    wrap.innerHTML = postMediaFiles.map((f, i) => {
+      const thumb = f.mime.startsWith('video/')
+        ? `<video src="${f.dataUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:8px" preload="metadata"></video>`
+        : `<img src="${f.dataUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:8px">`;
+      return `<div style="position:relative;display:inline-block">${thumb}<button onclick="window.removePostMedia(${i})" style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.7);border:none;cursor:pointer;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center">✕</button></div>`;
+    }).join('');
+  }
+  window.removePostMedia = i => { postMediaFiles.splice(i,1); renderPostPreviews(); };
+
   composeSubmit.addEventListener('click', async () => {
     const body = composeInput.value.trim();
-    if (!body) return;
+    if (!body && !postMediaFiles.length) return;
     composeSubmit.disabled = true;
     composeSubmit.textContent = 'Posting…';
     try {
       const fd = new FormData();
-      fd.append('body', body);
+      if (body) fd.append('body', body);
       if (subCheck && subCheck.checked) fd.append('subscriber_only', '1');
+      if (postMediaFiles.length) {
+        fd.append('media_data', postMediaFiles[0].dataUrl);
+        fd.append('media_mime', postMediaFiles[0].mime);
+      }
       const r  = await fetch('/post', { method: 'POST', body: fd });
       const d  = await r.json();
       if (d.success) {
         composeInput.value = '';
         composeChars.textContent = 500;
         composeInput.style.height = 'auto';
+        postMediaFiles = []; renderPostPreviews();
         prependPost(d.post);
         showToast('Posted!');
       } else {
@@ -557,6 +584,91 @@ if (boostForm) {
     ).join('');
     widget.style.display = '';
   } catch(_) {}
+})();
+
+// ── Who to follow (personalised) ──────────────────────────────────────────────
+(async function loadWhoToFollow() {
+  try {
+    const r = await fetch('/api/who-to-follow');
+    const users = await r.json();
+    if (!users.length) return;
+    const widget = document.getElementById('wtf-widget');
+    const list   = document.getElementById('wtf-list');
+    if (!widget || !list) return;
+    list.innerHTML = users.slice(0,5).map(u => {
+      const init = (u.display_name || u.username || '?')[0].toUpperCase();
+      const av = u.avatar_url
+        ? `<img src="${escapeHtml(u.avatar_url)}" style="width:34px;height:34px;border-radius:50%;object-fit:cover" alt="">`
+        : `<div class="avatar avatar-sm">${escapeHtml(init)}</div>`;
+      const mutual = u.mutual_count ? `<span> · ${u.mutual_count} mutual</span>` : '';
+      return `
+        <div class="suggest-row" id="wtf-${u.id}">
+          <a href="/user/${escapeHtml(u.username)}" class="suggest-avatar">${av}</a>
+          <div class="suggest-info">
+            <a href="/user/${escapeHtml(u.username)}" class="fw-700 suggest-name">${escapeHtml(u.display_name || u.username)}${u.is_verified ? ' <span class="verified-badge">✓</span>' : ''}</a>
+            <div class="text-xs text-muted">@${escapeHtml(u.username)}${mutual}</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="feedFollowUser('${escapeHtml(u.username)}', this)">Follow</button>
+        </div>`;
+    }).join('');
+    widget.style.display = '';
+  } catch(_) {}
+})();
+
+async function feedFollowUser(username, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.className = `btn ${d.following ? 'btn-ghost' : 'btn-outline'} btn-sm`;
+    if (d.following) {
+      const row = document.getElementById('wtf-' + btn.closest('[id^=wtf-]')?.id?.replace('wtf-',''));
+      if (row) { row.style.opacity = '0.4'; row.style.pointerEvents = 'none'; }
+    }
+  }
+  btn.disabled = false;
+}
+window.feedFollowUser = feedFollowUser;
+
+// ── Trending posts sidebar ────────────────────────────────────────────────────
+(async function loadTrendingPosts() {
+  try {
+    const r = await fetch('/api/trending/posts?window=24h');
+    const posts = await r.json();
+    if (!posts.length) return;
+    const widget = document.getElementById('trending-widget');
+    const list   = document.getElementById('trending-posts-list');
+    if (!widget || !list) return;
+    list.innerHTML = posts.slice(0,5).map(p => `
+      <a href="/post/${p.id}" class="trending-row">
+        <div class="trending-body">${escapeHtml((p.body||'').substring(0,80))}${(p.body||'').length>80?'…':''}</div>
+        <div class="trending-meta text-xs text-muted">❤️ ${p.like_count||0} · 💬 ${p.reply_count||0}</div>
+      </a>`).join('');
+    widget.style.display = '';
+  } catch(_) {}
+})();
+
+// ── Post view tracking (Intersection Observer) ────────────────────────────────
+(function() {
+  if (!('IntersectionObserver' in window)) return;
+  const viewed = new Set();
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      const id   = card.dataset.postId;
+      if (!id || viewed.has(id)) return;
+      viewed.add(id);
+      observer.unobserve(card);
+      // Fire-and-forget after 1s dwell
+      setTimeout(() => {
+        fetch(`/api/post/${id}/view`, { method: 'POST' }).catch(() => {});
+      }, 1000);
+    });
+  }, { threshold: 0.6 });
+
+  document.querySelectorAll('.post-card[data-post-id]').forEach(card => observer.observe(card));
 })();
 </script>
 {% endblock %}

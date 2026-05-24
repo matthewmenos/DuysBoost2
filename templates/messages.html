@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Messages — DUYS Boost{% endblock %}
+{% block page_title %}Messages{% endblock %}
+
+{% block head_extra %}
+<style>
+.inbox-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: var(--topbar-height); z-index: 20;
+}
+.inbox-title { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+
+.conv-list { display: flex; flex-direction: column; }
+
+.conv-item {
+  display: flex; align-items: center; gap: 13px;
+  padding: 14px 20px;
+  text-decoration: none; color: var(--text);
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+  position: relative;
+}
+.conv-item:hover { background: rgba(127,90,240,.04); }
+.conv-item.unread { background: rgba(127,90,240,.03); }
+
+.conv-avatar { flex-shrink: 0; position: relative; }
+.conv-avatar .unread-ring {
+  position: absolute; inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.conv-body { flex: 1; min-width: 0; }
+.conv-top  { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+.conv-name { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-time { font-size: 11.5px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.conv-preview {
+  font-size: 13.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.conv-item.unread .conv-preview { color: var(--text-dim); font-weight: 500; }
+
+.conv-unread-badge {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff; font-size: 10px; font-weight: 800;
+  min-width: 20px; height: 20px;
+  border-radius: 20px; padding: 0 6px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.new-msg-fab {
+  position: fixed; bottom: 96px; right: 20px;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--gradient-primary);
+  box-shadow: 0 4px 20px rgba(127,90,240,.5);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: #fff;
+  cursor: pointer; border: none; outline: none;
+  transition: transform .2s, box-shadow .2s;
+  z-index: 50;
+}
+.new-msg-fab:hover { transform: scale(1.08); box-shadow: 0 8px 30px rgba(127,90,240,.65); }
+@media (min-width: 900px) { .new-msg-fab { bottom: 28px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:680px;margin:0 auto">
+
+  <div class="inbox-header">
+    <div class="inbox-title">Messages</div>
+    <a href="{{ url_for('explore') }}" class="btn btn-outline btn-sm">+ New message</a>
+  </div>
+
+  <div class="conv-list">
+    {% if conversations %}
+      {% for conv in conversations %}
+      <a href="{{ url_for('message_thread', username=conv.other.username) }}"
+         class="conv-item {% if conv.unread %}unread{% endif %}">
+
+        <div class="conv-avatar">
+          <div class="avatar avatar-md">
+            {% if conv.other.avatar_url %}
+              <img src="{{ conv.other.avatar_url }}" alt="{{ conv.other.username }}">
+            {% else %}
+              {{ (conv.other.display_name or conv.other.username or '?')[0].upper() }}
+            {% endif %}
+          </div>
+          {% if conv.unread %}<div class="unread-ring"></div>{% endif %}
+        </div>
+
+        <div class="conv-body">
+          <div class="conv-top">
+            <div class="conv-name">
+              {{ conv.other.display_name or conv.other.username }}
+              {% if conv.other.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+            </div>
+            <div class="conv-time">
+              {% if conv.last_msg %}
+                {% if conv.last_msg.created_at[:10] == now_str %}{{ conv.last_msg.created_at[11:16] }}{% else %}{{ conv.last_msg.created_at[:10] }}{% endif %}
+              {% endif %}
+            </div>
+          </div>
+          <div class="conv-preview">
+            {% if conv.last_msg %}
+              {% if conv.last_msg.sender_id == current_user.id %}You: {% endif %}
+              {% set mt = conv.last_msg.msg_type or 'text' %}
+              {% if mt == 'image' %}📷 Photo
+              {% elif mt == 'video' %}🎬 Video
+              {% elif mt == 'voice' %}🎙 Voice note
+              {% elif mt == 'file' %}📎 {{ conv.last_msg.file_name or 'File' }}
+              {% elif conv.last_msg.body %}{{ conv.last_msg.body[:60] }}{% if conv.last_msg.body|length > 60 %}…{% endif %}
+              {% else %}(empty){% endif %}
+            {% else %}
+              No messages yet
+            {% endif %}
+          </div>
+        </div>
+
+        {% if conv.unread %}
+        <div class="conv-unread-badge">{{ conv.unread }}</div>
+        {% endif %}
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:72px 20px">
+        <div class="empty-icon">💬</div>
+        <div class="empty-title">No messages yet</div>
+        <div class="empty-text">
+          Find someone to talk to — visit their profile and tap the message button.
+        </div>
+        <a href="{{ url_for('explore') }}" class="btn btn-primary mt-16">Find people →</a>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// (no page-specific JS needed)
+</script>
+{% endblock %}

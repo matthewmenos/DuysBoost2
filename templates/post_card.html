@@ -71,9 +71,18 @@
       {% if p.is_subscriber_only %}
       <div class="post-sponsored-badge sub-only-badge">🔒 Subscribers only</div>
       {% endif %}
-      {% if p.body and not p.locked %}
-      <div class="post-body">{{ p.body | linkify_tags | safe }}</div>
-      {% elif p.locked %}
+      {% if not p.locked %}
+        {% if p.body %}
+        <div class="post-body">{{ p.body | linkify_tags | safe }}</div>
+        {% endif %}
+        {% if p.get("media_data") %}
+          {% if p.get("media_mime","").startswith("video/") %}
+          <div class="post-media-wrap"><video class="post-media-video" src="{{ p.media_data }}" controls preload="metadata" playsinline></video></div>
+          {% else %}
+          <div class="post-media-wrap"><img class="post-media-img" src="{{ p.media_data }}" alt="Post image" loading="lazy"></div>
+          {% endif %}
+        {% endif %}
+      {% else %}
       <div class="post-body-locked">🔒 Subscriber-only content.</div>
       {% endif %}
 

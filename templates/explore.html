@@ -1,77 +1,272 @@
 {% extends "base.html" %}
 {% from "post_card.html" import render_post %}
-{% block title %}Explore — DUYS Boost{% endblock %}
+{% block title %}{% if q %}{{ q }} — {% endif %}Explore — DUYS Boost{% endblock %}
 {% block page_title %}Explore{% endblock %}
+
+{% block head_extra %}
+<style>
+.explore-search-wrap { position: relative; margin-bottom: 4px; }
+.explore-search-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 50px; padding: 10px 18px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.explore-search-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(127,90,240,.12);
+}
+.search-input {
+  flex: 1; background: none; border: none; outline: none;
+  font-size: 15px; color: var(--text); font-family: var(--font-body);
+}
+.search-input::placeholder { color: var(--muted-2); }
+
+/* Autocomplete dropdown */
+.autocomplete-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  z-index: 300; overflow: hidden; display: none;
+  animation: modalIn .15s ease;
+}
+.autocomplete-dropdown.open { display: block; }
+.ac-section-label {
+  padding: 8px 16px 4px; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+}
+.ac-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; cursor: pointer;
+  transition: background var(--transition);
+  text-decoration: none; color: var(--text);
+}
+.ac-item:hover { background: var(--surface-2); }
+.ac-item-name  { font-size: 14px; font-weight: 600; }
+.ac-item-meta  { font-size: 12px; color: var(--muted); }
+.ac-tag-icon   { font-size: 18px; width: 34px; text-align: center; }
+
+/* Recent searches */
+.recent-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 50px;
+  font-size: 13px; font-weight: 500; color: var(--text-dim);
+  cursor: pointer; text-decoration: none;
+  transition: border-color var(--transition), color var(--transition);
+}
+.recent-pill:hover { border-color: var(--accent); color: var(--accent-light); }
+
+/* Tabs */
+.explore-tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky; top: var(--topbar-height); z-index: 40;
+  overflow-x: auto; scrollbar-width: none;
+}
+.explore-tabs::-webkit-scrollbar { display: none; }
+.explore-tab {
+  padding: 13px 18px; font-size: 13.5px; font-weight: 600;
+  color: var(--muted); border-bottom: 2px solid transparent;
+  margin-bottom: -1px; white-space: nowrap;
+  transition: color var(--transition), border-color var(--transition);
+  flex-shrink: 0;
+}
+.explore-tab:hover { color: var(--text); }
+.explore-tab.active { color: var(--text); border-color: var(--accent); }
+
+/* Tag grid */
+.tag-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr));
+  gap: 10px;
+}
+.tag-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+  text-decoration: none; color: inherit;
+  transition: border-color var(--transition), transform var(--transition);
+}
+.tag-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.tag-card-name { font-weight: 800; font-size: 15px; color: var(--accent-light); }
+.tag-card-cnt  { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+/* People grid  */
+.people-grid {
+  display: grid; grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 560px) {
+  .people-grid { grid-template-columns: 1fr 1fr; }
+}
+.people-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color var(--transition);
+}
+.people-card:hover { border-color: var(--border-strong); }
+.people-card-top { display: flex; align-items: center; gap: 10px; }
+.people-card-info { flex: 1; min-width: 0; }
+.people-card-name { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-card-handle { font-size: 12px; color: var(--muted); }
+.people-card-bio { font-size: 13px; color: var(--text-dim); line-height: 1.4; }
+.people-card-stats { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.people-stat-val { font-weight: 700; color: var(--text); }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="social-layout">
   <div class="feed-col">
-    <!-- Search box -->
-    <form method="get" action="{{ url_for('explore') }}" class="card" style="margin-bottom:16px">
-      <div style="display:flex;gap:10px;align-items:center">
-        <span style="font-size:18px;flex-shrink:0">🔍</span>
-        <input class="form-input" name="q" value="{{ q }}"
-               placeholder="Search posts or people…"
-               style="margin:0" autofocus>
-        <button type="submit" class="btn btn-primary btn-sm" style="flex-shrink:0">Search</button>
-      </div>
-    </form>
+
+    <!-- Search bar with autocomplete -->
+    <div class="explore-search-wrap" id="search-wrap">
+      <form method="get" action="{{ url_for('explore') }}" id="explore-form" autocomplete="off">
+        <div class="explore-search-bar">
+          <span style="font-size:18px;flex-shrink:0;color:var(--muted)">🔍</span>
+          <input class="search-input" name="q" id="search-input"
+                 value="{{ q }}" placeholder="Search posts, people, tags…"
+                 spellcheck="false" autocomplete="off">
+          {% if q %}
+          <a href="{{ url_for('explore') }}" style="color:var(--muted);font-size:20px;line-height:1;flex-shrink:0">✕</a>
+          {% endif %}
+          <button type="submit" class="btn btn-primary btn-sm" style="flex-shrink:0;border-radius:50px">Search</button>
+        </div>
+        <!-- Autocomplete dropdown -->
+        <div class="autocomplete-dropdown" id="ac-dropdown"></div>
+      </form>
+    </div>
+
+    <!-- Recent searches (no active query) -->
+    {% if not q and recent_searches %}
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 4px;margin-bottom:4px">
+      <span class="text-xs text-muted fw-700" style="text-transform:uppercase;letter-spacing:.06em">Recent</span>
+      {% for s in recent_searches %}
+      <a href="{{ url_for('explore', q=s) }}" class="recent-pill">{{ s }}</a>
+      {% endfor %}
+      <button onclick="clearHistory()" class="text-xs text-muted" style="background:none;border:none;cursor:pointer;padding:4px 8px">Clear</button>
+    </div>
+    {% endif %}
 
     {% if q %}
-      <!-- People results -->
-      {% if users %}
-      <div class="card mb-16">
-        <div class="section-title mb-12">👤 People</div>
+    <!-- Search tabs -->
+    <div class="explore-tabs">
+      <a href="{{ url_for('explore', q=q, tab='top') }}"     class="explore-tab {% if tab=='top' %}active{% endif %}">Top</a>
+      <a href="{{ url_for('explore', q=q, tab='latest') }}"  class="explore-tab {% if tab=='latest' %}active{% endif %}">Latest</a>
+      <a href="{{ url_for('explore', q=q, tab='people') }}"  class="explore-tab {% if tab=='people' %}active{% endif %}">People</a>
+      <a href="{{ url_for('explore', q=q, tab='posts') }}"   class="explore-tab {% if tab=='posts' %}active{% endif %}">Posts</a>
+      <a href="{{ url_for('explore', q=q, tab='tags') }}"    class="explore-tab {% if tab=='tags' %}active{% endif %}">Tags</a>
+    </div>
+
+    <!-- Results -->
+    {% if tab in ['top','people'] and users %}
+    <div class="card" style="margin-top:4px;padding:16px;border-radius:{% if tab=='top' %}0 0 0 0{% else %}var(--radius-lg){% endif %}">
+      {% if tab == 'top' %}<div class="section-title mb-12">People</div>{% endif %}
+      <div class="people-grid">
         {% for u in users %}
-        <div class="suggest-row" style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
-            <div class="avatar avatar-md">
-              {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
-              {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
-            </div>
-          </a>
-          <div class="suggest-info" style="flex:1">
-            <a href="{{ url_for('profile', username=u.username) }}" class="fw-700">
-              {{ u.display_name or u.username }}
-              {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+        <div class="people-card">
+          <div class="people-card-top">
+            <a href="{{ url_for('profile', username=u.username) }}">
+              <div class="avatar avatar-md">
+                {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
+                {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
+              </div>
             </a>
-            <div class="text-xs text-muted">@{{ u.username }} · {{ u.follower_count or 0 }} followers</div>
-            {% if u.bio %}<div class="text-sm text-muted mt-4">{{ u.bio[:80] }}</div>{% endif %}
+            <div class="people-card-info">
+              <a href="{{ url_for('profile', username=u.username) }}" class="people-card-name">
+                {{ u.display_name or u.username }}
+                {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+              </a>
+              <div class="people-card-handle">@{{ u.username }}</div>
+            </div>
+            <button class="btn {% if u.you_follow %}btn-ghost{% else %}btn-outline{% endif %} btn-sm"
+                    onclick="followUser('{{ u.username }}', this)">
+              {{ 'Following' if u.you_follow else 'Follow' }}
+            </button>
           </div>
-          <button class="btn btn-outline btn-sm"
-                  onclick="followUser('{{ u.username }}', this)">Follow</button>
+          {% if u.bio %}
+          <div class="people-card-bio">{{ u.bio[:100] }}</div>
+          {% endif %}
+          <div class="people-card-stats">
+            <span><span class="people-stat-val">{{ u.follower_count or 0 }}</span> followers</span>
+            {% if u.subscriber_count %}<span><span class="people-stat-val">{{ u.subscriber_count }}</span> subscribers</span>{% endif %}
+          </div>
         </div>
         {% endfor %}
       </div>
-      {% endif %}
+    </div>
+    {% endif %}
 
-      <!-- Post results -->
-      {% if posts %}
-      <div class="section-title mb-12">📝 Posts</div>
-      {% for post in posts %}{{ render_post(post) }}{% endfor %}
-      {% elif not users %}
-      <div class="empty-state"><div class="empty-icon">🔍</div>
-        <div class="empty-title">No results for "{{ q }}"</div>
-        <div class="empty-text">Try a different search term.</div>
+    {% if tab in ['top','posts','latest'] and posts %}
+    {% if tab == 'top' and users %}<div class="section-title mt-16 mb-4" style="padding:0 4px">Posts</div>{% endif %}
+    {% for post in posts %}{{ render_post(post) }}{% endfor %}
+    {% endif %}
+
+    {% if tab in ['top','tags'] and tags %}
+    <div class="card" style="margin-top:4px;padding:16px">
+      {% if tab == 'top' %}<div class="section-title mb-12">Tags</div>{% endif %}
+      <div class="tag-grid">
+        {% for t in tags %}
+        <a href="{{ url_for('hashtag_feed', tag=t.name) }}" class="tag-card">
+          <div class="tag-card-name">#{{ t.name }}</div>
+          <div class="tag-card-cnt">{{ t.cnt }} post{{ 's' if t.cnt != 1 else '' }}</div>
+        </a>
+        {% endfor %}
       </div>
-      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if not posts and not users and not tags %}
+    <div class="empty-state card" style="border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);padding:52px 20px">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">No results for "{{ q }}"</div>
+      <div class="empty-text">Try a different search term or browse trending content.</div>
+    </div>
+    {% endif %}
 
     {% else %}
-      <!-- Trending posts -->
-      {% if trending_posts %}
-      <div class="section-title mb-12">🔥 Trending today</div>
-      {% for post in trending_posts %}{{ render_post(post) }}{% endfor %}
-      {% endif %}
+    <!-- No query: show trending posts -->
+    {% if trending_posts %}
+    <div class="section-title mt-4 mb-4" style="padding:12px 4px 0">🔥 Trending right now</div>
+    {% for post in trending_posts %}{{ render_post(post) }}{% endfor %}
+    {% else %}
+    <div class="empty-state card" style="margin-top:4px;padding:52px 20px">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">Explore DUYS Boost</div>
+      <div class="empty-text">Search for posts, people or hashtags above.</div>
+    </div>
     {% endif %}
-  </div>
+    {% endif %}
 
-  <!-- Right sidebar: suggested users -->
+  </div><!-- /.feed-col -->
+
+  <!-- Right sidebar -->
   <aside class="feed-sidebar">
-    {% if suggested %}
+
+    <!-- Trending tags -->
+    {% if trending_tags %}
     <div class="sidebar-widget">
-      <div class="widget-title">People to follow</div>
-      {% for u in suggested %}
-      <div class="suggest-row" id="sug-{{ u.id }}">
+      <div class="widget-title">🔥 Trending tags</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        {% for t in trending_tags[:10] %}
+        <a href="{{ url_for('hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
+          #{{ t.name }}
+          <span class="trending-tag-cnt">{{ t.cnt }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      <a href="{{ url_for('trending') }}" class="text-accent text-sm mt-12" style="display:block">
+        See all trending →
+      </a>
+    </div>
+    {% endif %}
+
+    <!-- Who to follow -->
+    {% if who_to_follow %}
+    <div class="sidebar-widget">
+      <div class="widget-title">👥 Who to follow</div>
+      {% for u in who_to_follow %}
+      <div class="suggest-row" id="wtf-{{ u.id }}">
         <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
           <div class="avatar avatar-sm">
             {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
@@ -83,7 +278,10 @@
             {{ u.display_name or u.username }}
             {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
           </a>
-          <div class="text-xs text-muted">{{ u.follower_count or 0 }} followers</div>
+          <div class="text-xs text-muted">
+            {{ u.follower_count or 0 }} followers
+            {% if u.mutual_count %} · {{ u.mutual_count }} mutual{% endif %}
+          </div>
         </div>
         <button class="btn btn-outline btn-sm"
                 onclick="followUser('{{ u.username }}', this)">Follow</button>
@@ -91,22 +289,168 @@
       {% endfor %}
     </div>
     {% endif %}
+
   </aside>
-</div>
+</div><!-- /.social-layout -->
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── Follow ──────────────────────────────────────────────────────────────── */
 async function followUser(username, btn) {
   btn.disabled = true;
   const r = await fetch(`/user/${username}/follow`, { method: 'POST' });
   const d = await r.json();
   if (d.success) {
     btn.textContent = d.following ? 'Following' : 'Follow';
-    btn.className = `btn ${d.following ? 'btn-ghost' : 'btn-outline'} btn-sm`;
+    btn.className   = `btn ${d.following ? 'btn-ghost' : 'btn-outline'} btn-sm`;
   }
   btn.disabled = false;
 }
 window.followUser = followUser;
+
+/* ── Search autocomplete ─────────────────────────────────────────────────── */
+(function() {
+  const input    = document.getElementById('search-input');
+  const dropdown = document.getElementById('ac-dropdown');
+  if (!input || !dropdown) return;
+
+  let timer  = null;
+  let lastQ  = '';
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    if (q === lastQ) return;
+    lastQ = q;
+    clearTimeout(timer);
+    if (q.length < 1) { dropdown.classList.remove('open'); return; }
+    timer = setTimeout(() => fetchAC(q), 200);
+  });
+
+  input.addEventListener('focus', () => {
+    if (input.value.trim().length > 0) fetchAC(input.value.trim());
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target))
+      dropdown.classList.remove('open');
+  });
+
+  async function fetchAC(q) {
+    try {
+      const r = await fetch(`/api/search/autocomplete?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      renderAC(d, q);
+    } catch(_) {}
+  }
+
+  function renderAC(d, q) {
+    const items = [];
+
+    if (d.users && d.users.length) {
+      items.push(`<div class="ac-section-label">People</div>`);
+      d.users.forEach(u => {
+        const init = (u.display_name || u.username || '?')[0].toUpperCase();
+        const av   = u.avatar_url
+          ? `<img src="${escapeHtml(u.avatar_url)}" style="width:34px;height:34px;border-radius:50%;object-fit:cover" alt="">`
+          : `<div class="avatar avatar-sm" style="flex-shrink:0">${escapeHtml(init)}</div>`;
+        items.push(`
+          <a class="ac-item" href="/user/${escapeHtml(u.username)}">
+            ${av}
+            <div>
+              <div class="ac-item-name">${escapeHtml(u.display_name || u.username)}${u.is_verified ? ' <span class="verified-badge">✓</span>' : ''}</div>
+              <div class="ac-item-meta">@${escapeHtml(u.username)} · ${u.follower_count || 0} followers</div>
+            </div>
+          </a>`);
+      });
+    }
+
+    if (d.tags && d.tags.length) {
+      items.push(`<div class="ac-section-label">Hashtags</div>`);
+      d.tags.forEach(t => {
+        items.push(`
+          <a class="ac-item" href="/tag/${escapeHtml(t.name)}">
+            <div class="ac-tag-icon">#</div>
+            <div>
+              <div class="ac-item-name">#${escapeHtml(t.name)}</div>
+              <div class="ac-item-meta">${t.cnt} post${t.cnt !== 1 ? 's' : ''}</div>
+            </div>
+          </a>`);
+      });
+    }
+
+    if (!items.length) {
+      dropdown.classList.remove('open');
+      return;
+    }
+    dropdown.innerHTML = items.join('');
+    dropdown.classList.add('open');
+  }
+})();
+
+/* ── Clear search history ────────────────────────────────────────────────── */
+async function clearHistory() {
+  await fetch('/api/search/history/clear', { method: 'POST' });
+  document.querySelectorAll('.recent-pill').forEach(el => el.remove());
+  const wrap = document.querySelector('[onclick="clearHistory()"]');
+  if (wrap) wrap.closest('div').style.display = 'none';
+}
+window.clearHistory = clearHistory;
+
+/* ── Shared post card functions (needed on any page using post_card macro) ── */
+async function toggleLike(postId, btn) {
+  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.liked ? '❤️' : '🤍';
+  btn.classList.toggle('liked', d.liked);
+  const cnt = document.getElementById('like-count-' + postId);
+  if (cnt) cnt.textContent = d.like_count || '';
+}
+window.toggleLike = toggleLike;
+async function toggleBookmark(postId, btn) {
+  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  btn.querySelector('.action-icon').textContent = d.saved ? '🔖' : '🏷';
+  showToast(d.saved ? 'Bookmarked!' : 'Removed');
+}
+window.toggleBookmark = toggleBookmark;
+function openReplyModal(p,u){ window.location.href = '/post/' + p; }
+window.openReplyModal = openReplyModal;
+function openRepostModal(){}
+window.openRepostModal = openRepostModal;
+function togglePostMenu(postId, e) {
+  e.stopPropagation();
+  const m = document.getElementById('post-menu-' + postId);
+  if (!m) return;
+  document.querySelectorAll('.post-menu-dropdown').forEach(x => x.style.display='none');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+window.togglePostMenu = togglePostMenu;
+document.addEventListener('click', () => {
+  document.querySelectorAll('.post-menu-dropdown').forEach(m => m.style.display='none');
+});
+async function earnEngagement(postId, type, btn) {
+  btn.disabled = true;
+  const r = await fetch(`/post/${postId}/earn`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    const banner = document.getElementById('boost-banner-' + postId);
+    if (banner) { banner.innerHTML = `<span style="color:var(--green);font-weight:700">✅ +$${d.reward.toFixed(2)} earned!</span>`; setTimeout(()=>banner.style.display='none',2500); }
+    showToast(`+$${d.reward.toFixed(2)} earned!`);
+  } else { showToast(d.error||'Error.','error'); btn.disabled=false; }
+}
+window.earnEngagement = earnEngagement;
+function copyPostLink(id){ navigator.clipboard.writeText(location.origin+'/post/'+id); showToast('Copied!'); }
+window.copyPostLink = copyPostLink;
+async function deletePost(postId) {
+  if(!confirm('Delete?')) return;
+  const r = await fetch(`/post/${postId}/delete`,{method:'POST'});
+  const d = await r.json();
+  if(d.success){ const c=document.querySelector(`[data-post-id="${postId}"]`); if(c){c.style.opacity='0';setTimeout(()=>c.remove(),300);} showToast('Deleted.'); }
+  else showToast(d.error,'error');
+}
+window.deletePost = deletePost;
 </script>
 {% endblock %}

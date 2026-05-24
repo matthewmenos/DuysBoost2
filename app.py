@@ -22,11 +22,13 @@ from flask import (
     Flask, abort, g, jsonify, redirect, render_template, request, session,
     url_for
 )
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
+# In-memory typing state: {(user_id, recipient_username): timestamp}
+_typing_state: dict = {}
+
 app = Flask(__name__)
 base_dir = os.path.dirname(__file__)
 dotenv_path = os.path.join(base_dir, '.env')
@@ -36,16 +38,13 @@ if not os.path.exists(dotenv_path):
         dotenv_path = example_path
 load_dotenv(dotenv_path, override=False)
 
-# Trust proxy headers (X-Forwarded-Proto, X-Forwarded-For, etc.)
-# This is required for deployments behind reverse proxies (e.g., Render, Heroku, AWS ELB)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
-
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE', '0') == '1',
+    MAX_CONTENT_LENGTH=20 * 1024 * 1024,   # 20 MB max upload
 )
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'duys_boost.db')
@@ -84,11 +83,6 @@ WITHDRAWAL_KEYS = {
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
-# Allow OAuth over HTTP through proxies (for development/testing on Render, Heroku, etc.)
-# In production with HTTPS, this is automatically false
-if os.environ.get('OAUTHLIB_INSECURE_TRANSPORT') is None:
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' if not os.environ.get('COOKIE_SECURE', '0') == '1' else '0'
-
 oauth = OAuth(app)
 if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
     oauth.register(
@@ -97,7 +91,6 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         client_secret=GOOGLE_CLIENT_SECRET,
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid email profile'},
-        userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
     )
 
 
@@ -217,7 +210,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        body TEXT NOT NULL,
+        body TEXT,
         image_url TEXT,
         reply_to_id INTEGER,
         repost_of_id INTEGER,
@@ -335,13 +328,67 @@ def init_db():
         FOREIGN KEY(creator_id)    REFERENCES users(id),
         FOREIGN KEY(tier_id)       REFERENCES subscription_tiers(id)
     );
+
+    -- ── Phase 4: Discovery & trending ─────────────────────────────────
+    CREATE TABLE IF NOT EXISTS search_history (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        query      TEXT NOT NULL,
+        result_type TEXT DEFAULT 'mixed',
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS post_views (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id    INTEGER NOT NULL,
+        user_id    INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(post_id, user_id),
+        FOREIGN KEY(post_id) REFERENCES posts(id),
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    -- ── Direct Messages ────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS conversations (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_a       INTEGER NOT NULL,
+        user_b       INTEGER NOT NULL,
+        last_msg_at  TEXT DEFAULT (datetime('now')),
+        UNIQUE(user_a, user_b),
+        FOREIGN KEY(user_a) REFERENCES users(id),
+        FOREIGN KEY(user_b) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        conversation_id INTEGER NOT NULL,
+        sender_id       INTEGER NOT NULL,
+        body            TEXT,
+        msg_type        TEXT DEFAULT 'text',
+        file_data       TEXT,
+        file_name       TEXT,
+        file_mime       TEXT,
+        is_read         INTEGER DEFAULT 0,
+        created_at      TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(conversation_id) REFERENCES conversations(id),
+        FOREIGN KEY(sender_id)       REFERENCES users(id)
+    );
     ''')
 
     # ── Migrations for databases created by earlier versions ─────────────
+    def _table_exists(table):
+        return bool(db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone())
+
     def _add_col_if_missing(table, col, decl):
+        if not _table_exists(table):
+            return
         cols = {r[1] for r in db.execute(f'PRAGMA table_info({table})').fetchall()}
         if col not in cols:
-            db.execute(f'ALTER TABLE {table} ADD COLUMN {col} {decl}')
+            try:
+                db.execute(f'ALTER TABLE {table} ADD COLUMN {col} {decl}')
+            except Exception:
+                pass
 
     def _create_index_if_missing(table, index_name, cols):
         cols_set = {r[1] for r in db.execute(f'PRAGMA table_info({table})').fetchall()}
@@ -398,6 +445,8 @@ def init_db():
     _create_index_if_missing('post_hashtags', 'idx_ph_post',    'post_id')
     _create_index_if_missing('post_hashtags', 'idx_ph_hashtag', 'hashtag_id')
     _add_col_if_missing('posts', 'hashtags_cached', 'TEXT')
+    _add_col_if_missing('posts', 'media_data',     'TEXT')
+    _add_col_if_missing('posts', 'media_mime',     'TEXT')
 
     # Phase 3 migrations
     _add_col_if_missing('users', 'total_tips_received', 'REAL DEFAULT 0')
@@ -408,6 +457,29 @@ def init_db():
     _create_index_if_missing('tips', 'idx_tips_from', 'from_user_id')
     _create_index_if_missing('subscriptions', 'idx_sub_creator',    'creator_id')
     _create_index_if_missing('subscriptions', 'idx_sub_subscriber', 'subscriber_id')
+
+    # Phase 4 migrations
+    _add_col_if_missing('posts', 'view_count',   'INTEGER DEFAULT 0')
+    _add_col_if_missing('posts', 'score',        'REAL DEFAULT 0')
+    _add_col_if_missing('users', 'search_count', 'INTEGER DEFAULT 0')
+    _create_index_if_missing('search_history', 'idx_sh_user',  'user_id')
+    _create_index_if_missing('search_history', 'idx_sh_query', 'query')
+    _create_index_if_missing('post_views',     'idx_pv_post',  'post_id')
+    _create_index_if_missing('posts',          'idx_posts_score', 'score')
+
+    # DM migrations
+    _add_col_if_missing('users', 'unread_dm_count', 'INTEGER DEFAULT 0')
+    _add_col_if_missing('users', 'online_at',       'TEXT')
+    _add_col_if_missing('users', 'show_online',     'INTEGER DEFAULT 1')
+    _add_col_if_missing('messages', 'msg_type',   'TEXT DEFAULT "text"')
+    _add_col_if_missing('messages', 'file_data',  'TEXT')
+    _add_col_if_missing('messages', 'file_name',  'TEXT')
+    _add_col_if_missing('messages', 'file_mime',  'TEXT')
+    _create_index_if_missing('conversations', 'idx_conv_a',    'user_a')
+    _create_index_if_missing('conversations', 'idx_conv_b',    'user_b')
+    _create_index_if_missing('conversations', 'idx_conv_last', 'last_msg_at')
+    _create_index_if_missing('messages', 'idx_msg_conv',   'conversation_id')
+    _create_index_if_missing('messages', 'idx_msg_sender', 'sender_id')
 
 
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
@@ -717,7 +789,7 @@ def signup():
         add_notification(db, user['id'], '👋 Welcome to DUYS Boost! Your account is ready.')
         db.commit()
         session['user_id'] = user['id']
-        return jsonify({'success': True, 'redirect': url_for('dashboard')})
+        return jsonify({'success': True, 'redirect': url_for('feed')})
     return render_template('auth.html', mode='signup')
 
 
@@ -736,7 +808,7 @@ def login():
         _maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
         session['user_id'] = user['id']
-        return jsonify({'success': True, 'redirect': url_for('dashboard')})
+        return jsonify({'success': True, 'redirect': url_for('feed')})
     return render_template('auth.html', mode='login')
 
 
@@ -761,12 +833,8 @@ def google_auth_callback():
         return redirect(url_for('login'))
     try:
         token = oauth.google.authorize_access_token()
-        userinfo = token.get('userinfo')
-        if not userinfo:
-            # Fallback: parse the ID token if userinfo not in token
-            userinfo = oauth.google.parse_id_token(token)
-    except Exception as e:
-        print(f'Google OAuth callback error: {e}')
+        userinfo = oauth.google.parse_id_token(token)
+    except Exception:
         return redirect(url_for('login'))
     return _finalize_oauth_login(userinfo, provider='Google')
 
@@ -795,7 +863,7 @@ def _finalize_oauth_login(userinfo, provider):
         db.commit()
     session.clear()
     session['user_id'] = user['id']
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('feed'))
 
 
 # ── Dashboard ────────────────────────────────────────────────────────────────
@@ -1686,6 +1754,12 @@ def _format_post(row, current_uid, db):
     p['active_boost'] = dict(boost) if boost else None
 
     # Subscriber-only lock: viewer has no active subscription to this author?
+    # Ensure media fields come through
+    if 'media_data' not in p:
+        p['media_data'] = None
+    if 'media_mime' not in p:
+        p['media_mime'] = None
+
     if p.get('is_subscriber_only') and p['user_id'] != current_uid:
         is_subscribed = bool(db.execute(
             "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
@@ -1708,6 +1782,109 @@ def _update_counts(db, user_id):
         following_count = (SELECT COUNT(*) FROM follows WHERE follower_id=?),
         post_count      = (SELECT COUNT(*) FROM posts WHERE user_id=? AND reply_to_id IS NULL)
         WHERE id=?""", (user_id, user_id, user_id, user_id))
+
+
+def _recalc_post_score(db, post_id):
+    """
+    Hacker-News-style score: (likes*2 + replies + reposts*1.5 + views*0.1 + boost*20)
+    decayed by hours since posting.  Stored on the row for cheap ORDER BY.
+    """
+    import math
+    row = db.execute(
+        'SELECT like_count,reply_count,repost_count,view_count,is_boosted,created_at '
+        'FROM posts WHERE id=?', (post_id,)
+    ).fetchone()
+    if not row:
+        return
+    try:
+        from datetime import datetime, timezone
+        posted = datetime.fromisoformat(row['created_at'].replace('Z',''))
+        if posted.tzinfo is None:
+            posted = posted.replace(tzinfo=timezone.utc)
+        age_h = max(0.1, (datetime.now(timezone.utc) - posted).total_seconds() / 3600)
+    except Exception:
+        age_h = 1.0
+    gravity = 1.8
+    interactions = (
+        float(row['like_count'] or 0) * 2 +
+        float(row['reply_count'] or 0) * 1.5 +
+        float(row['repost_count'] or 0) * 1.5 +
+        float(row['view_count'] or 0) * 0.05 +
+        (20.0 if row['is_boosted'] else 0)
+    )
+    score = interactions / math.pow(age_h + 2, gravity)
+    db.execute('UPDATE posts SET score=? WHERE id=?', (round(score, 6), post_id))
+
+
+def _get_personalized_post_ids(db, uid, limit=20, offset=0):
+    """
+    Personalised For-You feed:
+    1. Posts from people the viewer follows (weight ×1.5)
+    2. Posts liked/boosted by followed accounts
+    3. Top-scored public posts the viewer hasn't seen
+    Deduped, ordered by weighted score.
+    """
+    # IDs the viewer has already interacted with
+    seen = {r[0] for r in db.execute(
+        'SELECT post_id FROM post_views WHERE user_id=?', (uid,)
+    ).fetchall()}
+    liked = {r[0] for r in db.execute(
+        'SELECT post_id FROM post_likes WHERE user_id=?', (uid,)
+    ).fetchall()}
+    exclude = seen | liked
+
+    following_ids = [r[0] for r in db.execute(
+        'SELECT following_id FROM follows WHERE follower_id=?', (uid,)
+    ).fetchall()]
+
+    results = {}  # post_id -> weighted_score
+
+    # Tier 1: posts from followed accounts
+    if following_ids:
+        ph = ','.join('?' * len(following_ids))
+        rows = db.execute(
+            f'SELECT id, score FROM posts '
+            f'WHERE user_id IN ({ph}) AND reply_to_id IS NULL '
+            f'ORDER BY score DESC LIMIT 60',
+            following_ids
+        ).fetchall()
+        for r in rows:
+            if r['id'] not in exclude:
+                results[r['id']] = float(r['score'] or 0) * 1.6
+
+    # Tier 2: posts liked by people the viewer follows
+    if following_ids:
+        ph = ','.join('?' * len(following_ids))
+        rows = db.execute(
+            f'SELECT DISTINCT p.id, p.score FROM posts p '
+            f'JOIN post_likes l ON l.post_id=p.id '
+            f'WHERE l.user_id IN ({ph}) AND p.user_id != ? '
+            f'AND p.reply_to_id IS NULL ORDER BY p.score DESC LIMIT 40',
+            following_ids + [uid]
+        ).fetchall()
+        for r in rows:
+            if r['id'] not in exclude:
+                existing = results.get(r['id'], 0)
+                results[r['id']] = max(existing, float(r['score'] or 0) * 1.2)
+
+    # Tier 3: high-score public posts not yet seen (fill remainder)
+    need = max(0, limit + offset - len(results))
+    if need > 0:
+        known = list(results.keys()) + list(exclude) + [0]
+        ph = ','.join('?' * len(known))
+        rows = db.execute(
+            f'SELECT id, score FROM posts '
+            f'WHERE id NOT IN ({ph}) AND reply_to_id IS NULL AND user_id != ? '
+            f'ORDER BY score DESC LIMIT ?',
+            known + [uid, need + 20]
+        ).fetchall()
+        for r in rows:
+            results[r['id']] = float(r['score'] or 0)
+
+    # Sort by weighted score, paginate
+    ranked = sorted(results.items(), key=lambda x: -x[1])
+    page_ids = [pid for pid, _ in ranked[offset: offset + limit]]
+    return page_ids
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1746,17 +1923,23 @@ def feed():
             ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT ? OFFSET ?
         """, (uid, uid, per, off)).fetchall()
     else:
-        # For-you: mix of recent posts with boosted posts surfaced higher
-        rows = db.execute("""
-            SELECT p.*,
-              CASE WHEN EXISTS (
-                SELECT 1 FROM post_boosts pb
-                WHERE pb.post_id=p.id AND pb.status='active' AND pb.budget_spent < pb.budget
-              ) THEN 1 ELSE 0 END AS has_active_boost
-            FROM posts p
-            WHERE p.reply_to_id IS NULL
-            ORDER BY has_active_boost DESC, p.created_at DESC LIMIT ? OFFSET ?
-        """, (per, off)).fetchall()
+        # For-you: personalised scored algorithm
+        ranked_ids = _get_personalized_post_ids(db, uid, limit=per, offset=off)
+        if ranked_ids:
+            ph   = ','.join('?' * len(ranked_ids))
+            rows = db.execute(
+                f'SELECT * FROM posts WHERE id IN ({ph})', ranked_ids
+            ).fetchall()
+            # re-order to match ranked_ids order
+            row_map = {r['id']: r for r in rows}
+            rows    = [row_map[pid] for pid in ranked_ids if pid in row_map]
+        else:
+            # fallback for empty graph (new user / no follows)
+            rows = db.execute("""
+                SELECT * FROM posts
+                WHERE reply_to_id IS NULL
+                ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?
+            """, (per, off)).fetchall()
 
     posts    = [_format_post(r, uid, db) for r in rows]
     has_more = len(rows) == per
@@ -1804,18 +1987,22 @@ def create_post():
     repost_of = safe_int(request.form.get('repost_of_id'), 0) or None
     quote_body = (request.form.get('quote_body') or '').strip() or None
     subscriber_only = 1 if request.form.get('subscriber_only') else 0
+    media_data = (request.form.get('media_data') or '').strip() or None  # base64 data-URI
+    media_mime = (request.form.get('media_mime') or '').strip() or None
 
-    if not body and not repost_of:
+    if not body and not repost_of and not media_data:
         return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
-    if len(body) > 500:
+    if body and len(body) > 500:
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
 
     db.execute("""
-        INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body, is_subscriber_only, created_at)
-        VALUES (?,?,?,?,?,?,?)
-    """, (uid, body, reply_to, repost_of, quote_body, subscriber_only, now))
+        INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
+                           is_subscriber_only, media_data, media_mime, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)
+    """, (uid, body or None, reply_to, repost_of, quote_body,
+            subscriber_only, media_data, media_mime, now))
     post_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
 
     # Update counts
@@ -1849,6 +2036,7 @@ def create_post():
                    (' '.join('#' + t for t in tags), post_id))
 
     _update_counts(db, uid)
+    _recalc_post_score(db, post_id)
     db.commit()
 
     post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
@@ -1933,6 +2121,7 @@ def toggle_like(post_id):
                 f'❤️ @{me["username"]} liked your post.')
 
     new_count = db.execute('SELECT like_count FROM posts WHERE id=?', (post_id,)).fetchone()['like_count']
+    _recalc_post_score(db, post_id)
     db.commit()
     return jsonify({'success': True, 'liked': liked, 'like_count': new_count})
 
@@ -2096,15 +2285,13 @@ def edit_profile():
         bio          = (request.form.get('bio')          or '').strip()[:160]
         website      = (request.form.get('website')      or '').strip()[:120]
         location     = (request.form.get('location')     or '').strip()[:60]
-        avatar_url   = (request.form.get('avatar_url')   or '').strip()[:300]
-        banner_url   = (request.form.get('banner_url')   or '').strip()[:300]
 
+        # avatar_url and banner_url are now handled by /profile/upload-photo
         db.execute("""UPDATE users SET
-            display_name=?, bio=?, website=?, location=?,
-            avatar_url=?, banner_url=?
+            display_name=?, bio=?, website=?, location=?
             WHERE id=?""",
             (display_name or None, bio or None, website or None,
-             location or None, avatar_url or None, banner_url or None, uid))
+             location or None, uid))
         db.commit()
         me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
         return jsonify({'success': True, 'redirect': url_for('profile', username=me['username'])})
@@ -2117,56 +2304,6 @@ def edit_profile():
 # Social — Explore / Search
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.route('/explore')
-@login_required
-def explore():
-    db  = get_db()
-    uid = session['user_id']
-    q   = request.args.get('q', '').strip()
-
-    if q:
-        # Search posts (body match) and users (username/display_name match)
-        like = f'%{q}%'
-        post_rows = db.execute("""
-            SELECT p.* FROM posts p
-            WHERE p.body LIKE ? AND p.reply_to_id IS NULL
-            ORDER BY p.like_count DESC, p.created_at DESC LIMIT 30
-        """, (like,)).fetchall()
-        posts = [_format_post(r, uid, db) for r in post_rows]
-
-        users = db.execute("""
-            SELECT id, username, display_name, avatar_url, is_verified,
-                   follower_count, bio
-            FROM users WHERE username LIKE ? OR display_name LIKE ?
-            ORDER BY follower_count DESC LIMIT 10
-        """, (like, like)).fetchall()
-        users = [dict(u) for u in users]
-    else:
-        posts = []
-        users = []
-
-    # Trending posts (last 24h, most liked)
-    trending_posts = db.execute("""
-        SELECT p.* FROM posts p
-        WHERE p.reply_to_id IS NULL
-          AND p.created_at >= datetime('now', '-24 hours')
-        ORDER BY p.like_count DESC, p.reply_count DESC LIMIT 10
-    """).fetchall()
-    trending_posts = [_format_post(r, uid, db) for r in trending_posts]
-
-    # Suggested users
-    suggested = db.execute("""
-        SELECT id, username, display_name, avatar_url, is_verified,
-               follower_count, bio
-        FROM users WHERE id != ?
-          AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
-        ORDER BY follower_count DESC, id DESC LIMIT 8
-    """, (uid, uid)).fetchall()
-    suggested = [dict(u) for u in suggested]
-
-    return render_template('explore.html', q=q, posts=posts,
-                           users=users, trending_posts=trending_posts,
-                           suggested=suggested)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2455,18 +2592,6 @@ def my_boosts():
 # Phase 2 — Trending hashtags API (for explore sidebar)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.route('/api/trending/tags')
-@login_required
-def api_trending_tags():
-    db = get_db()
-    rows = db.execute("""
-        SELECT h.name, COUNT(ph.post_id) as cnt
-        FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
-        JOIN posts p ON p.id=ph.post_id
-        WHERE p.created_at >= datetime('now', '-7 days')
-        GROUP BY h.id ORDER BY cnt DESC LIMIT 15
-    """).fetchall()
-    return jsonify([dict(r) for r in rows])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2915,6 +3040,684 @@ def api_creator_stats(username):
 # Phase 3 — Upgrade post creation to support subscriber-only posts
 # ─────────────────────────────────────────────────────────────────────────────
 # (handled via is_subscriber_only flag in create_post — injected below)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 4 — Discovery: upgraded Explore, search, trending, recommendations
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _save_search(db, uid, query, result_type='mixed'):
+    """Persist a search query for history and ranking."""
+    if not query or len(query) < 2:
+        return
+    db.execute(
+        'INSERT INTO search_history (user_id, query, result_type) VALUES (?,?,?)',
+        (uid, query[:100], result_type)
+    )
+    # Increment searched-for users' search_count for ranking
+    db.execute("""
+        UPDATE users SET search_count = search_count + 1
+        WHERE username LIKE ? OR display_name LIKE ?
+    """, (f'%{query}%', f'%{query}%'))
+
+
+def _trending_hashtags(db, hours=48, limit=15):
+    """Return list of {name, cnt, velocity} sorted by velocity."""
+    rows = db.execute("""
+        SELECT h.name,
+               COUNT(ph.post_id)                                             AS cnt,
+               COUNT(CASE WHEN p.created_at >= datetime('now','-6 hours')
+                          THEN 1 END)                                        AS recent_cnt
+        FROM hashtags h
+        JOIN post_hashtags ph ON ph.hashtag_id = h.id
+        JOIN posts p          ON p.id = ph.post_id
+        WHERE p.created_at >= datetime('now', ? || ' hours')
+        GROUP BY h.id
+        HAVING cnt > 0
+        ORDER BY (recent_cnt * 3 + cnt) DESC
+        LIMIT ?
+    """, (f'-{hours}', limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _who_to_follow(db, uid, limit=8):
+    """
+    Ranked "who to follow" recommendations:
+    - People followed by your followees (second-degree)
+    - Filtered: not already followed, not self
+    - Sorted by: mutual-follower count DESC, then follower_count DESC
+    """
+    rows = db.execute("""
+        SELECT u.id, u.username, u.display_name, u.avatar_url,
+               u.is_verified, u.follower_count, u.bio, u.subscriber_count,
+               COUNT(DISTINCT f2.follower_id) AS mutual_count
+        FROM users u
+        JOIN follows f1  ON f1.following_id = u.id          -- someone follows u
+        JOIN follows f2  ON f2.following_id = f1.follower_id -- viewer also follows that someone
+        WHERE f2.follower_id = ?
+          AND u.id != ?
+          AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        GROUP BY u.id
+        ORDER BY mutual_count DESC, u.follower_count DESC
+        LIMIT ?
+    """, (uid, uid, uid, limit)).fetchall()
+
+    if len(rows) < limit:
+        # Top accounts the viewer isn't following yet
+        existing_ids = [r['id'] for r in rows] + [uid]
+        ph = ','.join('?' * len(existing_ids))
+        extra = db.execute(
+            f'SELECT id,username,display_name,avatar_url,is_verified,'
+            f'follower_count,bio,subscriber_count, 0 AS mutual_count '
+            f'FROM users WHERE id NOT IN ({ph}) '
+            f'AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?) '
+            f'ORDER BY follower_count DESC LIMIT ?',
+            existing_ids + [uid, limit - len(rows)]
+        ).fetchall()
+        rows = list(rows) + list(extra)
+
+    return [dict(r) for r in rows]
+
+
+@app.route('/explore')
+@login_required
+def explore():
+    db   = get_db()
+    uid  = session['user_id']
+    q    = request.args.get('q', '').strip()
+    tab  = request.args.get('tab', 'top')   # top | people | posts | tags | latest
+
+    posts = []
+    users = []
+    tags  = []
+
+    if q:
+        _save_search(db, uid, q)
+        like = f'%{q}%'
+
+        if tab in ('top', 'posts', 'latest'):
+            order = 'p.created_at DESC' if tab == 'latest' else 'p.score DESC, p.like_count DESC'
+            post_rows = db.execute(f"""
+                SELECT p.* FROM posts p
+                WHERE p.body LIKE ? AND p.reply_to_id IS NULL
+                ORDER BY {order} LIMIT 40
+            """, (like,)).fetchall()
+            posts = [_format_post(r, uid, db) for r in post_rows]
+
+        if tab in ('top', 'people'):
+            user_rows = db.execute("""
+                SELECT id, username, display_name, avatar_url, is_verified,
+                       follower_count, bio, subscriber_count,
+                       EXISTS(SELECT 1 FROM follows
+                              WHERE follower_id=? AND following_id=id) AS you_follow
+                FROM users
+                WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?
+                ORDER BY follower_count DESC LIMIT 12
+            """, (uid, like, like, uid)).fetchall()
+            users = [dict(u) for u in user_rows]
+
+        if tab in ('top', 'tags'):
+            tag_q = q.lstrip('#').lower()
+            tag_rows = db.execute("""
+                SELECT h.name,
+                       COUNT(ph.post_id) AS cnt
+                FROM hashtags h
+                JOIN post_hashtags ph ON ph.hashtag_id = h.id
+                WHERE h.name LIKE ?
+                GROUP BY h.id
+                ORDER BY cnt DESC LIMIT 10
+            """, (f'%{tag_q}%',)).fetchall()
+            tags = [dict(t) for t in tag_rows]
+
+        db.commit()   # persist search_history insert
+
+    # Always fetch: trending tags, who to follow, top posts for sidebar
+    trending_tags  = _trending_hashtags(db, hours=48, limit=12)
+    who_to_follow  = _who_to_follow(db, uid, limit=6)
+
+    # Recent search history (last 8 unique queries)
+    history = db.execute("""
+        SELECT DISTINCT query FROM search_history
+        WHERE user_id=? ORDER BY created_at DESC LIMIT 8
+    """, (uid,)).fetchall()
+    recent_searches = [r['query'] for r in history]
+
+    # Trending posts (last 6h, scored)
+    trending_posts = db.execute("""
+        SELECT p.* FROM posts p
+        WHERE p.reply_to_id IS NULL
+          AND p.created_at >= datetime('now', '-6 hours')
+        ORDER BY p.score DESC LIMIT 8
+    """).fetchall()
+    trending_posts = [_format_post(r, uid, db) for r in trending_posts]
+
+    return render_template('explore.html',
+                           q=q, tab=tab,
+                           posts=posts, users=users, tags=tags,
+                           trending_tags=trending_tags,
+                           who_to_follow=who_to_follow,
+                           recent_searches=recent_searches,
+                           trending_posts=trending_posts)
+
+
+@app.route('/api/search/autocomplete')
+@login_required
+def search_autocomplete():
+    """Live autocomplete: return matching users and hashtags."""
+    db  = get_db()
+    uid = session['user_id']
+    q   = request.args.get('q', '').strip()
+    if len(q) < 1:
+        return jsonify({'users': [], 'tags': []})
+    like = f'{q}%'
+
+    users = db.execute("""
+        SELECT username, display_name, avatar_url, is_verified, follower_count
+        FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?
+        ORDER BY follower_count DESC LIMIT 5
+    """, (like, like, uid)).fetchall()
+
+    tags = db.execute("""
+        SELECT h.name, COUNT(ph.post_id) AS cnt
+        FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
+        WHERE h.name LIKE ?
+        GROUP BY h.id ORDER BY cnt DESC LIMIT 5
+    """, (like,)).fetchall()
+
+    return jsonify({
+        'users': [dict(u) for u in users],
+        'tags':  [dict(t) for t in tags],
+    })
+
+
+@app.route('/api/trending/posts')
+@login_required
+def api_trending_posts():
+    """Top scored posts in a rolling window — used by explore sidebar."""
+    db     = get_db()
+    uid    = session['user_id']
+    window = request.args.get('window', '24h')
+    hours  = {'6h': 6, '24h': 24, '48h': 48, '7d': 168}.get(window, 24)
+
+    rows = db.execute("""
+        SELECT p.* FROM posts p
+        WHERE p.reply_to_id IS NULL
+          AND p.created_at >= datetime('now', ? || ' hours')
+        ORDER BY p.score DESC LIMIT 10
+    """, (f'-{hours}',)).fetchall()
+    return jsonify([_format_post(r, uid, db) for r in rows])
+
+
+@app.route('/api/trending/tags')
+@login_required
+def api_trending_tags():
+    db = get_db()
+    return jsonify(_trending_hashtags(db, hours=48, limit=15))
+
+
+@app.route('/api/who-to-follow')
+@login_required
+def api_who_to_follow():
+    db  = get_db()
+    uid = session['user_id']
+    recs = _who_to_follow(db, uid, limit=8)
+    # add you_follow flag
+    for u in recs:
+        u['you_follow'] = bool(db.execute(
+            'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+            (uid, u['id'])
+        ).fetchone())
+    return jsonify(recs)
+
+
+@app.route('/api/post/<int:post_id>/view', methods=['POST'])
+@login_required
+def record_post_view(post_id):
+    """Record that the viewer has seen a post (for personalisation + view counts)."""
+    db  = get_db()
+    uid = session['user_id']
+    try:
+        db.execute(
+            'INSERT OR IGNORE INTO post_views (post_id, user_id) VALUES (?,?)',
+            (post_id, uid)
+        )
+        db.execute(
+            'UPDATE posts SET view_count=view_count+1 WHERE id=? '
+            'AND NOT EXISTS (SELECT 1 FROM post_views WHERE post_id=? AND user_id=?)',
+            (post_id, post_id, uid)
+        )
+        _recalc_post_score(db, post_id)
+        db.commit()
+    except Exception:
+        pass
+    return jsonify({'ok': True})
+
+
+@app.route('/trending')
+@login_required
+def trending():
+    """Dedicated trending page — top posts + tags across multiple time windows."""
+    db     = get_db()
+    uid    = session['user_id']
+    window = request.args.get('w', '24h')
+    hours  = {'6h': 6, '24h': 24, '48h': 48, '7d': 168}.get(window, 24)
+
+    top_posts = db.execute("""
+        SELECT p.* FROM posts p
+        WHERE p.reply_to_id IS NULL
+          AND p.created_at >= datetime('now', ? || ' hours')
+        ORDER BY p.score DESC LIMIT 30
+    """, (f'-{hours}',)).fetchall()
+    top_posts = [_format_post(r, uid, db) for r in top_posts]
+
+    top_tags       = _trending_hashtags(db, hours=hours, limit=20)
+    who_to_follow  = _who_to_follow(db, uid, limit=6)
+
+    # Rising creators: accounts who gained most followers recently
+    rising = db.execute("""
+        SELECT u.id, u.username, u.display_name, u.avatar_url,
+               u.is_verified, u.follower_count, u.bio,
+               COUNT(f.follower_id) AS new_followers
+        FROM users u
+        JOIN follows f ON f.following_id = u.id
+        WHERE f.created_at >= datetime('now', ? || ' hours')
+          AND u.id != ?
+          AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        GROUP BY u.id
+        ORDER BY new_followers DESC
+        LIMIT 5
+    """, (f'-{hours}', uid, uid)).fetchall()
+    rising = [dict(r) for r in rising]
+
+    return render_template('trending.html',
+                           top_posts=top_posts,
+                           top_tags=top_tags,
+                           who_to_follow=who_to_follow,
+                           rising=rising,
+                           window=window)
+
+
+@app.route('/api/search/history/clear', methods=['POST'])
+@login_required
+def clear_search_history():
+    db  = get_db()
+    uid = session['user_id']
+    db.execute('DELETE FROM search_history WHERE user_id=?', (uid,))
+    db.commit()
+    return jsonify({'success': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Direct Messages
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_or_create_conversation(db, uid, other_id):
+    """Return conversation row, creating it if needed. Always orders user_a < user_b."""
+    a, b = min(uid, other_id), max(uid, other_id)
+    conv = db.execute(
+        'SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)
+    ).fetchone()
+    if not conv:
+        db.execute(
+            'INSERT INTO conversations (user_a, user_b, last_msg_at) VALUES (?,?,datetime("now"))',
+            (a, b)
+        )
+        conv_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+        conv = db.execute('SELECT * FROM conversations WHERE id=?', (conv_id,)).fetchone()
+    return conv
+
+
+def _format_conversation(conv, uid, db):
+    """Enrich a conversation row with the other user's info and last message."""
+    other_id = conv['user_b'] if conv['user_a'] == uid else conv['user_a']
+    other = db.execute(
+        'SELECT id, username, display_name, avatar_url, is_verified FROM users WHERE id=?',
+        (other_id,)
+    ).fetchone()
+    try:
+        last_msg = db.execute(
+            'SELECT id, conversation_id, sender_id, body, msg_type, file_name, is_read, created_at '
+            'FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1',
+            (conv['id'],)
+        ).fetchone()
+        unread = db.execute(
+            'SELECT COUNT(*) FROM messages '
+            'WHERE conversation_id=? AND sender_id!=? AND is_read=0',
+            (conv['id'], uid)
+        ).fetchone()[0]
+    except Exception:
+        last_msg = None
+        unread   = 0
+    return {
+        'id':          conv['id'],
+        'other':       dict(other) if other else {},
+        'last_msg':    dict(last_msg) if last_msg else None,
+        'unread':      unread,
+        'last_msg_at': conv['last_msg_at'],
+    }
+
+
+@app.route('/messages')
+@login_required
+def messages_inbox():
+    """Conversation list — all threads the current user is part of."""
+    db  = get_db()
+    uid = session['user_id']
+
+    rows = db.execute("""
+        SELECT * FROM conversations
+        WHERE user_a=? OR user_b=?
+        ORDER BY last_msg_at DESC
+    """, (uid, uid)).fetchall()
+
+    convs = [_format_conversation(r, uid, db) for r in rows]
+
+    # Mark unread DM count to 0 when inbox is opened
+    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=?', (uid,))
+    db.commit()
+
+    now_str = datetime.now(timezone.utc).isoformat()[:10]
+    return render_template('messages.html', conversations=convs, now_str=now_str)
+
+
+@app.route('/messages/<username>')
+@login_required
+def message_thread(username):
+    """Individual DM thread with a specific user."""
+    db  = get_db()
+    uid = session['user_id']
+
+    other = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not other:
+        return render_template('error.html', code=404, message='User not found.'), 404
+    if other['id'] == uid:
+        return redirect(url_for('messages_inbox'))
+
+    conv = _get_or_create_conversation(db, uid, other['id'])
+
+    # Load messages (newest last)
+    msgs = db.execute("""
+        SELECT m.id, m.conversation_id, m.sender_id, m.body,
+               m.msg_type, m.file_data, m.file_name, m.file_mime,
+               m.is_read, m.created_at,
+               u.username as sender_username, u.avatar_url as sender_avatar
+        FROM messages m JOIN users u ON u.id = m.sender_id
+        WHERE m.conversation_id=?
+        ORDER BY m.created_at ASC LIMIT 100
+    """, (conv['id'],)).fetchall()
+    msgs = [dict(m) for m in msgs]
+
+    # Mark all as read
+    db.execute(
+        'UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
+        (conv['id'], uid)
+    )
+    # Recompute unread_dm_count
+    total_unread = db.execute("""
+        SELECT COUNT(*) FROM messages m
+        JOIN conversations c ON c.id=m.conversation_id
+        WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
+    """, (uid, uid, uid)).fetchone()[0]
+    db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
+    db.commit()
+
+    return render_template('message_thread.html',
+                           other=dict(other), messages=msgs,
+                           conv_id=conv['id'])
+
+
+@app.route('/messages/<username>/send', methods=['POST'])
+@login_required
+def send_message(username):
+    db  = get_db()
+    uid = session['user_id']
+
+    other = db.execute('SELECT id, username FROM users WHERE username=?', (username,)).fetchone()
+    if not other or other['id'] == uid:
+        return jsonify({'success': False, 'error': 'Invalid recipient.'}), 400
+
+    # Accept both form-data and JSON payloads
+    ct = request.content_type or ''
+    if 'application/json' in ct:
+        _d = request.get_json(silent=True) or {}
+        body      = (_d.get('body') or '').strip() or None
+        msg_type  = (_d.get('msg_type') or 'text').strip().lower()
+        file_name = (_d.get('file_name') or '') or None
+        file_mime = (_d.get('file_mime') or '') or None
+        file_data = _d.get('file_data') or None  # base64 data-URI
+    else:
+        body      = (request.form.get('body') or '').strip() or None
+        msg_type  = (request.form.get('msg_type') or 'text').strip().lower()
+        file_name = (request.form.get('file_name') or '') or None
+        file_mime = (request.form.get('file_mime') or '') or None
+        file_data = request.form.get('file_data') or None  # base64 data-URI
+
+    if msg_type not in ('text', 'image', 'file', 'voice', 'video'):
+        msg_type = 'text'
+
+    # For text messages body is required; for media file_data is required
+    if msg_type == 'text' and not body:
+        return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
+    if msg_type != 'text' and not file_data:
+        return jsonify({'success': False, 'error': 'No file data received.'}), 400
+    if body and len(body) > 2000:
+        return jsonify({'success': False, 'error': 'Message too long (max 2000 chars).'}), 400
+
+    conv = _get_or_create_conversation(db, uid, other['id'])
+    now  = datetime.now(timezone.utc).isoformat()
+
+    db.execute(
+        '''INSERT INTO messages
+           (conversation_id, sender_id, body, msg_type, file_data, file_name, file_mime, created_at)
+           VALUES (?,?,?,?,?,?,?,?)''',
+        (conv['id'], uid, body, msg_type, file_data, file_name, file_mime, now)
+    )
+    db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
+
+    # Update sender's online_at heartbeat
+    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
+
+    me = db.execute('SELECT username, avatar_url FROM users WHERE id=?', (uid,)).fetchone()
+    # DM messages do NOT create notifications — they use the unread_dm_count badge only
+    db.commit()
+
+    msg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+    return jsonify({
+        'success': True,
+        'message': {
+            'id':              msg_id,
+            'body':            body,
+            'msg_type':        msg_type,
+            'file_data':       file_data,
+            'file_name':       file_name,
+            'file_mime':       file_mime,
+            'sender_id':       uid,
+            'sender_username': me['username'],
+            'sender_avatar':   me['avatar_url'],
+            'created_at':      now,
+            'is_read':         0,
+        }
+    })
+
+
+@app.route('/api/messages/<username>/poll')
+@login_required
+def poll_messages(username):
+    """Long-poll endpoint — returns messages newer than ?after=<id>."""
+    db    = get_db()
+    uid   = session['user_id']
+    after = request.args.get('after', 0, type=int)
+
+    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    if not other:
+        return jsonify({'messages': []}), 404
+
+    a, b = min(uid, other['id']), max(uid, other['id'])
+    conv = db.execute('SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+    if not conv:
+        return jsonify({'messages': []})
+
+    rows = db.execute("""
+        SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
+        FROM messages m JOIN users u ON u.id=m.sender_id
+        WHERE m.conversation_id=? AND m.id > ?
+        ORDER BY m.created_at ASC LIMIT 50
+    """, (conv['id'], after)).fetchall()
+
+    if rows:
+        # Mark as read
+        db.execute(
+            'UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
+            (conv['id'], uid, after)
+        )
+        total_unread = db.execute("""
+            SELECT COUNT(*) FROM messages m
+            JOIN conversations c ON c.id=m.conversation_id
+            WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
+        """, (uid, uid, uid)).fetchone()[0]
+        db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
+        db.commit()
+
+    return jsonify({'messages': [dict(r) for r in rows]})
+
+
+@app.route('/api/messages/unread')
+@login_required
+def api_unread_dms():
+    db  = get_db()
+    uid = session['user_id']
+    count = db.execute('SELECT unread_dm_count FROM users WHERE id=?', (uid,)).fetchone()
+    return jsonify({'count': int((count['unread_dm_count'] or 0)) if count else 0})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Photo upload for profile avatar / banner
+# ─────────────────────────────────────────────────────────────────────────────
+
+import base64 as _b64
+
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024   # 5 MB
+
+
+@app.route('/profile/upload-photo', methods=['POST'])
+@login_required
+def upload_profile_photo():
+    """
+    Accept a photo file upload (multipart/form-data) for avatar or banner.
+    Stores as a data-URI in the database so no file system / CDN required.
+    field: 'photo' (file), 'type': 'avatar' | 'banner'
+    """
+    db    = get_db()
+    uid   = session['user_id']
+    photo = request.files.get('photo')
+    kind  = (request.form.get('type') or 'avatar').strip().lower()
+
+    if kind not in ('avatar', 'banner'):
+        return jsonify({'success': False, 'error': 'Invalid photo type.'}), 400
+    if not photo or not photo.filename:
+        return jsonify({'success': False, 'error': 'No file selected.'}), 400
+
+    mime = photo.mimetype or ''
+    if mime not in ALLOWED_IMAGE_TYPES:
+        return jsonify({'success': False,
+                        'error': 'Unsupported file type. Please upload JPG, PNG, WebP or GIF.'}), 400
+
+    data = photo.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        return jsonify({'success': False,
+                        'error': f'File too large. Maximum size is 5 MB.'}), 400
+
+    data_uri = f'data:{mime};base64,' + _b64.b64encode(data).decode('ascii')
+
+    col = 'avatar_url' if kind == 'avatar' else 'banner_url'
+    db.execute(f'UPDATE users SET {col}=? WHERE id=?', (data_uri, uid))
+    db.commit()
+
+    return jsonify({'success': True, 'url': data_uri, 'type': kind})
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Messaging — Online status + typing + new helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/online/heartbeat', methods=['POST'])
+@login_required
+def online_heartbeat():
+    """Browser pings this every 30s to indicate the user is online."""
+    db  = get_db()
+    uid = session['user_id']
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
+    db.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/online/status', methods=['POST'])
+@login_required
+def toggle_online_status():
+    """Toggle whether this user's online status is visible to others."""
+    db  = get_db()
+    uid = session['user_id']
+    data = request.get_json(silent=True) or {}
+    show = 1 if data.get('show', True) else 0
+    db.execute('UPDATE users SET show_online=? WHERE id=?', (show, uid))
+    db.commit()
+    return jsonify({'show_online': bool(show)})
+
+
+@app.route('/api/online/check/<username>')
+@login_required
+def check_online(username):
+    """Return whether a user is currently online (last heartbeat < 90s ago)."""
+    db = get_db()
+    row = db.execute(
+        'SELECT online_at, show_online FROM users WHERE username=?', (username,)
+    ).fetchone()
+    if not row or not row['show_online']:
+        return jsonify({'online': False})
+    if not row['online_at']:
+        return jsonify({'online': False})
+    try:
+        from datetime import timedelta
+        last = datetime.fromisoformat(row['online_at'].replace('Z', ''))
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        online = (datetime.now(timezone.utc) - last).total_seconds() < 90
+        return jsonify({'online': online, 'last_seen': row['online_at'][:16]})
+    except Exception:
+        return jsonify({'online': False})
+
+
+@app.route('/api/messages/<username>/typing', methods=['POST'])
+@login_required
+def set_typing(username):
+    """
+    Store a typing timestamp so the other user can poll and see the indicator.
+    Uses a lightweight in-memory dict — good enough for single-server deploys.
+    """
+    uid = session['user_id']
+    now = datetime.now(timezone.utc).timestamp()
+    # Store in a module-level dict; lightweight alternative to Redis
+    _typing_state[(uid, username)] = now
+    return jsonify({'ok': True})
+
+
+@app.route('/api/messages/<username>/is-typing')
+@login_required
+def is_typing(username):
+    """Return True if the other user has typed in the last 3 seconds."""
+    db    = get_db()
+    uid   = session['user_id']
+    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    if not other:
+        return jsonify({'typing': False})
+    key = (other['id'], db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()['username'])
+    ts  = _typing_state.get(key, 0)
+    typing = (datetime.now(timezone.utc).timestamp() - ts) < 3
+    return jsonify({'typing': typing})
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Error handlers
