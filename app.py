@@ -348,6 +348,59 @@ def init_db():
         FOREIGN KEY(user_id) REFERENCES users(id)
     );
 
+    -- ── Channels ───────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS channels (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL UNIQUE,
+        slug        TEXT NOT NULL UNIQUE,
+        description TEXT,
+        avatar_url  TEXT,
+        owner_id    INTEGER NOT NULL,
+        is_public   INTEGER DEFAULT 1,
+        member_count INTEGER DEFAULT 0,
+        post_count  INTEGER DEFAULT 0,
+        created_at  TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(owner_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS channel_members (
+        channel_id  INTEGER NOT NULL,
+        user_id     INTEGER NOT NULL,
+        role        TEXT DEFAULT 'member',
+        joined_at   TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY(channel_id, user_id),
+        FOREIGN KEY(channel_id) REFERENCES channels(id),
+        FOREIGN KEY(user_id)    REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS channel_posts (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        post_id    INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(channel_id, post_id),
+        FOREIGN KEY(channel_id) REFERENCES channels(id),
+        FOREIGN KEY(post_id)    REFERENCES posts(id)
+    );
+
+    -- ── Polls ──────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS poll_options (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL,
+        label   TEXT NOT NULL,
+        votes   INTEGER DEFAULT 0,
+        FOREIGN KEY(post_id) REFERENCES posts(id)
+    );
+    CREATE TABLE IF NOT EXISTS poll_votes (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id   INTEGER NOT NULL,
+        option_id INTEGER NOT NULL,
+        user_id   INTEGER NOT NULL,
+        voted_at  TEXT DEFAULT (datetime('now')),
+        UNIQUE(post_id, user_id),
+        FOREIGN KEY(post_id)   REFERENCES posts(id),
+        FOREIGN KEY(option_id) REFERENCES poll_options(id),
+        FOREIGN KEY(user_id)   REFERENCES users(id)
+    );
+
     -- ── Direct Messages ────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS conversations (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,12 +444,17 @@ def init_db():
                 pass
 
     def _create_index_if_missing(table, index_name, cols):
+        if not _table_exists(table):
+            return
         cols_set = {r[1] for r in db.execute(f'PRAGMA table_info({table})').fetchall()}
         if not set(c.strip() for c in cols.split(',')) <= cols_set:
             return
         existing = {r[1] for r in db.execute(f'PRAGMA index_list({table})').fetchall()}
         if index_name not in existing:
-            db.execute(f'CREATE INDEX {index_name} ON {table}({cols})')
+            try:
+                db.execute(f'CREATE INDEX {index_name} ON {table}({cols})')
+            except Exception:
+                pass
 
     # Migrate old paystack columns to crypto columns
     _add_col_if_missing('users', 'crypto_network', 'TEXT')
@@ -487,6 +545,16 @@ def init_db():
     _create_index_if_missing('messages', 'idx_msg_conv',   'conversation_id')
     _create_index_if_missing('messages', 'idx_msg_sender', 'sender_id')
 
+    # Channels + Polls + Settings migrations
+    _add_col_if_missing('posts', 'post_type',       'TEXT DEFAULT "post"')
+    _add_col_if_missing('posts', 'poll_expires_at', 'TEXT')
+    _add_col_if_missing('users', 'allow_post_saves','INTEGER DEFAULT 1')
+    _create_index_if_missing('channels',       'idx_ch_owner',    'owner_id')
+    _create_index_if_missing('channel_members','idx_chm_channel', 'channel_id')
+    _create_index_if_missing('channel_members','idx_chm_user',    'user_id')
+    _create_index_if_missing('channel_posts',  'idx_chp_channel', 'channel_id')
+    _create_index_if_missing('poll_options',   'idx_po_post',     'post_id')
+    _create_index_if_missing('poll_votes',     'idx_poll_votes_post',  'post_id')
 
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
     if not existing:
@@ -1947,7 +2015,7 @@ def feed():
                 ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?
             """, (per, off)).fetchall()
 
-    posts    = [_format_post(r, uid, db) for r in rows]
+    posts    = [_format_post_with_poll(r, uid, db) for r in rows]
     has_more = len(rows) == per
 
     if request.headers.get('X-Requested-With') == 'fetch':
@@ -1995,8 +2063,24 @@ def create_post():
     subscriber_only = 1 if request.form.get('subscriber_only') else 0
     media_data = (request.form.get('media_data') or '').strip() or None  # base64 data-URI
     media_mime = (request.form.get('media_mime') or '').strip() or None
+    post_type  = (request.form.get('post_type') or 'post').strip().lower()
+    channel_id = safe_int(request.form.get('channel_id'), 0) or None
 
-    if not body and not repost_of and not media_data:
+    # Poll options (JSON list of strings)
+    import json as _json_create
+    poll_options_raw = request.form.get('poll_options') or '[]'
+    try:
+        poll_options = [str(o).strip() for o in _json_create.loads(poll_options_raw) if str(o).strip()][:6]
+    except Exception:
+        poll_options = []
+    if post_type == 'poll' and len(poll_options) < 2:
+        return jsonify({'success': False, 'error': 'A poll needs at least 2 options.'}), 400
+    poll_expires_at = None
+    if post_type == 'poll':
+        from datetime import timedelta
+        poll_expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+    if not body and not repost_of and not media_data and post_type != 'poll':
         return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
     if body and len(body) > 500:
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
@@ -2005,11 +2089,25 @@ def create_post():
 
     db.execute("""
         INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
-                           is_subscriber_only, media_data, media_mime, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)
+                           is_subscriber_only, media_data, media_mime,
+                           post_type, poll_expires_at, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
     """, (uid, body or None, reply_to, repost_of, quote_body,
-            subscriber_only, media_data, media_mime, now))
+            subscriber_only, media_data, media_mime,
+            post_type, poll_expires_at, now))
     post_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    # Insert poll options
+    for opt_label in poll_options:
+        db.execute('INSERT INTO poll_options (post_id, label) VALUES (?,?)', (post_id, opt_label))
+
+    # Link to channel if provided
+    if channel_id:
+        ch = db.execute('SELECT id FROM channels WHERE id=?', (channel_id,)).fetchone()
+        if ch:
+            db.execute('INSERT OR IGNORE INTO channel_posts (channel_id, post_id) VALUES (?,?)',
+                       (channel_id, post_id))
+            db.execute('UPDATE channels SET post_count=post_count+1 WHERE id=?', (channel_id,))
 
     # Update counts
     if reply_to:
@@ -2040,6 +2138,19 @@ def create_post():
     if tags:
         db.execute('UPDATE posts SET hashtags_cached=? WHERE id=?',
                    (' '.join('#' + t for t in tags), post_id))
+
+    # ── @mention notifications ──────────────────────────────────────────────
+    if body:
+        mentioned = list(set(_re.findall(r'@(\w+)', body)))
+        me_row = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        me_name = me_row['username'] if me_row else ''
+        for username in mentioned[:10]:
+            if username.lower() == me_name.lower():
+                continue
+            target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+            if target and target['id'] != uid:
+                add_notification(db, target['id'],
+                    f'🔔 @{me_name} mentioned you in a post.')
 
     _update_counts(db, uid)
     _recalc_post_score(db, post_id)
@@ -2291,13 +2402,13 @@ def edit_profile():
         bio          = (request.form.get('bio')          or '').strip()[:160]
         website      = (request.form.get('website')      or '').strip()[:120]
         location     = (request.form.get('location')     or '').strip()[:60]
+        allow_saves  = 1 if request.form.get('allow_post_saves', '1') != '0' else 0
 
-        # avatar_url and banner_url are now handled by /profile/upload-photo
         db.execute("""UPDATE users SET
-            display_name=?, bio=?, website=?, location=?
+            display_name=?, bio=?, website=?, location=?, allow_post_saves=?
             WHERE id=?""",
             (display_name or None, bio or None, website or None,
-             location or None, uid))
+             location or None, allow_saves, uid))
         db.commit()
         me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
         return jsonify({'success': True, 'redirect': url_for('profile', username=me['username'])})
@@ -3974,6 +4085,283 @@ def search_users_for_dm():
         (like, like, uid)
     ).fetchall()
     return jsonify({'users': [dict(u) for u in rows]})
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Settings — allow_post_saves
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/settings/saves', methods=['POST'])
+@login_required
+def toggle_post_saves():
+    db  = get_db()
+    uid = session['user_id']
+    data = request.get_json(silent=True) or {}
+    allow = 1 if data.get('allow', True) else 0
+    db.execute('UPDATE users SET allow_post_saves=? WHERE id=?', (allow, uid))
+    db.commit()
+    return jsonify({'success': True, 'allow_post_saves': bool(allow)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Polls — vote
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/poll/vote', methods=['POST'])
+@login_required
+def poll_vote(post_id):
+    db        = get_db()
+    uid       = session['user_id']
+    option_id = safe_int(request.form.get('option_id'), 0)
+
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found.'}), 404
+
+    keys = post.keys()
+    pt   = post['post_type'] if 'post_type' in keys else 'post'
+    if pt != 'poll':
+        return jsonify({'success': False, 'error': 'Not a poll.'}), 400
+
+    exp = post['poll_expires_at'] if 'poll_expires_at' in keys else None
+    if exp:
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            if _dt.fromisoformat(exp.replace('Z','')) < _dt.now(_tz.utc):
+                return jsonify({'success': False, 'error': 'This poll has ended.'}), 400
+        except Exception:
+            pass
+
+    # Check valid option
+    opt = db.execute('SELECT * FROM poll_options WHERE id=? AND post_id=?',
+                     (option_id, post_id)).fetchone()
+    if not opt:
+        return jsonify({'success': False, 'error': 'Invalid option.'}), 400
+
+    # Remove existing vote then insert
+    existing = db.execute('SELECT option_id FROM poll_votes WHERE post_id=? AND user_id=?',
+                          (post_id, uid)).fetchone()
+    if existing:
+        db.execute('UPDATE poll_options SET votes=MAX(0,votes-1) WHERE id=?', (existing['option_id'],))
+        db.execute('DELETE FROM poll_votes WHERE post_id=? AND user_id=?', (post_id, uid))
+
+    db.execute('INSERT INTO poll_votes (post_id,option_id,user_id) VALUES (?,?,?)',
+               (post_id, option_id, uid))
+    db.execute('UPDATE poll_options SET votes=votes+1 WHERE id=?', (option_id,))
+    db.commit()
+
+    options = db.execute('SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (post_id,)).fetchall()
+    total   = sum(o['votes'] for o in options)
+    result  = [{'id': o['id'], 'label': o['label'], 'votes': o['votes'],
+                'pct': round(o['votes']*100/total) if total else 0} for o in options]
+    return jsonify({'success': True, 'options': result, 'total': total, 'user_vote': option_id})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Channels
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _format_channel(ch, uid, db):
+    row = dict(ch)
+    row['is_member'] = bool(db.execute(
+        'SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid)
+    ).fetchone())
+    row['is_owner'] = ch['owner_id'] == uid
+    return row
+
+
+@app.route('/channels')
+@login_required
+def channels_browse():
+    db  = get_db()
+    uid = session['user_id']
+    q   = (request.args.get('q') or '').strip()
+    tab = request.args.get('tab', 'discover')   # discover | joined | owned
+
+    if tab == 'joined':
+        rows = db.execute("""
+            SELECT c.* FROM channels c
+            JOIN channel_members cm ON cm.channel_id=c.id
+            WHERE cm.user_id=?
+            ORDER BY c.member_count DESC, c.created_at DESC LIMIT 40
+        """, (uid,)).fetchall()
+    elif tab == 'owned':
+        rows = db.execute("""
+            SELECT * FROM channels WHERE owner_id=?
+            ORDER BY created_at DESC LIMIT 40
+        """, (uid,)).fetchall()
+    else:
+        # Discover
+        if q:
+            rows = db.execute("""
+                SELECT * FROM channels WHERE name LIKE ? OR description LIKE ?
+                ORDER BY member_count DESC LIMIT 30
+            """, (f'%{q}%', f'%{q}%')).fetchall()
+        else:
+            rows = db.execute("""
+                SELECT * FROM channels ORDER BY member_count DESC, created_at DESC LIMIT 40
+            """).fetchall()
+
+    channels = [_format_channel(r, uid, db) for r in rows]
+    return render_template('channels.html', channels=channels, tab=tab, q=q)
+
+
+@app.route('/channel/create', methods=['GET', 'POST'])
+@login_required
+def channel_create():
+    db  = get_db()
+    uid = session['user_id']
+
+    if request.method == 'POST':
+        name        = (request.form.get('name') or '').strip()[:60]
+        description = (request.form.get('description') or '').strip()[:300]
+        is_public   = 1 if request.form.get('is_public', '1') != '0' else 0
+
+        if not name:
+            return jsonify({'success': False, 'error': 'Channel name is required.'}), 400
+
+        import re as _re2
+        slug = _re2.sub(r'[^a-z0-9-]', '-', name.lower()).strip('-')
+        slug = _re2.sub(r'-+', '-', slug)[:50]
+        if not slug:
+            slug = f'channel-{uid}'
+
+        # Ensure unique slug
+        base_slug = slug
+        for i in range(1, 10):
+            ex = db.execute('SELECT 1 FROM channels WHERE slug=?', (slug,)).fetchone()
+            if not ex:
+                break
+            slug = f'{base_slug}-{i}'
+
+        try:
+            db.execute("""
+                INSERT INTO channels (name, slug, description, owner_id, is_public, member_count)
+                VALUES (?,?,?,?,?,1)
+            """, (name, slug, description or None, uid, is_public))
+            ch_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute('INSERT INTO channel_members (channel_id,user_id,role) VALUES (?,?,?)',
+                       (ch_id, uid, 'owner'))
+            db.commit()
+            return jsonify({'success': True, 'redirect': url_for('channel_detail', slug=slug)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': 'Channel name already taken.'}), 400
+
+    return render_template('channel_create.html')
+
+
+@app.route('/channel/<slug>')
+@login_required
+def channel_detail(slug):
+    db  = get_db()
+    uid = session['user_id']
+
+    ch = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    if not ch:
+        return render_template('error.html', code=404, message='Channel not found.'), 404
+
+    is_member = bool(db.execute(
+        'SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid)
+    ).fetchone())
+
+    if not ch['is_public'] and not is_member:
+        return render_template('error.html', code=403, message='This channel is private.'), 403
+
+    post_rows = db.execute("""
+        SELECT p.* FROM posts p
+        JOIN channel_posts cp ON cp.post_id=p.id
+        WHERE cp.channel_id=?
+        ORDER BY p.created_at DESC LIMIT 40
+    """, (ch['id'],)).fetchall()
+    posts = [_format_post_with_poll(r, uid, db) for r in post_rows]
+
+    members = db.execute("""
+        SELECT u.username, u.display_name, u.avatar_url, u.is_verified, cm.role
+        FROM channel_members cm JOIN users u ON u.id=cm.user_id
+        WHERE cm.channel_id=?
+        ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'mod' THEN 1 ELSE 2 END, cm.joined_at
+        LIMIT 20
+    """, (ch['id'],)).fetchall()
+
+    return render_template('channel_detail.html',
+                           ch=dict(ch), posts=posts,
+                           members=[dict(m) for m in members],
+                           is_member=is_member, is_owner=ch['owner_id']==uid)
+
+
+@app.route('/channel/<slug>/join', methods=['POST'])
+@login_required
+def channel_join(slug):
+    db  = get_db()
+    uid = session['user_id']
+    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    if not ch:
+        return jsonify({'success': False, 'error': 'Channel not found.'}), 404
+
+    existing = db.execute('SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?',
+                          (ch['id'], uid)).fetchone()
+    if existing:
+        return jsonify({'success': False, 'error': 'Already a member.'}), 400
+
+    db.execute('INSERT INTO channel_members (channel_id,user_id,role) VALUES (?,?,?)',
+               (ch['id'], uid, 'member'))
+    db.execute('UPDATE channels SET member_count=member_count+1 WHERE id=?', (ch['id'],))
+    db.commit()
+    return jsonify({'success': True, 'member_count': db.execute(
+        'SELECT member_count FROM channels WHERE id=?', (ch['id'],)
+    ).fetchone()[0]})
+
+
+@app.route('/channel/<slug>/leave', methods=['POST'])
+@login_required
+def channel_leave(slug):
+    db  = get_db()
+    uid = session['user_id']
+    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    if not ch:
+        return jsonify({'success': False, 'error': 'Channel not found.'}), 404
+    if ch['owner_id'] == uid:
+        return jsonify({'success': False, 'error': 'Owner cannot leave. Delete the channel instead.'}), 400
+
+    db.execute('DELETE FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid))
+    db.execute('UPDATE channels SET member_count=MAX(0,member_count-1) WHERE id=?', (ch['id'],))
+    db.commit()
+    return jsonify({'success': True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _format_post_with_poll — extends _format_post with poll data
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _format_post_with_poll(row, uid, db):
+    p = _format_post(row, uid, db)
+    if p and p.get('post_type') == 'poll':
+        options = db.execute(
+            'SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (p['id'],)
+        ).fetchall()
+        total = sum(o['votes'] for o in options)
+        user_vote = db.execute(
+            'SELECT option_id FROM poll_votes WHERE post_id=? AND user_id=?',
+            (p['id'], uid)
+        ).fetchone()
+        p['poll_options'] = [
+            {'id': o['id'], 'label': o['label'], 'votes': o['votes'],
+             'pct': round(o['votes']*100/total) if total else 0}
+            for o in options
+        ]
+        p['poll_total']     = total
+        p['poll_user_vote'] = user_vote['option_id'] if user_vote else None
+        exp = p.get('poll_expires_at')
+        if exp:
+            try:
+                from datetime import datetime as _dt2, timezone as _tz2
+                p['poll_ended'] = _dt2.fromisoformat(exp.replace('Z','')) < _dt2.now(_tz2.utc)
+            except Exception:
+                p['poll_ended'] = False
+        else:
+            p['poll_ended'] = False
+    return p
 
 
 # ─────────────────────────────────────────────────────────────────────────────

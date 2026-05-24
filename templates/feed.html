@@ -38,12 +38,23 @@
               <button type="button" class="compose-icon-btn" onclick="document.getElementById('post-media-input').click()" title="Add photo/video" aria-label="Attach photo or video">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
               </button>
+              <!-- Poll -->
+              <button type="button" class="compose-icon-btn" id="feed-poll-btn" onclick="feedTogglePoll()" title="Create poll" aria-label="Create poll">📊</button>
               <input type="file" id="post-media-input" accept="image/*,video/*" multiple style="display:none">
               <span class="compose-chars" id="compose-chars">500</span>
               <button type="button" class="sub-only-pill" id="sub-only-pill" title="Toggle audience">🌐 Public</button>
               <input type="checkbox" id="compose-sub-only" style="display:none">
             </div>
             <button class="btn btn-primary btn-sm" id="compose-submit">Post</button>
+          </div>
+          <!-- Poll option builder (hidden by default) -->
+          <div id="feed-poll-wrap" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+            <div class="text-sm fw-700 mb-8">📊 Poll options <span class="text-muted" style="font-weight:400">(min 2, max 6)</span></div>
+            <div id="feed-poll-options">
+              <input class="form-input mb-6" type="text" placeholder="Option 1" style="font-size:13.5px">
+              <input class="form-input mb-6" type="text" placeholder="Option 2" style="font-size:13.5px">
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="feedAddPollOption()">+ Add option</button>
           </div>
         </div>
       </div>
@@ -55,6 +66,8 @@
          class="feed-tab {% if tab=='for_you' %}active{% endif %}">For You</a>
       <a href="{{ url_for('feed', tab='following') }}"
          class="feed-tab {% if tab=='following' %}active{% endif %}">Following</a>
+      <a href="{{ url_for('channels_browse') }}"
+         class="feed-tab {% if request.endpoint=='channels_browse' %}active{% endif %}">📡 Channels</a>
       <a href="{{ url_for('feed', tab='earn') }}"
          class="feed-tab earn-tab {% if tab=='earn' %}active{% endif %}">
         ⚡ Earn
@@ -249,9 +262,37 @@ if (composeInput) {
   }
   window.removePostMedia = i => { postMediaFiles.splice(i,1); renderPostPreviews(); };
 
+  // ── Poll toggle ───────────────────────────────────────────────────────────
+  function feedTogglePoll() {
+    const w = document.getElementById('feed-poll-wrap');
+    const btn = document.getElementById('feed-poll-btn');
+    const visible = w.style.display !== 'none';
+    w.style.display = visible ? 'none' : 'block';
+    btn.style.color = visible ? '' : 'var(--accent)';
+  }
+  window.feedTogglePoll = feedTogglePoll;
+
+  function feedAddPollOption() {
+    const list = document.getElementById('feed-poll-options');
+    const count = list.querySelectorAll('input').length;
+    if (count >= 6) { showToast('Max 6 poll options.', 'error'); return; }
+    const inp = document.createElement('input');
+    inp.className='form-input mb-6'; inp.type='text';
+    inp.placeholder=`Option ${count+1}`; inp.style.fontSize='13.5px';
+    list.appendChild(inp);
+  }
+  window.feedAddPollOption = feedAddPollOption;
+
   composeSubmit.addEventListener('click', async () => {
     const body = composeInput.value.trim();
-    if (!body && !postMediaFiles.length) return;
+    const pollWrap = document.getElementById('feed-poll-wrap');
+    const isPoll = pollWrap && pollWrap.style.display !== 'none';
+    let pollOptions = [];
+    if (isPoll) {
+      pollOptions = Array.from(document.querySelectorAll('#feed-poll-options input')).map(i=>i.value.trim()).filter(Boolean);
+      if (pollOptions.length < 2) { showToast('A poll needs at least 2 options.', 'error'); return; }
+    }
+    if (!body && !postMediaFiles.length && !isPoll) return;
     composeSubmit.disabled = true;
     composeSubmit.textContent = 'Posting…';
     try {
@@ -262,6 +303,10 @@ if (composeInput) {
         fd.append('media_data', postMediaFiles[0].dataUrl);
         fd.append('media_mime', postMediaFiles[0].mime);
       }
+      if (isPoll) {
+        fd.append('post_type', 'poll');
+        fd.append('poll_options', JSON.stringify(pollOptions));
+      }
       const r  = await fetch('/post', { method: 'POST', body: fd });
       const d  = await r.json();
       if (d.success) {
@@ -269,6 +314,7 @@ if (composeInput) {
         composeChars.textContent = 500;
         composeInput.style.height = 'auto';
         postMediaFiles = []; renderPostPreviews();
+        if (isPoll) { pollWrap.style.display='none'; document.getElementById('feed-poll-btn').style.color=''; }
         prependPost(d.post);
         showToast('Posted!');
       } else {

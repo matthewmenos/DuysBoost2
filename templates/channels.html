@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Channels — DUYS Boost{% endblock %}
+{% block page_title %}Channels{% endblock %}
+
+{% block head_extra %}
+<style>
+.ch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px; padding: 16px;
+}
+.ch-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px;
+  text-decoration: none; color: var(--text);
+  transition: border-color var(--transition), transform var(--transition);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.ch-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.ch-avatar {
+  width: 48px; height: 48px; border-radius: 14px; font-size: 22px;
+  background: var(--gradient-primary);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; flex-shrink: 0;
+  overflow: hidden;
+}
+.ch-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ch-name { font-weight: 800; font-size: 15px; }
+.ch-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.ch-meta { font-size: 12px; color: var(--muted-2); display: flex; gap: 12px; }
+.ch-badge-pub  { background: rgba(44,182,125,.12); color: var(--green); font-size: 10.5px; font-weight: 700; border-radius: 20px; padding: 2px 8px; }
+.ch-badge-priv { background: rgba(239,69,101,.1); color: var(--red); font-size: 10.5px; font-weight: 700; border-radius: 20px; padding: 2px 8px; }
+.ch-joined-badge { background: rgba(127,90,240,.12); color: var(--accent-light); font-size: 10.5px; font-weight: 700; border-radius: 20px; padding: 2px 8px; }
+.ch-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ch-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; }
+.ch-tab { padding: 12px 20px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; transition: color var(--transition), border-color var(--transition); }
+.ch-tab:hover { color: var(--text); }
+.ch-tab.active { color: var(--text); border-color: var(--accent); }
+.ch-search-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-2); border: 1.5px solid var(--border);
+  border-radius: 50px; padding: 8px 16px;
+  transition: border-color var(--transition);
+}
+.ch-search-bar:focus-within { border-color: var(--accent); }
+.ch-search-bar input { background: none; border: none; outline: none; font-size: 14px; color: var(--text); font-family: var(--font-body); flex: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ch-header">
+  <div>
+    <div style="font-family:var(--font-display);font-size:22px;font-weight:800">📡 Channels</div>
+    <div class="text-sm text-muted">Join communities around topics you care about</div>
+  </div>
+  <a href="{{ url_for('channel_create') }}" class="btn btn-primary btn-sm">+ Create channel</a>
+</div>
+
+<div class="ch-tabs">
+  <a href="{{ url_for('channels_browse', tab='discover') }}" class="ch-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
+  <a href="{{ url_for('channels_browse', tab='joined') }}"   class="ch-tab {% if tab=='joined' %}active{% endif %}">✅ Joined</a>
+  <a href="{{ url_for('channels_browse', tab='owned') }}"    class="ch-tab {% if tab=='owned' %}active{% endif %}">👑 My Channels</a>
+</div>
+
+{% if tab == 'discover' %}
+<form method="get" action="{{ url_for('channels_browse') }}" style="padding:12px 16px;border-bottom:1px solid var(--border)">
+  <input type="hidden" name="tab" value="discover">
+  <div class="ch-search-bar">
+    <span style="color:var(--muted)">🔍</span>
+    <input name="q" value="{{ q }}" placeholder="Search channels…" autocomplete="off">
+    <button type="submit" class="btn btn-primary btn-sm" style="border-radius:50px">Search</button>
+  </div>
+</form>
+{% endif %}
+
+{% if channels %}
+<div class="ch-grid">
+  {% for ch in channels %}
+  <a href="{{ url_for('channel_detail', slug=ch.slug) }}" class="ch-card">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="ch-avatar">
+        {% if ch.avatar_url %}<img src="{{ ch.avatar_url }}" alt="">
+        {% else %}{{ ch.name[0].upper() }}{% endif %}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="ch-name">{{ ch.name }}</div>
+        <div class="ch-meta">
+          <span>{{ ch.member_count or 0 }} members</span>
+          <span>{{ ch.post_count or 0 }} posts</span>
+        </div>
+      </div>
+    </div>
+    {% if ch.description %}
+    <div class="ch-desc">{{ ch.description[:100] }}{% if ch.description|length > 100 %}…{% endif %}</div>
+    {% endif %}
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <span class="{% if ch.is_public %}ch-badge-pub{% else %}ch-badge-priv{% endif %}">{{ '🌐 Public' if ch.is_public else '🔒 Private' }}</span>
+      {% if ch.is_member %}<span class="ch-joined-badge">✓ Joined</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state" style="padding:64px 20px">
+  <div class="empty-icon">📡</div>
+  <div class="empty-title">
+    {% if tab == 'joined' %}You haven't joined any channels yet
+    {% elif tab == 'owned' %}You haven't created any channels
+    {% elif q %}No channels found for "{{ q }}"
+    {% else %}No channels yet{% endif %}
+  </div>
+  {% if tab == 'discover' and not q %}
+  <a href="{{ url_for('channel_create') }}" class="btn btn-primary mt-16">Create the first one →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

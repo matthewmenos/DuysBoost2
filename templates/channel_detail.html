@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% from "post_card.html" import render_post %}
+{% block title %}{{ ch.name }} — DUYS Boost{% endblock %}
+{% block page_title %}{{ ch.name }}{% endblock %}
+
+{% block head_extra %}
+<style>
+.ch-hero {
+  background: var(--gradient-primary); padding: 28px 20px 20px;
+  border-radius: 0; position: relative; overflow: hidden;
+}
+.ch-hero-title { font-family: var(--font-display); font-size: 24px; font-weight: 800; color: #fff; }
+.ch-hero-desc  { color: rgba(255,255,255,.75); font-size: 14px; margin-top: 6px; }
+.ch-hero-meta  { color: rgba(255,255,255,.65); font-size: 12.5px; margin-top: 8px; display: flex; gap: 16px; }
+.ch-hero-av {
+  width: 52px; height: 52px; border-radius: 14px; font-size: 24px; font-weight: 800;
+  background: rgba(255,255,255,.2); color: #fff;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+  overflow: hidden;
+}
+.poll-block {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px; margin-top: 8px; margin-bottom: 4px;
+}
+.poll-option-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer;
+}
+.poll-bar-wrap { flex: 1; background: var(--surface-3); border-radius: 50px; height: 8px; overflow: hidden; }
+.poll-bar { height: 100%; background: var(--gradient-primary); border-radius: 50px; transition: width .5s ease; }
+.poll-option-label { font-size: 13.5px; font-weight: 600; min-width: 80px; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poll-pct { font-size: 12px; color: var(--muted); min-width: 36px; text-align: right; }
+.poll-voted { color: var(--accent); font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+  <div class="feed-col">
+    <!-- Channel hero -->
+    <div class="ch-hero">
+      <div class="ch-hero-av">
+        {% if ch.avatar_url %}<img src="{{ ch.avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover">
+        {% else %}{{ ch.name[0].upper() }}{% endif %}
+      </div>
+      <div class="ch-hero-title">{{ ch.name }}</div>
+      {% if ch.description %}<div class="ch-hero-desc">{{ ch.description }}</div>{% endif %}
+      <div class="ch-hero-meta">
+        <span>👥 {{ ch.member_count or 0 }} members</span>
+        <span>📝 {{ ch.post_count or 0 }} posts</span>
+        <span>{{ '🌐 Public' if ch.is_public else '🔒 Private' }}</span>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        {% if is_member %}
+          {% if not is_owner %}
+          <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)"
+                  onclick="leaveChannel()">Leave</button>
+          {% endif %}
+        {% else %}
+          <button class="btn btn-sm" style="background:#fff;color:var(--accent);font-weight:700"
+                  onclick="joinChannel()">+ Join</button>
+        {% endif %}
+        {% if is_owner %}
+          <span style="background:rgba(255,255,255,.15);color:#fff;font-size:11px;font-weight:700;border-radius:20px;padding:3px 10px">👑 Owner</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Compose inside channel (members only) -->
+    {% if is_member %}
+    <div class="compose-box card" style="border-radius:0;border-top:none">
+      <div class="compose-inner">
+        <div class="avatar avatar-md flex-shrink-0">
+          {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
+          {% else %}{{ current_user.username[0].upper() }}{% endif %}
+        </div>
+        <div class="compose-right">
+          <textarea class="compose-input" id="ch-compose-input" placeholder="Post to #{{ ch.name }}…" maxlength="500" rows="1"></textarea>
+          <div id="ch-media-previews" style="display:none;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+          <div class="compose-footer">
+            <div style="display:flex;align-items:center;gap:6px">
+              <button type="button" class="compose-icon-btn" onclick="document.getElementById('ch-media-input').click()" title="Add photo/video">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </button>
+              <button type="button" class="compose-icon-btn" onclick="togglePollCompose()" title="Add poll" id="poll-toggle-btn">📊</button>
+              <input type="file" id="ch-media-input" accept="image/*,video/*" multiple style="display:none">
+              <span class="compose-chars" id="ch-compose-chars">500</span>
+            </div>
+            <button class="btn btn-primary btn-sm" id="ch-compose-submit">Post</button>
+          </div>
+          <!-- Poll options builder -->
+          <div id="poll-compose-wrap" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+            <div class="text-sm fw-700 mb-8">📊 Poll options</div>
+            <div id="poll-options-list">
+              <input class="form-input mb-8" type="text" placeholder="Option 1" style="font-size:13.5px">
+              <input class="form-input mb-8" type="text" placeholder="Option 2" style="font-size:13.5px">
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="addPollOption()">+ Add option</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Posts -->
+    <div id="ch-feed-list">
+      {% if posts %}
+        {% for post in posts %}
+          {{ render_post(post) }}
+        {% endfor %}
+      {% else %}
+        <div class="empty-state" style="padding:52px 20px">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">No posts yet</div>
+          <div class="empty-text">{% if is_member %}Be the first to post something!{% else %}Join this channel to see and post content.{% endif %}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside class="feed-sidebar">
+    <div class="sidebar-widget">
+      <div class="widget-title">👥 Members ({{ ch.member_count or 0 }})</div>
+      {% for m in members %}
+      <div class="suggest-row" style="padding:6px 0">
+        <a href="{{ url_for('profile', username=m.username) }}">
+          <div class="avatar avatar-xs">
+            {% if m.avatar_url %}<img src="{{ m.avatar_url }}" alt="">
+            {% else %}{{ (m.display_name or m.username or '?')[0].upper() }}{% endif %}
+          </div>
+        </a>
+        <div class="suggest-info">
+          <a href="{{ url_for('profile', username=m.username) }}" class="fw-600" style="font-size:13.5px">{{ m.display_name or m.username }}</a>
+          {% if m.role != 'member' %}<span style="font-size:10px;background:rgba(127,90,240,.1);color:var(--accent-light);border-radius:20px;padding:1px 7px">{{ '👑' if m.role == 'owner' else '🔧' }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CH_SLUG = '{{ ch.slug }}';
+const IS_MEMBER = {{ 'true' if is_member else 'false' }};
+
+async function joinChannel() {
+  const r = await fetch('/channel/' + CH_SLUG + '/join', {method:'POST'});
+  const d = await r.json();
+  if (d.success) { showToast('Joined!'); setTimeout(()=>location.reload(),600); }
+  else showToast(d.error||'Could not join.','error');
+}
+async function leaveChannel() {
+  if (!confirm('Leave this channel?')) return;
+  const r = await fetch('/channel/' + CH_SLUG + '/leave', {method:'POST'});
+  const d = await r.json();
+  if (d.success) { showToast('Left channel.'); setTimeout(()=>location.reload(),600); }
+  else showToast(d.error||'Could not leave.','error');
+}
+
+// Channel compose
+const chInput  = document.getElementById('ch-compose-input');
+const chChars  = document.getElementById('ch-compose-chars');
+const chSubmit = document.getElementById('ch-compose-submit');
+let chMediaFiles = [];
+
+if (chInput) {
+  chInput.addEventListener('input', function() {
+    chInput.style.height='auto'; chInput.style.height=Math.min(chInput.scrollHeight,120)+'px';
+    if(chChars) chChars.textContent = 500 - chInput.value.length;
+  });
+  document.getElementById('ch-media-input').addEventListener('change', function() {
+    Array.from(this.files).forEach(f => {
+      const reader = new FileReader();
+      reader.onload = e => { chMediaFiles.push({dataUrl:e.target.result,mime:f.type,name:f.name}); renderChPreviews(); };
+      reader.readAsDataURL(f);
+    }); this.value='';
+  });
+  chSubmit.addEventListener('click', async function() {
+    const body = chInput.value.trim();
+    const pollWrap = document.getElementById('poll-compose-wrap');
+    const isPoll = pollWrap && pollWrap.style.display !== 'none';
+    let pollOptions = [];
+    if (isPoll) {
+      pollOptions = Array.from(document.querySelectorAll('#poll-options-list input')).map(i=>i.value.trim()).filter(Boolean);
+      if (pollOptions.length < 2) { showToast('A poll needs at least 2 options.','error'); return; }
+    }
+    if (!body && !chMediaFiles.length && !isPoll) return;
+    chSubmit.textContent='Posting…'; chSubmit.disabled=true;
+    try {
+      const fd = new FormData();
+      if (body) fd.append('body', body);
+      fd.append('channel_id', '{{ ch.id }}');
+      fd.append('post_type', isPoll ? 'poll' : 'post');
+      if (isPoll) fd.append('poll_options', JSON.stringify(pollOptions));
+      if (chMediaFiles.length) { fd.append('media_data',chMediaFiles[0].dataUrl); fd.append('media_mime',chMediaFiles[0].mime); }
+      const r = await fetch('/post', {method:'POST',body:fd});
+      const d = await r.json();
+      if (d.success) {
+        chInput.value=''; chMediaFiles=[]; renderChPreviews();
+        if (isPoll) { document.getElementById('poll-compose-wrap').style.display='none'; }
+        showToast('Posted!'); setTimeout(()=>location.reload(),700);
+      } else showToast(d.error||'Could not post.','error');
+    } catch(_){showToast('Network error.','error');}
+    finally { chSubmit.textContent='Post'; chSubmit.disabled=false; }
+  });
+}
+
+function renderChPreviews() {
+  const wrap = document.getElementById('ch-media-previews');
+  if (!chMediaFiles.length) { wrap.style.display='none'; wrap.innerHTML=''; return; }
+  wrap.style.display='flex';
+  wrap.innerHTML = chMediaFiles.map((f,i)=>{
+    const t=f.mime.startsWith('video/')?`<video src="${f.dataUrl}" style="width:56px;height:56px;object-fit:cover;border-radius:8px" preload="metadata"></video>`:`<img src="${f.dataUrl}" style="width:56px;height:56px;object-fit:cover;border-radius:8px">`;
+    return `<div style="position:relative;display:inline-block">${t}<button onclick="chRmMedia(${i})" style="position:absolute;top:1px;right:1px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.7);border:none;cursor:pointer;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">✕</button></div>`;
+  }).join('');
+}
+window.chRmMedia = i => { chMediaFiles.splice(i,1); renderChPreviews(); };
+
+function togglePollCompose() {
+  const w = document.getElementById('poll-compose-wrap');
+  w.style.display = w.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('poll-toggle-btn').style.color = w.style.display==='none' ? '' : 'var(--accent)';
+}
+window.togglePollCompose = togglePollCompose;
+
+function addPollOption() {
+  const list = document.getElementById('poll-options-list');
+  const count = list.querySelectorAll('input').length;
+  if (count >= 6) { showToast('Max 6 options.','error'); return; }
+  const inp = document.createElement('input');
+  inp.className='form-input mb-8'; inp.type='text'; inp.placeholder=`Option ${count+1}`; inp.style.fontSize='13.5px';
+  list.appendChild(inp);
+}
+window.addPollOption = addPollOption;
+
+// Vote on polls
+async function votePoll(postId, optionId, btn) {
+  btn.disabled = true;
+  const fd = new FormData(); fd.append('option_id', optionId);
+  const r = await fetch(`/post/${postId}/poll/vote`, {method:'POST',body:fd});
+  const d = await r.json();
+  if (d.success) { renderPollResult(postId, d); showToast('Vote recorded!'); }
+  else { showToast(d.error||'Could not vote.','error'); btn.disabled=false; }
+}
+window.votePoll = votePoll;
+
+function renderPollResult(postId, d) {
+  const block = document.getElementById('poll-block-'+postId);
+  if (!block) return;
+  block.innerHTML = d.options.map(o =>
+    `<div class="poll-option-row">
+      <div class="poll-option-label ${o.id===d.user_vote?'poll-voted':''}">${escapeHtml(o.label)}${o.id===d.user_vote?' ✓':''}</div>
+      <div class="poll-bar-wrap"><div class="poll-bar" style="width:${o.pct}%"></div></div>
+      <div class="poll-pct">${o.pct}%</div>
+    </div>`
+  ).join('') + `<div class="text-xs text-muted" style="margin-top:6px">${d.total} vote${d.total!==1?'s':''}</div>`;
+}
+</script>
+{% endblock %}

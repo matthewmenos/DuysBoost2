@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Create Channel — DUYS Boost{% endblock %}
+{% block page_title %}Create Channel{% endblock %}
+
+{% block content %}
+<div style="max-width:560px;margin:0 auto">
+  <div class="card">
+    <div class="section-title mb-20">📡 Create a Channel</div>
+    <form id="ch-form" novalidate>
+      <div class="form-group">
+        <label class="form-label">Channel name <span style="color:var(--red)">*</span></label>
+        <input class="form-input" id="ch-name" name="name" type="text" maxlength="60" required placeholder="e.g. Tech News, Ghana Football, Crypto Tips">
+        <div class="form-hint">Choose a clear, descriptive name. The URL slug is generated automatically.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span class="optional">(optional)</span></label>
+        <textarea class="form-input" id="ch-desc" name="description" maxlength="300" rows="3" placeholder="What's this channel about?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Visibility</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius);transition:border-color var(--transition)" id="pub-label">
+            <input type="radio" name="is_public" value="1" checked style="accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:700;font-size:14px">🌐 Public</div>
+              <div class="text-xs text-muted">Anyone can find and join this channel</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius);transition:border-color var(--transition)">
+            <input type="radio" name="is_public" value="0" style="accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:700;font-size:14px">🔒 Private</div>
+              <div class="text-xs text-muted">Only people you invite can see posts</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div id="ch-error" class="error-list" style="display:none"></div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Create channel 🚀</button>
+        <a href="{{ url_for('channels_browse') }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('ch-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  const err = document.getElementById('ch-error');
+  err.style.display = 'none';
+  const orig = btn.textContent; btn.textContent = 'Creating…'; btn.disabled = true;
+  try {
+    const r = await fetch('/channel/create', { method: 'POST', body: new FormData(e.target) });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Channel created! 🎉');
+      setTimeout(() => location.href = d.redirect, 500);
+    } else {
+      err.style.display = 'block'; err.textContent = d.error || 'Could not create channel.';
+    }
+  } catch (_) { err.style.display = 'block'; err.textContent = 'Network error.'; }
+  finally { btn.textContent = orig; btn.disabled = false; }
+});
+</script>
+{% endblock %}

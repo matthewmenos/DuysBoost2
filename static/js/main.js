@@ -331,3 +331,36 @@
   }
   window.openPostLightbox = openPostLightbox;
 })();
+
+// ── Poll voting ─────────────────────────────────────────────────────────────
+async function castVote(postId, optionId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const fd = new FormData();
+    fd.append('option_id', optionId);
+    const r = await fetch('/post/' + postId + '/poll/vote', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      const block = document.getElementById('poll-block-' + postId);
+      if (block) {
+        block.innerHTML = d.options.map(function(o) {
+          return '<div class="poll-option-row" style="cursor:default">' +
+            '<div class="poll-option-label' + (o.id === d.user_vote ? ' poll-voted' : '') + '">' +
+            escapeHtml(o.label) + (o.id === d.user_vote ? ' ✓' : '') + '</div>' +
+            '<div class="poll-bar-wrap"><div class="poll-bar" style="width:' + o.pct + '%"></div></div>' +
+            '<div class="poll-pct">' + o.pct + '%</div>' +
+            '</div>';
+        }).join('') +
+        '<div class="text-xs text-muted" style="margin-top:6px">' + d.total + ' vote' + (d.total !== 1 ? 's' : '') + '</div>';
+      }
+      if (typeof showToast === 'function') showToast('Vote recorded!');
+    } else {
+      if (typeof showToast === 'function') showToast(d.error || 'Could not vote.', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || btn.textContent; }
+    }
+  } catch (_) {
+    if (typeof showToast === 'function') showToast('Network error.', 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+window.castVote = castVote;

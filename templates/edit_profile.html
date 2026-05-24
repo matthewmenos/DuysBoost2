@@ -135,6 +135,19 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label">Settings</label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius)">
+          <input type="checkbox" name="allow_post_saves" id="allow-saves"
+                 {% if user.allow_post_saves != 0 %}checked{% endif %}
+                 style="width:18px;height:18px;accent-color:var(--accent)">
+          <div>
+            <div style="font-weight:700;font-size:14px">Allow saving images</div>
+            <div class="text-xs text-muted">Others can download your image posts to their gallery</div>
+          </div>
+        </label>
+      </div>
+
       <div id="edit-error" class="error-list" style="display:none"></div>
 
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -221,7 +234,11 @@ document.getElementById('edit-profile-form').addEventListener('submit', async e 
   btn.textContent = 'Saving…'; btn.disabled = true;
   err.style.display = 'none';
   try {
-    const r = await fetch('/profile/edit', { method: 'POST', body: new FormData(e.target) });
+    const fd = new FormData(e.target);
+    // Ensure allow_post_saves is sent as 1 or 0
+    const cb = document.getElementById('allow-saves');
+    if (cb) fd.set('allow_post_saves', cb.checked ? '1' : '0');
+    const r = await fetch('/profile/edit', { method: 'POST', body: fd });
     const d = await r.json();
     if (d.success) {
       showToast('Profile updated!');

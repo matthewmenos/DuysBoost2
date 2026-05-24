@@ -38,6 +38,9 @@
       <a href="{{ url_for('trending') }}" class="nav-item {% if request.endpoint=='trending' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔥</span> Trending
       </a>
+      <a href="{{ url_for('channels_browse') }}" class="nav-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
+        <span class="icon" aria-hidden="true">📡</span> Channels
+      </a>
       <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔔</span> Notifications
         <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
@@ -150,7 +153,7 @@
     </main>
 
     {% if current_user %}
-    <nav class="bottom-nav" aria-label="Bottom navigation" id="bottom-nav">
+    <nav class="bottom-nav {% if request.endpoint == 'message_thread' %}force-hidden{% endif %}" aria-label="Bottom navigation" id="bottom-nav">
 
       {# ── Home ─────────────────────────────────────────────────────────── #}
       <a href="{{ url_for('feed') }}"
