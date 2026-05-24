@@ -475,6 +475,12 @@ def init_db():
     _add_col_if_missing('messages', 'file_data',  'TEXT')
     _add_col_if_missing('messages', 'file_name',  'TEXT')
     _add_col_if_missing('messages', 'file_mime',  'TEXT')
+    _add_col_if_missing('messages', 'edited_at',  'TEXT')
+    _add_col_if_missing('messages', 'reply_to_id','INTEGER')
+    _add_col_if_missing('messages', 'reactions',  'TEXT')
+    _add_col_if_missing('messages', 'is_pinned',  'INTEGER DEFAULT 0')
+    _add_col_if_missing('messages', 'deleted_at', 'TEXT')
+    _add_col_if_missing('posts',    'edited_at',  'TEXT')
     _create_index_if_missing('conversations', 'idx_conv_a',    'user_a')
     _create_index_if_missing('conversations', 'idx_conv_b',    'user_b')
     _create_index_if_missing('conversations', 'idx_conv_last', 'last_msg_at')
@@ -3437,15 +3443,20 @@ def message_thread(username):
 
     # Load messages (newest last)
     msgs = db.execute("""
-        SELECT m.id, m.conversation_id, m.sender_id, m.body,
-               m.msg_type, m.file_data, m.file_name, m.file_mime,
-               m.is_read, m.created_at,
+        SELECT m.*,
                u.username as sender_username, u.avatar_url as sender_avatar
         FROM messages m JOIN users u ON u.id = m.sender_id
         WHERE m.conversation_id=?
         ORDER BY m.created_at ASC LIMIT 100
     """, (conv['id'],)).fetchall()
     msgs = [dict(m) for m in msgs]
+    # Ensure new optional columns are always present in the dict
+    for m in msgs:
+        m.setdefault('edited_at',   None)
+        m.setdefault('reactions',   None)
+        m.setdefault('is_pinned',   0)
+        m.setdefault('reply_to_id', None)
+        m.setdefault('deleted_at',  None)
 
     # Mark all as read
     db.execute(
@@ -3718,6 +3729,252 @@ def is_typing(username):
     ts  = _typing_state.get(key, 0)
     typing = (datetime.now(timezone.utc).timestamp() - ts) < 3
     return jsonify({'typing': typing})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Edit Post
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/edit', methods=['POST'])
+@login_required
+def edit_post(post_id):
+    db  = get_db()
+    uid = session['user_id']
+
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found.'}), 404
+    if post['user_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    body = (request.form.get('body') or '').strip()
+    if len(body) > 500:
+        return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
+    if not body:
+        # only allow empty if media exists
+        keys = post.keys()
+        has_media = 'media_data' in keys and post['media_data']
+        if not has_media:
+            return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
+
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute('UPDATE posts SET body=?, edited_at=? WHERE id=?', (body or None, now, post_id))
+    db.commit()
+
+    updated = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    return jsonify({'success': True, 'post': _format_post(updated, uid, db)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Message: Edit / Delete / React / Pin / Forward / Info
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/messages/edit/<int:msg_id>', methods=['POST'])
+@login_required
+def edit_message(msg_id):
+    db  = get_db()
+    uid = session['user_id']
+
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found.'}), 404
+    if msg['sender_id'] != uid:
+        return jsonify({'success': False, 'error': 'You can only edit your own messages.'}), 403
+
+    keys = msg.keys()
+    mt   = msg['msg_type'] if 'msg_type' in keys else 'text'
+    if mt != 'text':
+        return jsonify({'success': False, 'error': 'Only text messages can be edited.'}), 400
+
+    data = request.get_json(silent=True) or {}
+    body = (data.get('body') or '').strip()
+    if not body:
+        return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
+    if len(body) > 2000:
+        return jsonify({'success': False, 'error': 'Message too long.'}), 400
+
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
+    db.commit()
+    return jsonify({'success': True, 'body': body, 'edited_at': now})
+
+
+@app.route('/api/messages/delete/<int:msg_id>', methods=['POST'])
+@login_required
+def delete_message(msg_id):
+    db  = get_db()
+    uid = session['user_id']
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found.'}), 404
+    if msg['sender_id'] != uid:
+        return jsonify({'success': False, 'error': 'You can only delete your own messages.'}), 403
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        "UPDATE messages SET body='(deleted)', msg_type='text', file_data=NULL, "
+        "file_name=NULL, file_mime=NULL, deleted_at=? WHERE id=?",
+        (now, msg_id)
+    )
+    db.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/api/messages/react/<int:msg_id>', methods=['POST'])
+@login_required
+def react_message(msg_id):
+    import json as _json
+    db    = get_db()
+    uid   = session['user_id']
+    data  = request.get_json(silent=True) or {}
+    emoji = (data.get('emoji') or '').strip()
+    if not emoji or len(emoji) > 8:
+        return jsonify({'success': False, 'error': 'Invalid emoji.'}), 400
+
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found.'}), 404
+
+    # Verify viewer is in the conversation
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    raw = msg['reactions'] if 'reactions' in msg.keys() else None
+    try:
+        reactions = _json.loads(raw) if raw else {}
+    except Exception:
+        reactions = {}
+
+    users = reactions.get(emoji, [])
+    if uid in users:
+        users.remove(uid)
+    else:
+        users.append(uid)
+    if users:
+        reactions[emoji] = users
+    else:
+        reactions.pop(emoji, None)
+
+    db.execute('UPDATE messages SET reactions=? WHERE id=?', (_json.dumps(reactions), msg_id))
+    db.commit()
+    return jsonify({'success': True, 'reactions': reactions})
+
+
+@app.route('/api/messages/pin/<int:msg_id>', methods=['POST'])
+@login_required
+def pin_message(msg_id):
+    db  = get_db()
+    uid = session['user_id']
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Message not found.'}), 404
+
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    current = msg['is_pinned'] if 'is_pinned' in msg.keys() else 0
+    new_state = 0 if current else 1
+    db.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
+    db.commit()
+    return jsonify({'success': True, 'pinned': bool(new_state)})
+
+
+@app.route('/api/messages/info/<int:msg_id>')
+@login_required
+def message_info(msg_id):
+    db  = get_db()
+    uid = session['user_id']
+    msg = db.execute(
+        "SELECT m.*, u.username as sender_username, u.display_name as sender_display "
+        "FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?",
+        (msg_id,)
+    ).fetchone()
+    if not msg:
+        return jsonify({'success': False}), 404
+
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
+        return jsonify({'success': False}), 403
+
+    keys = msg.keys()
+    return jsonify({
+        'success':   True,
+        'sender':    msg['sender_username'],
+        'sent_at':   msg['created_at'],
+        'is_read':   bool(msg['is_read']),
+        'edited_at': msg['edited_at'] if 'edited_at' in keys else None,
+        'msg_type':  msg['msg_type'] if 'msg_type' in keys else 'text',
+        'pinned':    bool(msg['is_pinned']) if 'is_pinned' in keys else False,
+    })
+
+
+@app.route('/api/messages/forward', methods=['POST'])
+@login_required
+def forward_message():
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    msg_id = data.get('msg_id')
+    recipients = data.get('recipients') or []
+    if not msg_id or not recipients:
+        return jsonify({'success': False, 'error': 'Missing data.'}), 400
+
+    src = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not src:
+        return jsonify({'success': False, 'error': 'Source message not found.'}), 404
+
+    src_conv = db.execute('SELECT * FROM conversations WHERE id=?', (src['conversation_id'],)).fetchone()
+    if not src_conv or (src_conv['user_a'] != uid and src_conv['user_b'] != uid):
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    keys = src.keys()
+    body      = src['body']
+    msg_type  = src['msg_type']  if 'msg_type'  in keys else 'text'
+    file_data = src['file_data'] if 'file_data' in keys else None
+    file_name = src['file_name'] if 'file_name' in keys else None
+    file_mime = src['file_mime'] if 'file_mime' in keys else None
+
+    sent = 0
+    now  = datetime.now(timezone.utc).isoformat()
+    for username in recipients[:10]:
+        u = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+        if not u or u['id'] == uid:
+            continue
+        conv = _get_or_create_conversation(db, uid, u['id'])
+        db.execute(
+            "INSERT INTO messages (conversation_id, sender_id, body, msg_type, "
+            "file_data, file_name, file_mime, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (conv['id'], uid, body, msg_type, file_data, file_name, file_mime, now)
+        )
+        db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (u['id'],))
+        sent += 1
+    db.commit()
+    return jsonify({'success': True, 'sent': sent})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User search for new-message picker
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/users/search')
+@login_required
+def search_users_for_dm():
+    db  = get_db()
+    uid = session['user_id']
+    q   = (request.args.get('q') or '').strip()
+    if len(q) < 1:
+        return jsonify({'users': []})
+    like = f'%{q}%'
+    rows = db.execute(
+        "SELECT username, display_name, avatar_url, is_verified, follower_count "
+        "FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? "
+        "ORDER BY follower_count DESC LIMIT 10",
+        (like, like, uid)
+    ).fetchall()
+    return jsonify({'users': [dict(u) for u in rows]})
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Error handlers

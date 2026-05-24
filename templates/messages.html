@@ -14,26 +14,17 @@
 .inbox-title { font-family: var(--font-display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
 
 .conv-list { display: flex; flex-direction: column; }
-
 .conv-item {
   display: flex; align-items: center; gap: 13px;
   padding: 14px 20px;
   text-decoration: none; color: var(--text);
   border-bottom: 1px solid var(--border);
   transition: background var(--transition);
-  position: relative;
 }
 .conv-item:hover { background: rgba(127,90,240,.04); }
 .conv-item.unread { background: rgba(127,90,240,.03); }
-
 .conv-avatar { flex-shrink: 0; position: relative; }
-.conv-avatar .unread-ring {
-  position: absolute; inset: -2px;
-  border-radius: 50%;
-  border: 2px solid var(--accent);
-  pointer-events: none;
-}
-
+.conv-avatar .unread-ring { position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--accent); pointer-events: none; }
 .conv-body { flex: 1; min-width: 0; }
 .conv-top  { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
 .conv-name { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -41,32 +32,64 @@
 .conv-preview {
   font-size: 13.5px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 100%;
 }
 .conv-item.unread .conv-preview { color: var(--text-dim); font-weight: 500; }
-
 .conv-unread-badge {
   flex-shrink: 0;
-  background: var(--accent);
-  color: #fff; font-size: 10px; font-weight: 800;
-  min-width: 20px; height: 20px;
-  border-radius: 20px; padding: 0 6px;
+  background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 800;
+  min-width: 20px; height: 20px; border-radius: 20px; padding: 0 6px;
   display: flex; align-items: center; justify-content: center;
 }
 
-.new-msg-fab {
-  position: fixed; bottom: 96px; right: 20px;
-  width: 52px; height: 52px; border-radius: 50%;
-  background: var(--gradient-primary);
-  box-shadow: 0 4px 20px rgba(127,90,240,.5);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 24px; color: #fff;
-  cursor: pointer; border: none; outline: none;
-  transition: transform .2s, box-shadow .2s;
-  z-index: 50;
+.nm-popover {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(4px);
+  display: none; align-items: flex-start; justify-content: center;
+  padding-top: 80px;
 }
-.new-msg-fab:hover { transform: scale(1.08); box-shadow: 0 8px 30px rgba(127,90,240,.65); }
-@media (min-width: 900px) { .new-msg-fab { bottom: 28px; } }
+.nm-popover.open { display: flex; animation: fadeIn .15s ease; }
+.nm-panel {
+  width: min(calc(100vw - 32px), 520px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: modalIn .18s ease;
+}
+.nm-search-wrap { padding: 14px 16px 8px; border-bottom: 1px solid var(--border); }
+.nm-search-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 50px;
+  padding: 8px 14px;
+  transition: border-color var(--transition);
+}
+.nm-search-row:focus-within { border-color: var(--accent); }
+.nm-search-input {
+  flex: 1; background: none; border: none; outline: none;
+  font-size: 14.5px; color: var(--text); font-family: var(--font-body);
+}
+.nm-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 22px; padding: 4px 8px;
+  line-height: 1; border-radius: 50%;
+  transition: background var(--transition);
+}
+.nm-close:hover { background: var(--surface-2); color: var(--text); }
+.nm-results { max-height: min(60vh, 480px); overflow-y: auto; padding: 4px 0; }
+.nm-result {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  text-decoration: none; color: var(--text); cursor: pointer;
+  transition: background var(--transition);
+}
+.nm-result:hover { background: var(--surface-2); }
+.nm-name { font-weight: 700; font-size: 14px; }
+.nm-handle { font-size: 12px; color: var(--muted); }
+.nm-empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 13.5px; }
 </style>
 {% endblock %}
 
@@ -75,7 +98,7 @@
 
   <div class="inbox-header">
     <div class="inbox-title">Messages</div>
-    <a href="{{ url_for('explore') }}" class="btn btn-outline btn-sm">+ New message</a>
+    <button class="btn btn-outline btn-sm" onclick="openNewMsg()">+ New message</button>
   </div>
 
   <div class="conv-list">
@@ -83,18 +106,13 @@
       {% for conv in conversations %}
       <a href="{{ url_for('message_thread', username=conv.other.username) }}"
          class="conv-item {% if conv.unread %}unread{% endif %}">
-
         <div class="conv-avatar">
           <div class="avatar avatar-md">
-            {% if conv.other.avatar_url %}
-              <img src="{{ conv.other.avatar_url }}" alt="{{ conv.other.username }}">
-            {% else %}
-              {{ (conv.other.display_name or conv.other.username or '?')[0].upper() }}
-            {% endif %}
+            {% if conv.other.avatar_url %}<img src="{{ conv.other.avatar_url }}" alt="">
+            {% else %}{{ (conv.other.display_name or conv.other.username or '?')[0].upper() }}{% endif %}
           </div>
           {% if conv.unread %}<div class="unread-ring"></div>{% endif %}
         </div>
-
         <div class="conv-body">
           <div class="conv-top">
             <div class="conv-name">
@@ -122,29 +140,96 @@
             {% endif %}
           </div>
         </div>
-
-        {% if conv.unread %}
-        <div class="conv-unread-badge">{{ conv.unread }}</div>
-        {% endif %}
+        {% if conv.unread %}<div class="conv-unread-badge">{{ conv.unread }}</div>{% endif %}
       </a>
       {% endfor %}
     {% else %}
       <div class="empty-state" style="padding:72px 20px">
         <div class="empty-icon">💬</div>
         <div class="empty-title">No messages yet</div>
-        <div class="empty-text">
-          Find someone to talk to — visit their profile and tap the message button.
-        </div>
-        <a href="{{ url_for('explore') }}" class="btn btn-primary mt-16">Find people →</a>
+        <div class="empty-text">Tap "New message" above to find someone to chat with.</div>
+        <button onclick="openNewMsg()" class="btn btn-primary mt-16">+ New message</button>
       </div>
     {% endif %}
   </div>
+</div>
 
+<div class="nm-popover" id="nm-popover" onclick="if(event.target===this)closeNewMsg()">
+  <div class="nm-panel">
+    <div class="nm-search-wrap">
+      <div class="nm-search-row">
+        <span style="font-size:16px;color:var(--muted)">🔍</span>
+        <input id="nm-input" class="nm-search-input" type="text"
+               placeholder="Search people to message…" autocomplete="off">
+        <button class="nm-close" onclick="closeNewMsg()" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="nm-results" id="nm-results">
+      <div class="nm-empty">Start typing to find people.</div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// (no page-specific JS needed)
+const NM_POP   = document.getElementById('nm-popover');
+const NM_INPUT = document.getElementById('nm-input');
+const NM_RES   = document.getElementById('nm-results');
+
+function openNewMsg() {
+  NM_POP.classList.add('open');
+  document.body.classList.add('no-scroll');
+  NM_INPUT.value = '';
+  NM_RES.innerHTML = '<div class="nm-empty">Start typing to find people.</div>';
+  setTimeout(function() { NM_INPUT.focus(); }, 50);
+}
+function closeNewMsg() {
+  NM_POP.classList.remove('open');
+  document.body.classList.remove('no-scroll');
+}
+window.openNewMsg  = openNewMsg;
+window.closeNewMsg = closeNewMsg;
+
+let nmTimer = null;
+NM_INPUT.addEventListener('input', function() {
+  clearTimeout(nmTimer);
+  const q = this.value.trim();
+  if (q.length < 1) {
+    NM_RES.innerHTML = '<div class="nm-empty">Start typing to find people.</div>';
+    return;
+  }
+  nmTimer = setTimeout(function() { runSearch(q); }, 200);
+});
+
+async function runSearch(q) {
+  try {
+    const r = await fetch('/api/users/search?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (!d.users || !d.users.length) {
+      NM_RES.innerHTML = '<div class="nm-empty">No users found for "' + escapeHtml(q) + '".</div>';
+      return;
+    }
+    NM_RES.innerHTML = d.users.map(function(u) {
+      const initials = (u.display_name || u.username || '?')[0].toUpperCase();
+      const av = u.avatar_url
+        ? '<img src="' + escapeHtml(u.avatar_url) + '" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover">'
+        : '<div class="avatar" style="width:38px;height:38px;font-size:14px;background:var(--gradient-primary);display:grid;place-items:center;color:#fff;font-weight:700;border-radius:50%">' + escapeHtml(initials) + '</div>';
+      return '<a href="/messages/' + encodeURIComponent(u.username) + '" class="nm-result">' +
+        av +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="nm-name">' + escapeHtml(u.display_name || u.username) +
+            (u.is_verified ? ' <span class="verified-badge">✓</span>' : '') + '</div>' +
+          '<div class="nm-handle">@' + escapeHtml(u.username) + ' · ' + (u.follower_count || 0) + ' followers</div>' +
+        '</div></a>';
+    }).join('');
+  } catch (_) {
+    NM_RES.innerHTML = '<div class="nm-empty">Network error.</div>';
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && NM_POP.classList.contains('open')) closeNewMsg();
+});
 </script>
 {% endblock %}

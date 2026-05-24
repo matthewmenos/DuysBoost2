@@ -262,7 +262,27 @@
 {% block modals %}{% endblock %}
 
 {% if current_user %}
-<!-- Global compose modal (triggered by + button) -->
+<!-- Global edit post modal -->
+<div class="modal-overlay" id="edit-post-modal" role="dialog" aria-modal="true" aria-label="Edit post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✏️ Edit Post</div>
+      <button class="modal-close" onclick="closeModal('edit-post-modal')" aria-label="Close">✕</button>
+    </div>
+    <input type="hidden" id="ep-post-id" value="">
+    <textarea id="ep-body" class="form-input" rows="4" maxlength="500" style="min-height:90px;resize:vertical"></textarea>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+      <span id="ep-chars" style="font-size:12px;color:var(--muted)">500</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('edit-post-modal')">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="ep-save-btn" onclick="saveEditPost()">Save changes</button>
+      </div>
+    </div>
+    <div id="ep-error" class="error-list" style="display:none;margin-top:8px"></div>
+  </div>
+</div>
+
+
 <div class="modal-overlay" id="global-compose-modal" role="dialog" aria-modal="true" aria-label="Create post">
   <div class="modal">
     <div class="modal-header">
@@ -435,13 +455,80 @@
   }, { passive: true });
 })();
 
-/* ── + button: open compose ────────────────────────────────────────────── */
+/* ── Edit post ──────────────────────────────────────────────────────────── */
+function openEditPost(postId, currentBody) {
+  const inp  = document.getElementById('ep-body');
+  const cid  = document.getElementById('ep-post-id');
+  const chars = document.getElementById('ep-chars');
+  const err  = document.getElementById('ep-error');
+  if (!inp) return;
+  cid.value   = postId;
+  inp.value   = currentBody || '';
+  if (chars) chars.textContent = 500 - (currentBody || '').length;
+  if (err)  err.style.display = 'none';
+  if (typeof window.openModal === 'function') window.openModal('edit-post-modal');
+  setTimeout(function() { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 150);
+}
+window.openEditPost = openEditPost;
+
+(function() {
+  var epBody = document.getElementById('ep-body');
+  var epChars = document.getElementById('ep-chars');
+  if (epBody && epChars) {
+    epBody.addEventListener('input', function() {
+      var left = 500 - epBody.value.length;
+      epChars.textContent = left;
+      epChars.style.color = left < 20 ? 'var(--red)' : 'var(--muted)';
+    });
+  }
+})();
+
+async function saveEditPost() {
+  var postId  = document.getElementById('ep-post-id').value;
+  var newBody = (document.getElementById('ep-body').value || '').trim();
+  var err     = document.getElementById('ep-error');
+  var btn     = document.getElementById('ep-save-btn');
+  if (err) err.style.display = 'none';
+  if (!postId) return;
+  var orig = btn.textContent;
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  try {
+    var fd = new FormData();
+    fd.append('body', newBody);
+    var r = await fetch('/post/' + postId + '/edit', { method: 'POST', body: fd });
+    var d = await r.json();
+    if (d.success) {
+      // Update the post body in the DOM
+      var bodyEl = document.getElementById('post-body-' + postId);
+      if (bodyEl) bodyEl.innerHTML = newBody + '&nbsp;<span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>';
+      if (typeof window.closeModal === 'function') window.closeModal('edit-post-modal');
+      if (typeof showToast === 'function') showToast('Post updated.');
+    } else {
+      if (err) { err.style.display = 'block'; err.textContent = d.error || 'Could not save.'; }
+    }
+  } catch (_) {
+    if (err) { err.style.display = 'block'; err.textContent = 'Network error.'; }
+  } finally { btn.textContent = orig; btn.disabled = false; }
+}
+window.saveEditPost = saveEditPost;
+
+
 function openBnCompose() {
-  // If on feed page, focus the inline compose
+  // If on feed page, pulse + focus the inline compose
   const inlineCi = document.getElementById('compose-input');
   if (inlineCi && window.location.pathname === '/feed') {
     inlineCi.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(function() { inlineCi.focus(); }, 300);
+    setTimeout(function() {
+      inlineCi.focus();
+      // flash highlight so user sees it
+      inlineCi.style.transition = 'box-shadow .15s, border-color .15s';
+      inlineCi.style.boxShadow  = '0 0 0 3px rgba(127,90,240,.45)';
+      inlineCi.style.borderColor = 'var(--accent)';
+      setTimeout(function() {
+        inlineCi.style.boxShadow   = '';
+        inlineCi.style.borderColor = '';
+      }, 1400);
+    }, 250);
     return;
   }
   // Otherwise open the modal

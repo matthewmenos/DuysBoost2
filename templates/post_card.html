@@ -46,11 +46,12 @@
           <button class="btn-ghost-icon post-menu-btn" aria-label="More options"
                   onclick="togglePostMenu({{ p.id }}, event)">⋯</button>
           <div class="post-menu-dropdown" id="post-menu-{{ p.id }}" style="display:none">
+            {% if current_user and current_user.id == p.user_id %}
+            <button class="post-menu-item" onclick="openEditPost({{ p.id }}, {{ p.body | tojson }})">✏️ Edit post</button>
+            <button class="post-menu-item" onclick="openBoostModal({{ p.id }})">📣 Boost this post</button>
+            {% endif %}
             {% if current_user and (current_user.id == p.user_id or current_user.is_admin) %}
             <button class="post-menu-item danger" onclick="deletePost({{ p.id }})">🗑 Delete post</button>
-            {% endif %}
-            {% if current_user and current_user.id == p.user_id %}
-            <button class="post-menu-item" onclick="openBoostModal({{ p.id }})">📣 Boost this post</button>
             {% endif %}
             <a class="post-menu-item" href="{{ url_for('post_detail', post_id=p.id) }}">🔗 View post</a>
             <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
@@ -73,7 +74,7 @@
       {% endif %}
       {% if not p.locked %}
         {% if p.body %}
-        <div class="post-body">{{ p.body | linkify_tags | safe }}</div>
+        <div class="post-body" id="post-body-{{ p.id }}">{{ p.body | linkify_tags | safe }}{% if p.get('edited_at') %}&nbsp;<span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>{% endif %}</div>
         {% endif %}
         {% if p.get("media_data") %}
           {% if p.get("media_mime","").startswith("video/") %}
