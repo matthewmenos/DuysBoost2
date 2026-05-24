@@ -41,6 +41,11 @@
       <a href="{{ url_for('channels_browse') }}" class="nav-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
         <span class="icon" aria-hidden="true">📡</span> Channels
       </a>
+      <a href="{{ url_for('groups_list') }}" class="nav-item {% if request.endpoint in ['groups_list','group_detail','group_create'] %}active{% endif %}"
+         style="position:relative">
+        <span class="icon" aria-hidden="true">💬</span> Groups
+        <span class="nav-badge" id="sidebar-grp-badge" style="display:none"></span>
+      </a>
       <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔔</span> Notifications
         <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>

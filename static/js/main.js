@@ -364,3 +364,23 @@ async function castVote(postId, optionId, btn) {
   }
 }
 window.castVote = castVote;
+
+// ── Group unread badge polling ──────────────────────────────────────────────
+(function() {
+  const notifBtn = document.getElementById('notif-btn');
+  if (!notifBtn) return;
+  async function loadGroupCount() {
+    try {
+      const r = await fetch('/api/groups/unread');
+      const d = await r.json();
+      const cnt = d.count || 0;
+      const badge = document.getElementById('sidebar-grp-badge');
+      if (badge) {
+        badge.textContent = cnt;
+        badge.style.display = cnt > 0 ? 'inline-flex' : 'none';
+      }
+    } catch(_) {}
+  }
+  loadGroupCount();
+  setInterval(loadGroupCount, 20000);
+})();

@@ -14,6 +14,7 @@ from functools import wraps
 
 import threading
 import requests
+from werkzeug.middleware.proxy_fix import ProxyFix
 from crypto_engine import verify_deposit as _chain_verify_deposit
 from crypto_engine import send_usdt as _chain_send_usdt
 from authlib.integrations.flask_client import OAuth
@@ -30,6 +31,24 @@ from flask import (
 _typing_state: dict = {}
 
 app = Flask(__name__)
+
+# ── Reverse-proxy fix (Render, Heroku, nginx, etc.) ───────────────────────────
+# Tells Flask to trust X-Forwarded-Proto / X-Forwarded-Host headers so that
+# url_for(..., _external=True) generates https:// URLs instead of http://.
+# x_for=1   → trust 1 hop of X-Forwarded-For  (client IP)
+# x_proto=1 → trust X-Forwarded-Proto          (http vs https)  ← key for OAuth
+# x_host=1  → trust X-Forwarded-Host           (correct hostname)
+# x_prefix=1→ trust X-Forwarded-Prefix         (sub-path deploys)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+# ── OAuthlib transport flag ───────────────────────────────────────────────────
+# OAUTHLIB_INSECURE_TRANSPORT=1 is only needed for local http:// development.
+# On Render (or any https host) we must NOT set it — the ProxyFix above ensures
+# the redirect_uri is already https://, so OAuth validation passes cleanly.
+# We only enable it when explicitly requested via the environment variable AND
+# we are not running behind a proxy (i.e. pure local dev).
+if os.environ.get('OAUTHLIB_INSECURE_TRANSPORT', '0') == '1':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 base_dir = os.path.dirname(__file__)
 dotenv_path = os.path.join(base_dir, '.env')
 if not os.path.exists(dotenv_path):
@@ -381,6 +400,45 @@ def init_db():
         FOREIGN KEY(post_id)    REFERENCES posts(id)
     );
 
+    -- ── Group chats (Telegram-style: everyone can send messages) ──────
+    CREATE TABLE IF NOT EXISTS groups (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name         TEXT NOT NULL,
+        slug         TEXT NOT NULL UNIQUE,
+        description  TEXT,
+        avatar_url   TEXT,
+        owner_id     INTEGER NOT NULL,
+        is_public    INTEGER DEFAULT 1,
+        member_count INTEGER DEFAULT 0,
+        created_at   TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(owner_id) REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS group_members (
+        group_id  INTEGER NOT NULL,
+        user_id   INTEGER NOT NULL,
+        role      TEXT DEFAULT 'member',
+        joined_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY(group_id, user_id),
+        FOREIGN KEY(group_id) REFERENCES groups(id),
+        FOREIGN KEY(user_id)  REFERENCES users(id)
+    );
+    CREATE TABLE IF NOT EXISTS group_messages (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id  INTEGER NOT NULL,
+        sender_id INTEGER NOT NULL,
+        body      TEXT,
+        msg_type  TEXT DEFAULT 'text',
+        file_data TEXT,
+        file_name TEXT,
+        file_mime TEXT,
+        reply_to_id INTEGER,
+        deleted_at  TEXT,
+        edited_at   TEXT,
+        created_at  TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(group_id)  REFERENCES groups(id),
+        FOREIGN KEY(sender_id) REFERENCES users(id)
+    );
+
     -- ── Polls ──────────────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS poll_options (
         id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -446,15 +504,19 @@ def init_db():
     def _create_index_if_missing(table, index_name, cols):
         if not _table_exists(table):
             return
+        # SQLite index names are globally unique — check sqlite_master, not per-table list
+        global_exists = bool(db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?", (index_name,)
+        ).fetchone())
+        if global_exists:
+            return
         cols_set = {r[1] for r in db.execute(f'PRAGMA table_info({table})').fetchall()}
         if not set(c.strip() for c in cols.split(',')) <= cols_set:
             return
-        existing = {r[1] for r in db.execute(f'PRAGMA index_list({table})').fetchall()}
-        if index_name not in existing:
-            try:
-                db.execute(f'CREATE INDEX {index_name} ON {table}({cols})')
-            except Exception:
-                pass
+        try:
+            db.execute(f'CREATE INDEX {index_name} ON {table}({cols})')
+        except Exception:
+            pass
 
     # Migrate old paystack columns to crypto columns
     _add_col_if_missing('users', 'crypto_network', 'TEXT')
@@ -555,6 +617,15 @@ def init_db():
     _create_index_if_missing('channel_posts',  'idx_chp_channel', 'channel_id')
     _create_index_if_missing('poll_options',   'idx_po_post',     'post_id')
     _create_index_if_missing('poll_votes',     'idx_poll_votes_post',  'post_id')
+
+    # Group chat migrations
+    _create_index_if_missing('groups',         'idx_grp_owner',   'owner_id')
+    _create_index_if_missing('group_members',  'idx_grpm_group',  'group_id')
+    _create_index_if_missing('group_members',  'idx_grpm_user',   'user_id')
+    _create_index_if_missing('group_messages', 'idx_grpms_group', 'group_id')
+    _create_index_if_missing('group_messages', 'idx_grpms_sender','sender_id')
+    _add_col_if_missing('users', 'unread_group_count', 'INTEGER DEFAULT 0')
+    _add_col_if_missing('group_members', 'last_read_at', 'TEXT')
 
     existing = db.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
     if not existing:
@@ -897,7 +968,12 @@ def logout():
 def google_login_route():
     if not getattr(oauth, 'google', None):
         return redirect(url_for('login'))
-    redirect_uri = url_for('google_auth_callback', _external=True)
+    # ProxyFix ensures request.scheme is already 'https' on Render.
+    # _scheme is set explicitly as a belt-and-braces fallback: if the app is
+    # behind a proxy that hasn't set X-Forwarded-Proto yet on this request,
+    # we still generate a valid https callback URL for Google to accept.
+    scheme = 'https' if request.headers.get('X-Forwarded-Proto', request.scheme) == 'https' else request.scheme
+    redirect_uri = url_for('google_auth_callback', _external=True, _scheme=scheme)
     return oauth.google.authorize_redirect(redirect_uri)
 
 
@@ -1919,6 +1995,7 @@ def _get_personalized_post_ids(db, uid, limit=20, offset=0):
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE user_id IN ({ph}) AND reply_to_id IS NULL '
+            f'AND id NOT IN (SELECT post_id FROM channel_posts) '
             f'ORDER BY score DESC LIMIT 60',
             following_ids
         ).fetchall()
@@ -1949,6 +2026,7 @@ def _get_personalized_post_ids(db, uid, limit=20, offset=0):
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE id NOT IN ({ph}) AND reply_to_id IS NULL AND user_id != ? '
+            f'AND id NOT IN (SELECT post_id FROM channel_posts) '
             f'ORDER BY score DESC LIMIT ?',
             known + [uid, need + 20]
         ).fetchall()
@@ -1980,6 +2058,7 @@ def feed():
             SELECT p.* FROM posts p
             WHERE p.reply_to_id IS NULL
               AND p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?)
+              AND p.id NOT IN (SELECT post_id FROM channel_posts)
             ORDER BY p.created_at DESC LIMIT ? OFFSET ?
         """, (uid, per, off)).fetchall()
     elif tab == 'earn':
@@ -2012,6 +2091,7 @@ def feed():
             rows = db.execute("""
                 SELECT * FROM posts
                 WHERE reply_to_id IS NULL
+                  AND id NOT IN (SELECT post_id FROM channel_posts)
                 ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?
             """, (per, off)).fetchall()
 
@@ -2070,7 +2150,7 @@ def create_post():
     import json as _json_create
     poll_options_raw = request.form.get('poll_options') or '[]'
     try:
-        poll_options = [str(o).strip() for o in _json_create.loads(poll_options_raw) if str(o).strip()][:6]
+        poll_options = [str(o).strip() for o in _json_create.loads(poll_options_raw) if str(o).strip()][:10]
     except Exception:
         poll_options = []
     if post_type == 'poll' and len(poll_options) < 2:
@@ -4261,9 +4341,12 @@ def channel_detail(slug):
     if not ch:
         return render_template('error.html', code=404, message='Channel not found.'), 404
 
-    is_member = bool(db.execute(
-        'SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid)
-    ).fetchone())
+    member_row = db.execute(
+        'SELECT role FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid)
+    ).fetchone()
+    is_member  = bool(member_row)
+    user_role  = member_row['role'] if member_row else None
+    can_post   = user_role in ('owner', 'admin', 'mod')
 
     if not ch['is_public'] and not is_member:
         return render_template('error.html', code=403, message='This channel is private.'), 403
@@ -4280,14 +4363,15 @@ def channel_detail(slug):
         SELECT u.username, u.display_name, u.avatar_url, u.is_verified, cm.role
         FROM channel_members cm JOIN users u ON u.id=cm.user_id
         WHERE cm.channel_id=?
-        ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'mod' THEN 1 ELSE 2 END, cm.joined_at
-        LIMIT 20
+        ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'mod' THEN 2 ELSE 3 END, cm.joined_at
+        LIMIT 40
     """, (ch['id'],)).fetchall()
 
     return render_template('channel_detail.html',
                            ch=dict(ch), posts=posts,
                            members=[dict(m) for m in members],
-                           is_member=is_member, is_owner=ch['owner_id']==uid)
+                           is_member=is_member, is_owner=ch['owner_id']==uid,
+                           can_post=can_post, user_role=user_role)
 
 
 @app.route('/channel/<slug>/join', methods=['POST'])
@@ -4362,6 +4446,384 @@ def _format_post_with_poll(row, uid, db):
         else:
             p['poll_ended'] = False
     return p
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Channel — role management (promote/demote members)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/channel/<slug>/promote', methods=['POST'])
+@login_required
+def channel_promote(slug):
+    db  = get_db()
+    uid = session['user_id']
+    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    if not ch:
+        return jsonify({'success': False, 'error': 'Not found.'}), 404
+    # Only owner can promote
+    if ch['owner_id'] != uid:
+        return jsonify({'success': False, 'error': 'Only the owner can manage roles.'}), 403
+
+    data     = request.get_json(silent=True) or {}
+    username = (data.get('username') or '').strip()
+    new_role = (data.get('role') or 'member').strip()
+    if new_role not in ('admin', 'mod', 'member'):
+        return jsonify({'success': False, 'error': 'Invalid role.'}), 400
+
+    target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    if not target:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+    if target['id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot change your own role.'}), 400
+
+    row = db.execute('SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?',
+                     (ch['id'], target['id'])).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'User is not a member.'}), 400
+
+    db.execute('UPDATE channel_members SET role=? WHERE channel_id=? AND user_id=?',
+               (new_role, ch['id'], target['id']))
+    db.commit()
+    return jsonify({'success': True, 'username': username, 'role': new_role})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Poll — edit options
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/post/<int:post_id>/poll/edit', methods=['POST'])
+@login_required
+def poll_edit(post_id):
+    """Owner can edit poll options before anyone has voted."""
+    import json as _json_pe
+    db  = get_db()
+    uid = session['user_id']
+
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found.'}), 404
+    if post['user_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+    if (post['post_type'] if 'post_type' in post.keys() else 'post') != 'poll':
+        return jsonify({'success': False, 'error': 'Not a poll.'}), 400
+
+    total_votes = db.execute(
+        'SELECT COALESCE(SUM(votes),0) FROM poll_options WHERE post_id=?', (post_id,)
+    ).fetchone()[0]
+    if total_votes > 0:
+        return jsonify({'success': False, 'error': 'Cannot edit a poll that already has votes.'}), 400
+
+    data = request.get_json(silent=True) or {}
+    new_options = [str(o).strip() for o in (data.get('options') or []) if str(o).strip()][:10]
+    if len(new_options) < 2:
+        return jsonify({'success': False, 'error': 'A poll needs at least 2 options.'}), 400
+
+    db.execute('DELETE FROM poll_options WHERE post_id=?', (post_id,))
+    for label in new_options:
+        db.execute('INSERT INTO poll_options (post_id, label) VALUES (?,?)', (post_id, label))
+    db.commit()
+
+    options = db.execute('SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (post_id,)).fetchall()
+    return jsonify({'success': True, 'options': [{'id': o['id'], 'label': o['label']} for o in options]})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Groups (Telegram-style group chats)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _format_group(row, uid, db):
+    g = dict(row)
+    member = db.execute(
+        'SELECT role FROM group_members WHERE group_id=? AND user_id=?', (row['id'], uid)
+    ).fetchone()
+    g['is_member']  = bool(member)
+    g['user_role']  = member['role'] if member else None
+    g['is_owner']   = row['owner_id'] == uid
+    last = db.execute(
+        'SELECT gm.*, u.username as sender_name FROM group_messages gm '
+        'JOIN users u ON u.id=gm.sender_id '
+        'WHERE gm.group_id=? ORDER BY gm.created_at DESC LIMIT 1', (row['id'],)
+    ).fetchone()
+    g['last_msg'] = dict(last) if last else None
+    unread = db.execute(
+        'SELECT COUNT(*) FROM group_messages '
+        'WHERE group_id=? AND sender_id!=? AND created_at > COALESCE(('
+        '  SELECT last_read_at FROM group_members WHERE group_id=? AND user_id=?'
+        '), "1970-01-01")',
+        (row['id'], uid, row['id'], uid)
+    ).fetchone()[0]
+    g['unread'] = unread
+    return g
+
+
+@app.route('/groups')
+@login_required
+def groups_list():
+    db  = get_db()
+    uid = session['user_id']
+    tab = request.args.get('tab', 'my')  # my | discover
+
+    if tab == 'discover':
+        rows = db.execute("""
+            SELECT g.* FROM groups g
+            WHERE g.is_public=1
+              AND g.id NOT IN (SELECT group_id FROM group_members WHERE user_id=?)
+            ORDER BY g.member_count DESC, g.created_at DESC LIMIT 40
+        """, (uid,)).fetchall()
+    else:
+        rows = db.execute("""
+            SELECT g.* FROM groups g
+            JOIN group_members gm ON gm.group_id=g.id
+            WHERE gm.user_id=?
+            ORDER BY g.created_at DESC LIMIT 40
+        """, (uid,)).fetchall()
+
+    groups = [_format_group(r, uid, db) for r in rows]
+    return render_template('groups.html', groups=groups, tab=tab)
+
+
+@app.route('/group/create', methods=['GET', 'POST'])
+@login_required
+def group_create():
+    db  = get_db()
+    uid = session['user_id']
+
+    if request.method == 'POST':
+        import re as _re3
+        name        = (request.form.get('name') or '').strip()[:60]
+        description = (request.form.get('description') or '').strip()[:300]
+        is_public   = 1 if request.form.get('is_public', '1') != '0' else 0
+
+        if not name:
+            return jsonify({'success': False, 'error': 'Group name required.'}), 400
+
+        slug = _re3.sub(r'[^a-z0-9-]', '-', name.lower()).strip('-')
+        slug = _re3.sub(r'-+', '-', slug)[:50] or f'group-{uid}'
+        base = slug
+        for i in range(1, 20):
+            if not db.execute('SELECT 1 FROM groups WHERE slug=?', (slug,)).fetchone():
+                break
+            slug = f'{base}-{i}'
+
+        try:
+            db.execute(
+                'INSERT INTO groups (name,slug,description,owner_id,is_public,member_count) '
+                'VALUES (?,?,?,?,?,1)',
+                (name, slug, description or None, uid, is_public)
+            )
+            gid = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+            db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (?,?,?)',
+                       (gid, uid, 'owner'))
+            db.commit()
+            return jsonify({'success': True, 'redirect': url_for('group_detail', slug=slug)})
+        except Exception:
+            return jsonify({'success': False, 'error': 'Group name already taken.'}), 400
+
+    return render_template('group_create.html')
+
+
+@app.route('/group/<slug>')
+@login_required
+def group_detail(slug):
+    db  = get_db()
+    uid = session['user_id']
+
+    g = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not g:
+        return render_template('error.html', code=404, message='Group not found.'), 404
+
+    member = db.execute(
+        'SELECT role FROM group_members WHERE group_id=? AND user_id=?', (g['id'], uid)
+    ).fetchone()
+    is_member = bool(member)
+    user_role = member['role'] if member else None
+
+    if not g['is_public'] and not is_member:
+        return render_template('error.html', code=403, message='This group is private.'), 403
+
+    # Mark as read
+    if is_member:
+        now = datetime.now(timezone.utc).isoformat()
+        db.execute('UPDATE group_members SET last_read_at=? WHERE group_id=? AND user_id=?',
+                   (now, g['id'], uid))
+        db.execute('UPDATE users SET unread_group_count=('
+                   'SELECT COUNT(DISTINCT gm2.group_id) FROM group_messages gm2 '
+                   'JOIN group_members gmp ON gmp.group_id=gm2.group_id AND gmp.user_id=? '
+                   'WHERE gm2.sender_id!=? AND gm2.created_at > COALESCE(gmp.last_read_at,"1970-01-01")'
+                   ') WHERE id=?', (uid, uid, uid))
+        db.commit()
+
+    msgs = db.execute("""
+        SELECT gm.*, u.username as sender_username, u.display_name as sender_display,
+               u.avatar_url as sender_avatar
+        FROM group_messages gm JOIN users u ON u.id=gm.sender_id
+        WHERE gm.group_id=? AND gm.deleted_at IS NULL
+        ORDER BY gm.created_at ASC LIMIT 100
+    """, (g['id'],)).fetchall()
+
+    members = db.execute("""
+        SELECT u.username, u.display_name, u.avatar_url, u.is_verified, gm.role, gm.joined_at
+        FROM group_members gm JOIN users u ON u.id=gm.user_id
+        WHERE gm.group_id=?
+        ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'mod' THEN 2 ELSE 3 END, gm.joined_at
+        LIMIT 50
+    """, (g['id'],)).fetchall()
+
+    return render_template('group_detail.html',
+                           g=dict(g), messages=[dict(m) for m in msgs],
+                           members=[dict(m) for m in members],
+                           is_member=is_member, is_owner=g['owner_id']==uid,
+                           user_role=user_role)
+
+
+@app.route('/group/<slug>/send', methods=['POST'])
+@login_required
+def group_send(slug):
+    db  = get_db()
+    uid = session['user_id']
+
+    g = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not g:
+        return jsonify({'success': False, 'error': 'Group not found.'}), 404
+
+    if not db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+                      (g['id'], uid)).fetchone():
+        return jsonify({'success': False, 'error': 'You are not a member.'}), 403
+
+    ct = request.content_type or ''
+    if 'application/json' in ct:
+        _d = request.get_json(silent=True) or {}
+        body      = (_d.get('body') or '').strip() or None
+        msg_type  = (_d.get('msg_type') or 'text').lower()
+        file_data = _d.get('file_data') or None
+        file_name = (_d.get('file_name') or '') or None
+        file_mime = (_d.get('file_mime') or '') or None
+        reply_to  = _d.get('reply_to_id') or None
+    else:
+        body      = (request.form.get('body') or '').strip() or None
+        msg_type  = (request.form.get('msg_type') or 'text').lower()
+        file_data = request.form.get('file_data') or None
+        file_name = (request.form.get('file_name') or '') or None
+        file_mime = (request.form.get('file_mime') or '') or None
+        reply_to  = safe_int(request.form.get('reply_to_id'), 0) or None
+
+    if msg_type == 'text' and not body:
+        return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
+    if msg_type != 'text' and not file_data:
+        return jsonify({'success': False, 'error': 'No file data.'}), 400
+
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        'INSERT INTO group_messages '
+        '(group_id,sender_id,body,msg_type,file_data,file_name,file_mime,reply_to_id,created_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?)',
+        (g['id'], uid, body, msg_type, file_data, file_name, file_mime, reply_to, now)
+    )
+    msg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+
+    # Increment unread for all other members
+    db.execute("""
+        UPDATE users SET unread_group_count=unread_group_count+1
+        WHERE id IN (
+            SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?
+        )
+    """, (g['id'], uid))
+
+    me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()
+    db.commit()
+
+    return jsonify({'success': True, 'message': {
+        'id': msg_id, 'body': body, 'msg_type': msg_type,
+        'file_data': file_data, 'file_name': file_name, 'file_mime': file_mime,
+        'sender_id': uid, 'sender_username': me['username'],
+        'sender_display': me['display_name'], 'sender_avatar': me['avatar_url'],
+        'reply_to_id': reply_to, 'created_at': now,
+    }})
+
+
+@app.route('/group/<slug>/poll', methods=['POST'])
+@login_required
+def group_send_message(slug):
+    """Alias kept for backwards compat — forwards to group_send."""
+    return group_send(slug)
+
+
+@app.route('/api/group/<slug>/poll')
+@login_required
+def group_poll_messages(slug):
+    """Poll for new messages after ?after=<id>."""
+    db    = get_db()
+    uid   = session['user_id']
+    after = request.args.get('after', 0, type=int)
+
+    g = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not g:
+        return jsonify({'messages': []}), 404
+    if not db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+                      (g['id'], uid)).fetchone():
+        return jsonify({'messages': []}), 403
+
+    rows = db.execute("""
+        SELECT gm.*, u.username as sender_username, u.display_name as sender_display,
+               u.avatar_url as sender_avatar
+        FROM group_messages gm JOIN users u ON u.id=gm.sender_id
+        WHERE gm.group_id=? AND gm.id > ? AND gm.deleted_at IS NULL
+        ORDER BY gm.created_at ASC LIMIT 50
+    """, (g['id'], after)).fetchall()
+
+    if rows:
+        now = datetime.now(timezone.utc).isoformat()
+        db.execute('UPDATE group_members SET last_read_at=? WHERE group_id=? AND user_id=?',
+                   (now, g['id'], uid))
+        db.commit()
+
+    return jsonify({'messages': [dict(r) for r in rows]})
+
+
+@app.route('/group/<slug>/join', methods=['POST'])
+@login_required
+def group_join(slug):
+    db  = get_db()
+    uid = session['user_id']
+    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not g:
+        return jsonify({'success': False, 'error': 'Group not found.'}), 404
+    if not g['is_public']:
+        return jsonify({'success': False, 'error': 'This group is private.'}), 403
+    if db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+                  (g['id'], uid)).fetchone():
+        return jsonify({'success': False, 'error': 'Already a member.'}), 400
+
+    db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (?,?,?)', (g['id'], uid, 'member'))
+    db.execute('UPDATE groups SET member_count=member_count+1 WHERE id=?', (g['id'],))
+    db.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/group/<slug>/leave', methods=['POST'])
+@login_required
+def group_leave(slug):
+    db  = get_db()
+    uid = session['user_id']
+    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not g:
+        return jsonify({'success': False, 'error': 'Not found.'}), 404
+    if g['owner_id'] == uid:
+        return jsonify({'success': False, 'error': 'Owner cannot leave. Delete the group instead.'}), 400
+    db.execute('DELETE FROM group_members WHERE group_id=? AND user_id=?', (g['id'], uid))
+    db.execute('UPDATE groups SET member_count=MAX(0,member_count-1) WHERE id=?', (g['id'],))
+    db.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/api/groups/unread')
+@login_required
+def api_group_unread():
+    db  = get_db()
+    uid = session['user_id']
+    row = db.execute('SELECT unread_group_count FROM users WHERE id=?', (uid,)).fetchone()
+    return jsonify({'count': int(row['unread_group_count'] or 0) if row else 0})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

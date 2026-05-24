@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Create Group — DUYS Boost{% endblock %}
+{% block page_title %}Create Group{% endblock %}
+
+{% block content %}
+<div style="max-width:560px;margin:0 auto">
+  <div class="card">
+    <div class="section-title mb-20">💬 Create a Group</div>
+    <form id="grp-form" novalidate>
+      <div class="form-group">
+        <label class="form-label">Group name <span style="color:var(--red)">*</span></label>
+        <input class="form-input" id="grp-name" name="name" type="text" maxlength="60" required placeholder="e.g. DUYS Crypto Traders, Football Fans Ghana">
+        <div class="form-hint">Everyone can search and find public groups.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span class="optional">(optional)</span></label>
+        <textarea class="form-input" name="description" maxlength="300" rows="3" placeholder="What's this group about?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius)">
+            <input type="radio" name="is_public" value="1" checked style="accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:700;font-size:14px">🌐 Public group</div>
+              <div class="text-xs text-muted">Anyone can join and read messages</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius)">
+            <input type="radio" name="is_public" value="0" style="accent-color:var(--accent)">
+            <div>
+              <div style="font-weight:700;font-size:14px">🔒 Private group</div>
+              <div class="text-xs text-muted">Only people you invite can join</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="info-box" style="margin-bottom:16px">
+        💡 In groups, <strong>all members can send messages</strong>. For broadcast-only channels where only admins can post, use <a href="{{ url_for('channel_create') }}" class="text-accent">Channels</a> instead.
+      </div>
+      <div id="grp-error" class="error-list" style="display:none"></div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">Create group 💬</button>
+        <a href="{{ url_for('groups_list') }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('grp-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  const err = document.getElementById('grp-error');
+  err.style.display = 'none';
+  const orig = btn.textContent; btn.textContent = 'Creating…'; btn.disabled = true;
+  try {
+    const r = await fetch('/group/create', { method: 'POST', body: new FormData(e.target) });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Group created! 💬');
+      setTimeout(() => location.href = d.redirect, 500);
+    } else {
+      err.style.display = 'block'; err.textContent = d.error || 'Could not create.';
+    }
+  } catch(_) { err.style.display = 'block'; err.textContent = 'Network error.'; }
+  finally { btn.textContent = orig; btn.disabled = false; }
+});
+</script>
+{% endblock %}

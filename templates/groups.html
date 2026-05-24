@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Groups — DUYS Boost{% endblock %}
+{% block page_title %}Groups{% endblock %}
+
+{% block head_extra %}
+<style>
+.grp-header { display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap; }
+.grp-tabs { display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto; }
+.grp-tab { padding:12px 20px;font-size:13.5px;font-weight:600;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap;transition:color var(--transition),border-color var(--transition); }
+.grp-tab:hover { color:var(--text); }
+.grp-tab.active { color:var(--text);border-color:var(--accent); }
+.grp-list { display:flex;flex-direction:column; }
+.grp-row {
+  display:flex;align-items:center;gap:14px;padding:14px 20px;
+  text-decoration:none;color:var(--text);border-bottom:1px solid var(--border);
+  transition:background var(--transition);
+}
+.grp-row:hover { background:rgba(127,90,240,.04); }
+.grp-av {
+  width:50px;height:50px;border-radius:14px;flex-shrink:0;font-size:20px;font-weight:800;
+  background:var(--gradient-primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.grp-av img { width:100%;height:100%;object-fit:cover; }
+.grp-info { flex:1;min-width:0; }
+.grp-name { font-weight:700;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.grp-sub { font-size:12.5px;color:var(--muted);margin-top:2px; }
+.grp-last { font-size:13px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%; }
+.grp-badge { flex-shrink:0;background:var(--accent);color:#fff;font-size:10px;font-weight:800;min-width:20px;height:20px;border-radius:20px;padding:0 6px;display:flex;align-items:center;justify-content:center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:680px;margin:0 auto">
+  <div class="grp-header">
+    <div>
+      <div style="font-family:var(--font-display);font-size:22px;font-weight:800">💬 Groups</div>
+      <div class="text-sm text-muted">Chat with communities</div>
+    </div>
+    <a href="{{ url_for('group_create') }}" class="btn btn-primary btn-sm">+ New group</a>
+  </div>
+
+  <div class="grp-tabs">
+    <a href="{{ url_for('groups_list', tab='my') }}"       class="grp-tab {% if tab=='my' %}active{% endif %}">💬 My Groups</a>
+    <a href="{{ url_for('groups_list', tab='discover') }}" class="grp-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
+  </div>
+
+  <div class="grp-list">
+    {% if groups %}
+      {% for g in groups %}
+      <a href="{{ url_for('group_detail', slug=g.slug) }}" class="grp-row">
+        <div class="grp-av">
+          {% if g.avatar_url %}<img src="{{ g.avatar_url }}" alt="">
+          {% else %}{{ g.name[0].upper() }}{% endif %}
+        </div>
+        <div class="grp-info">
+          <div class="grp-name">{{ g.name }}</div>
+          <div class="grp-sub">👥 {{ g.member_count or 0 }} members · {{ '🌐 Public' if g.is_public else '🔒 Private' }}</div>
+          {% if g.last_msg %}
+          <div class="grp-last">
+            <strong>{{ g.last_msg.sender_name }}</strong>: {{ (g.last_msg.body or '(media)')[:60] }}
+          </div>
+          {% endif %}
+        </div>
+        {% if g.unread and g.unread > 0 %}
+        <div class="grp-badge">{{ g.unread if g.unread < 100 else '99+' }}</div>
+        {% endif %}
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state" style="padding:72px 20px">
+        <div class="empty-icon">💬</div>
+        <div class="empty-title">
+          {% if tab == 'my' %}You haven't joined any groups{% else %}No public groups found{% endif %}
+        </div>
+        <div class="empty-text">Create a group or join an existing one.</div>
+        <a href="{{ url_for('group_create') }}" class="btn btn-primary mt-16">Create a group</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
