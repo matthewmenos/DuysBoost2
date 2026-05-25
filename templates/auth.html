@@ -1,306 +1,609 @@
-{% extends "base.html" %}
-{% block title %}{{ 'Sign Up' if mode=='signup' else 'Sign In' }} — DUYS Boost{% endblock %}
-{% block body_class %}auth-body{% endblock %}
-
-{% block head_extra %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{{ 'Create Account' if mode=='signup' else 'Sign In' }} — DUYS Boost</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 <style>
-body.auth-body { background: var(--bg); }
-.auth-page {
+/* ── Reset & base ────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+
+body {
   min-height: 100vh;
-  min-height: 100dvh;
+  background: #080a12;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  background: var(--bg);
+  font-family: var(--font-body, 'Inter', system-ui, sans-serif);
+  overflow: hidden;
   position: relative;
-  overflow-x: hidden;
 }
-.auth-page::before {
-  content: '';
-  position: absolute;
-  width: min(90vw, 600px);
-  height: min(90vw, 600px);
-  background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(127,90,240,.14) 0%, transparent 70%);
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+
+/* ── Animated background orbs ───────────────────────────────────────────── */
+.bg-scene {
+  position: fixed;
+  inset: 0;
   pointer-events: none;
+  overflow: hidden;
   z-index: 0;
 }
-.auth-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  padding: 24px 20px;
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  animation: drift linear infinite;
+}
+.orb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, #7f5af0 0%, #5a3fc0 50%, transparent 70%);
+  top: -120px; left: -80px;
+  animation-duration: 22s;
+}
+.orb-2 {
+  width: 420px; height: 420px;
+  background: radial-gradient(circle, #2cb67d 0%, #1a9e6a 50%, transparent 70%);
+  bottom: -100px; right: -60px;
+  animation-duration: 28s;
+  animation-direction: reverse;
+}
+.orb-3 {
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, #e16bff 0%, #a020f0 50%, transparent 70%);
+  top: 40%; right: 10%;
+  animation-duration: 18s;
+  opacity: 0.35;
+}
+.orb-4 {
+  width: 260px; height: 260px;
+  background: radial-gradient(circle, #00c6ff 0%, #0072ff 50%, transparent 70%);
+  bottom: 20%; left: 5%;
+  animation-duration: 24s;
+  opacity: 0.3;
+}
+
+@keyframes drift {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(40px, -30px) scale(1.05); }
+  50%  { transform: translate(20px, 50px) scale(0.97); }
+  75%  { transform: translate(-30px, 20px) scale(1.03); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* Subtle noise texture overlay */
+.bg-noise {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+/* ── Glass card ──────────────────────────────────────────────────────────── */
+.glass-wrap {
+  position: relative;
+  z-index: 10;
   width: 100%;
   max-width: 440px;
+  padding: 16px;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 24px;
+  padding: 36px 32px 32px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04) inset,
+    0 32px 80px rgba(0,0,0,0.55),
+    0 8px 24px rgba(127,90,240,0.12);
   position: relative;
-  z-index: 1;
-  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
-@media (min-width: 520px) { .auth-card { padding: 36px 32px; } }
 
+/* Glass sheen effect */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.2) 30%,
+    rgba(255,255,255,0.35) 50%,
+    rgba(255,255,255,0.2) 70%,
+    transparent 100%);
+  pointer-events: none;
+}
+.glass-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse 80% 40% at 50% 0%,
+    rgba(127,90,240,0.08) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ── Logo ────────────────────────────────────────────────────────────────── */
 .auth-logo {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 20px;
+  text-align: center;
+  margin-bottom: 28px;
+}
+.auth-logo-icon {
+  width: 52px; height: 52px;
+  background: linear-gradient(135deg, #7f5af0 0%, #5a3fc0 100%);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  font-size: 24px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 20px rgba(127,90,240,0.4);
 }
-@media (min-width: 520px) { .auth-logo { justify-content: flex-start; margin-bottom: 24px; } }
-
-.auth-title {
-  font-family: var(--font-display);
-  font-size: clamp(20px, 5vw, 24px);
+.auth-logo-name {
+  font-size: 22px;
   font-weight: 800;
-  margin-bottom: 4px;
+  color: #fff;
+  letter-spacing: -0.03em;
 }
-.auth-sub {
-  font-size: 13.5px;
-  color: var(--muted);
-  margin-bottom: 22px;
-  line-height: 1.5;
+.auth-logo-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 3px;
 }
 
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
 .auth-tabs {
-  display: flex;
-  background: var(--surface-2);
-  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
   padding: 4px;
-  margin-bottom: 22px;
+  margin-bottom: 28px;
+  border: 1px solid rgba(255,255,255,0.07);
 }
 .auth-tab {
-  flex: 1;
-  text-align: center;
-  padding: 10px 8px;
+  padding: 9px;
   border-radius: 9px;
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 700;
+  text-align: center;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-  color: var(--muted);
+  color: rgba(255,255,255,0.45);
+  transition: all 0.2s;
+  border: none;
+  background: none;
   text-decoration: none;
-  border: 0;
-  background: transparent;
-  font-family: inherit;
+  display: block;
 }
 .auth-tab.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
+  background: rgba(127,90,240,0.75);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(127,90,240,0.4);
+}
+.auth-tab:hover:not(.active) {
+  color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.06);
 }
 
-.divider {
+/* ── Form ────────────────────────────────────────────────────────────────── */
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.field-wrap { position: relative; }
+
+.field-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 6px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 11px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  -webkit-appearance: none;
+}
+.field-input::placeholder { color: rgba(255,255,255,0.25); }
+.field-input:focus {
+  border-color: rgba(127, 90, 240, 0.7);
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 3px rgba(127,90,240,0.15);
+}
+
+/* Password toggle */
+.pw-wrap { position: relative; }
+.pw-wrap .field-input { padding-right: 42px; }
+.pw-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  transition: color 0.15s;
+}
+.pw-toggle:hover { color: rgba(255,255,255,0.7); }
+
+/* ── Errors ──────────────────────────────────────────────────────────────── */
+.auth-errors {
+  background: rgba(239,69,101,0.10);
+  border: 1px solid rgba(239,69,101,0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: none;
+}
+.auth-errors.show { display: block; }
+.auth-errors ul  { list-style: none; }
+.auth-errors li  { color: #ff7c9c; font-size: 13px; padding: 2px 0; }
+
+/* ── Submit button ───────────────────────────────────────────────────────── */
+.auth-submit {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #7f5af0 0%, #5a3fc0 100%);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(127,90,240,0.4);
+  letter-spacing: 0.01em;
+  position: relative;
+  overflow: hidden;
+}
+.auth-submit::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transition: left 0.4s;
+}
+.auth-submit:hover::before { left: 100%; }
+.auth-submit:hover { opacity: 0.92; box-shadow: 0 6px 28px rgba(127,90,240,0.5); }
+.auth-submit:active { transform: scale(0.98); }
+.auth-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+.auth-divider {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin: 18px 0;
-  color: var(--muted);
-  font-size: 12.5px;
+  gap: 12px;
+  margin: 2px 0;
 }
-.divider::before, .divider::after {
+.auth-divider span {
+  font-size: 12px;
+  color: rgba(255,255,255,0.25);
+  white-space: nowrap;
+}
+.auth-divider::before, .auth-divider::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--border);
+  background: rgba(255,255,255,0.08);
 }
 
-.social-row {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.social-btn {
+/* ── Google button ───────────────────────────────────────────────────────── */
+.google-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   width: 100%;
-  max-width: 280px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
+  padding: 11px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  color: rgba(255,255,255,0.85);
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: border-color var(--transition), background var(--transition);
-  color: var(--text);
-  min-height: 44px;
-}
-.social-btn:hover { border-color: var(--accent); background: var(--surface-3); }
-
-.social-btn.google {
-  background: #4285f4;
-  color: white;
-  border-color: #4285f4;
-}
-.social-btn.google:hover {
-  background: #3367d6;
-  border-color: #3367d6;
-}
-
-.auth-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 12px;
   text-decoration: none;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+  backdrop-filter: blur(8px);
 }
-.auth-back:hover { color: var(--accent); }
+.google-btn:hover {
+  background: rgba(255,255,255,0.11);
+  border-color: rgba(255,255,255,0.2);
+}
+.google-btn:active { transform: scale(0.98); }
+.google-icon {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+}
+
+/* ── Footer links ────────────────────────────────────────────────────────── */
+.auth-footer {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.35);
+}
+.auth-footer a {
+  color: rgba(127,90,240,0.9);
+  text-decoration: none;
+  font-weight: 600;
+}
+.auth-footer a:hover { color: #a78bfa; }
+
+/* ── Optional badge ──────────────────────────────────────────────────────── */
+.optional-badge {
+  font-size: 10.5px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.4);
+  padding: 1px 7px;
+  border-radius: 99px;
+  margin-left: 5px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* ── Password strength ───────────────────────────────────────────────────── */
+.pw-strength { display: flex; gap: 4px; margin-top: 6px; }
+.pw-strength-bar {
+  flex: 1; height: 3px; border-radius: 99px;
+  background: rgba(255,255,255,0.1);
+  transition: background 0.3s;
+}
+.pw-strength-bar.weak   { background: #e53e3e; }
+.pw-strength-bar.fair   { background: #f4c94e; }
+.pw-strength-bar.good   { background: #2cb67d; }
+.pw-strength-bar.strong { background: #7f5af0; }
 </style>
 {% endblock %}
 
-{% block layout %}
-<div class="auth-page">
-  <div class="auth-card">
-    <a href="{{ url_for('auth.index') }}" class="auth-back">← Back to home</a>
+<body>
+<div class="bg-scene">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+</div>
+<div class="bg-noise"></div>
+
+<div class="glass-wrap">
+  <div class="glass-card">
+
+    <!-- Logo -->
     <div class="auth-logo">
-      <div class="logo-mark" aria-hidden="true">D</div>
-      <div class="logo-text">DUYS Boost</div>
+      <div class="auth-logo-icon">⚡</div>
+      <div class="auth-logo-name">DUYS Boost</div>
+      <div class="auth-logo-sub">{{ 'Create your account' if mode=='signup' else 'Welcome back' }}</div>
     </div>
 
-    <div class="auth-title">{{ 'Create your account' if mode == 'signup' else 'Welcome back' }}</div>
-    <div class="auth-sub">{{ 'Start growing your social presence in minutes.' if mode == 'signup' else 'Sign in to continue to your dashboard.' }}</div>
-
-    <div class="auth-tabs" role="tablist">
-      <a class="auth-tab {% if mode=='login' %}active{% endif %}" href="{{ url_for('auth.login') }}" role="tab">Sign In</a>
-      <a class="auth-tab {% if mode=='signup' %}active{% endif %}" href="{{ url_for('auth.signup') }}" role="tab">Sign Up</a>
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <a href="{{ url_for('auth.login') }}"
+         class="auth-tab {% if mode=='login' %}active{% endif %}">Sign In</a>
+      <a href="{{ url_for('auth.signup') }}"
+         class="auth-tab {% if mode=='signup' %}active{% endif %}">Sign Up</a>
     </div>
 
-    <div id="error-box" class="error-list" style="display:none" role="alert"></div>
+    <!-- Errors -->
+    <div class="auth-errors" id="auth-errors">
+      <ul id="auth-error-list"></ul>
+    </div>
 
+    <!-- ── LOGIN FORM ──────────────────────────────────────────────────── -->
     {% if mode == 'login' %}
-    <form id="auth-form" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="login-id">Email or Username</label>
-        <input class="form-input" id="login-id" name="identifier" type="text" autocomplete="username" placeholder="you@example.com" required>
+    <form class="auth-form" id="auth-form" novalidate>
+      <div class="field-wrap">
+        <label class="field-label" for="identifier">Email or Username</label>
+        <input class="field-input" id="identifier" name="identifier"
+               type="text" autocomplete="username" placeholder="you@example.com"
+               required autofocus>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="pw-field">Password</label>
-        <div class="password-wrap">
-          <input class="form-input" id="pw-field" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
-          <button type="button" class="password-toggle" onclick="togglePw()" aria-label="Show password" id="pw-eye">👁️</button>
-        </div>
+      <div class="field-wrap pw-wrap">
+        <label class="field-label" for="password">Password</label>
+        <input class="field-input" id="password" name="password"
+               type="password" autocomplete="current-password" placeholder="••••••••"
+               required>
+        <button type="button" class="pw-toggle" onclick="togglePw('password')">👁</button>
       </div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg">Sign In →</button>
+      <button type="submit" class="auth-submit" id="submit-btn">
+        Sign In →
+      </button>
     </form>
 
-    <div class="divider">or continue with</div>
-    <div class="social-row">
-      <button class="social-btn google" type="button" onclick="window.location='{{ url_for('auth.google_login_route') }}'">
-        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-        Continue with Google
-      </button>
-    </div>
-
+    <!-- ── SIGN UP FORM ───────────────────────────────────────────────── -->
     {% else %}
-    <form id="auth-form" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="su-display">Display name</label>
-        <input class="form-input" id="su-display" name="display_name" type="text" autocomplete="name" placeholder="How others see you" maxlength="60" required>
+    <form class="auth-form" id="auth-form" novalidate>
+      <div class="field-wrap">
+        <label class="field-label" for="display_name">Display Name</label>
+        <input class="field-input" id="display_name" name="display_name"
+               type="text" autocomplete="name" placeholder="How others see you"
+               maxlength="60" required autofocus>
       </div>
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label class="form-label" for="su-username">Username</label>
-          <input class="form-input" id="su-username" name="username" type="text" autocomplete="username" placeholder="cooluser" minlength="3" required>
+      <div class="form-row">
+        <div class="field-wrap">
+          <label class="field-label" for="username">Username</label>
+          <input class="field-input" id="username" name="username"
+                 type="text" autocomplete="username" placeholder="cooluser"
+                 minlength="3" maxlength="30" required>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="su-ref">Referral <span class="optional">(optional)</span></label>
-          <input class="form-input" id="su-ref" name="referral_code" type="text" placeholder="abc123">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="su-email">Email</label>
-        <input class="form-input" id="su-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="pw-field">Password</label>
-        <div class="password-wrap">
-          <input class="form-input" id="pw-field" name="password" type="password" autocomplete="new-password" placeholder="Min. 8 characters" minlength="8" required>
-          <button type="button" class="password-toggle" onclick="togglePw()" aria-label="Show password" id="pw-eye">👁️</button>
-        </div>
-        <div class="pw-strength" data-strength-for="pw-field" data-level="0">
-          <div class="pw-strength-bar"><span></span><span></span><span></span><span></span></div>
-          <div class="pw-strength-label"></div>
+        <div class="field-wrap">
+          <label class="field-label" for="email">Email</label>
+          <input class="field-input" id="email" name="email"
+                 type="email" autocomplete="email" placeholder="you@example.com"
+                 required>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="su-confirm">Confirm Password</label>
-        <input class="form-input" id="su-confirm" name="confirm_password" type="password" autocomplete="new-password" placeholder="••••••••" required>
+      <div class="field-wrap pw-wrap">
+        <label class="field-label" for="password">Password</label>
+        <input class="field-input" id="password" name="password"
+               type="password" autocomplete="new-password" placeholder="Min. 8 characters"
+               minlength="8" required oninput="checkPwStrength(this.value)">
+        <button type="button" class="pw-toggle" onclick="togglePw('password')">👁</button>
+        <div class="pw-strength" id="pw-strength">
+          <div class="pw-strength-bar" id="pw-bar-1"></div>
+          <div class="pw-strength-bar" id="pw-bar-2"></div>
+          <div class="pw-strength-bar" id="pw-bar-3"></div>
+          <div class="pw-strength-bar" id="pw-bar-4"></div>
+        </div>
       </div>
-      <button type="submit" class="btn btn-primary btn-block btn-lg">Create Account →</button>
-    </form>
-
-    <div class="divider">or continue with</div>
-    <div class="social-row">
-      <button class="social-btn google" type="button" onclick="window.location='{{ url_for('auth.google_login_route') }}'">
-        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-        Continue with Google
+      <div class="field-wrap pw-wrap">
+        <label class="field-label" for="confirm_password">Confirm Password</label>
+        <input class="field-input" id="confirm_password" name="confirm_password"
+               type="password" autocomplete="new-password" placeholder="Repeat password"
+               required>
+        <button type="button" class="pw-toggle" onclick="togglePw('confirm_password')">👁</button>
+      </div>
+      <div class="field-wrap">
+        <label class="field-label">
+          Referral Code <span class="optional-badge">optional</span>
+        </label>
+        <input class="field-input" name="referral_code" type="text" placeholder="abc123"
+               maxlength="20">
+      </div>
+      <button type="submit" class="auth-submit" id="submit-btn">
+        Create Account →
       </button>
+    </form>
+    {% endif %}
+
+    <!-- Divider + Google -->
+    {% if GOOGLE_ENABLED %}
+    <div class="auth-divider" style="margin-top:20px"><span>or continue with</span></div>
+    <a href="{{ url_for('auth.google_login_route') }}" class="google-btn" style="margin-top:12px">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </a>
+    {% endif %}
+
+    <!-- Footer -->
+    <div class="auth-footer">
+      {% if mode == 'login' %}
+        Don't have an account?
+        <a href="{{ url_for('auth.signup') }}">Sign up free</a>
+      {% else %}
+        Already have an account?
+        <a href="{{ url_for('auth.login') }}">Sign in</a>
+      {% endif %}
     </div>
 
-    {% endif %}
   </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-function togglePw() {
-  const f = document.getElementById('pw-field');
-  const e = document.getElementById('pw-eye');
-  const isPw = f.type === 'password';
-  f.type = isPw ? 'text' : 'password';
-  e.textContent = isPw ? '🙈' : '👁️';
-  e.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
-}
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-// Pre-fill referral from ?ref= query param
-(function () {
-  const params = new URLSearchParams(window.location.search);
-  const ref = params.get('ref');
-  const refInput = document.getElementById('su-ref');
-  if (ref && refInput) refInput.value = ref;
-})();
-
-document.getElementById('auth-form').addEventListener('submit', async e => {
+/* ── Form submit ─────────────────────────────────────────────────────────── */
+document.getElementById('auth-form').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const form = e.target;
-  const btn = form.querySelector('[type=submit]');
-  const originalText = btn.textContent;
-  btn.textContent = 'Loading…';
+  const btn = document.getElementById('submit-btn');
   btn.disabled = true;
+  btn.textContent = 'Please wait…';
+  clearErrors();
+
+  const fd     = new FormData(this);
+  const action = '{{ url_for("auth.signup") if mode=="signup" else url_for("auth.login") }}';
+
   try {
-    const fd = new FormData(form);
-    const action = '{{ url_for("auth.login") if mode=="login" else url_for("auth.signup") }}';
-    const r = await fetch(action, { method: 'POST', body: fd });
+    const r = await fetch(action, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF },
+      body: fd,
+    });
     const d = await r.json();
     if (d.success) {
-      window.location = d.redirect;
-      return;
+      btn.textContent = '✓ Redirecting…';
+      location.href   = d.redirect;
+    } else {
+      showErrors(d.errors || ['Something went wrong. Please try again.']);
+      btn.disabled    = false;
+      btn.textContent = '{{ "Create Account →" if mode=="signup" else "Sign In →" }}';
     }
-    const eb = document.getElementById('error-box');
-    eb.style.display = 'block';
-    eb.innerHTML = (d.errors || ['Something went wrong.']).map(escapeHtml).join('<br>');
-    eb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  } catch (_err) {
-    showToast('Network error. Please try again.', 'error');
-  } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
+  } catch (_) {
+    showErrors(['Network error — please check your connection.']);
+    btn.disabled    = false;
+    btn.textContent = '{{ "Create Account →" if mode=="signup" else "Sign In →" }}';
   }
 });
+
+function showErrors(errs) {
+  const box  = document.getElementById('auth-errors');
+  const list = document.getElementById('auth-error-list');
+  list.innerHTML = errs.map(e => `<li>⚠ ${e}</li>`).join('');
+  box.classList.add('show');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearErrors() {
+  document.getElementById('auth-errors').classList.remove('show');
+}
+
+/* ── Password visibility toggle ─────────────────────────────────────────── */
+function togglePw(id) {
+  const inp = document.getElementById(id);
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+/* ── Password strength meter ─────────────────────────────────────────────── */
+function checkPwStrength(pw) {
+  const score = [
+    pw.length >= 8,
+    /[A-Z]/.test(pw),
+    /[0-9]/.test(pw),
+    /[^A-Za-z0-9]/.test(pw) || pw.length >= 14,
+  ].filter(Boolean).length;
+
+  const levels = ['', 'weak', 'fair', 'good', 'strong'];
+  for (let i = 1; i <= 4; i++) {
+    const bar = document.getElementById('pw-bar-' + i);
+    if (bar) bar.className = 'pw-strength-bar ' + (i <= score ? levels[score] : '');
+  }
+}
+
+/* ── Pre-fill username from display name ────────────────────────────────── */
+const dn = document.getElementById('display_name');
+const un = document.getElementById('username');
+if (dn && un) {
+  dn.addEventListener('input', () => {
+    if (!un._touched) {
+      un.value = dn.value.replace(/[^A-Za-z0-9_-]/g, '').toLowerCase().slice(0, 20);
+    }
+  });
+  un.addEventListener('input', () => { un._touched = true; });
+}
+
+/* ── Check for banned message in URL ────────────────────────────────────── */
+if (new URLSearchParams(location.search).get('banned')) {
+  showErrors(['Your account has been suspended. Please contact support.']);
+}
 </script>
-{% endblock %}
+</body>
+</html>

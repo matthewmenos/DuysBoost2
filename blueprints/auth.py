@@ -95,6 +95,9 @@ def login():
         ).fetchone()
         if not user or not verify_password(password, user['password']):
             return jsonify({'success': False, 'errors': ['Invalid credentials.']}), 401
+        if user['is_banned']:
+            reason = user.get('ban_reason') or 'Community guidelines violation'
+            return jsonify({'success': False, 'errors': [f'Account suspended: {reason}']}), 403
         maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
         session['user_id'] = user['id']
@@ -128,15 +131,39 @@ def google_login_route():
 @bp.route('/auth/google/callback')
 @csrf_exempt
 def google_auth_callback():
+    import logging as _log
+    _logger = _log.getLogger(__name__)
     from flask import current_app
     oauth = current_app.extensions.get('authlib.integrations.flask_client')
     if not oauth or not getattr(oauth, 'google', None):
+        _logger.warning('Google OAuth not configured')
         return redirect(url_for('auth.login'))
     try:
-        token    = oauth.google.authorize_access_token()
-        userinfo = oauth.google.parse_id_token(token)
-    except Exception:
+        token = oauth.google.authorize_access_token()
+    except Exception as e:
+        _logger.error('Google authorize_access_token failed: %s', e)
         return redirect(url_for('auth.login'))
+
+    # Fetch userinfo from the token or the userinfo endpoint
+    userinfo = token.get('userinfo')
+    if not userinfo:
+        try:
+            # Authlib ≥1.0: userinfo is in the token; fallback to endpoint
+            resp     = oauth.google.get('https://openidconnect.googleapis.com/v1/userinfo')
+            userinfo = resp.json()
+        except Exception as e:
+            _logger.error('Google userinfo fetch failed: %s', e)
+            try:
+                # Last resort: parse id_token
+                userinfo = oauth.google.parse_id_token(token, nonce=None)
+            except Exception as e2:
+                _logger.error('Google parse_id_token failed: %s', e2)
+                return redirect(url_for('auth.login'))
+
+    if not userinfo or not userinfo.get('email'):
+        _logger.error('No email in Google userinfo: %s', userinfo)
+        return redirect(url_for('auth.login'))
+
     return _finalize_oauth_login(userinfo, provider='Google')
 
 
@@ -159,11 +186,14 @@ def _finalize_oauth_login(userinfo, provider):
     if user:
         # Returning user — sign in directly
         session.clear()
+        if user['is_banned']:
+            return redirect(url_for('auth.login') + '?banned=1')
         session['user_id'] = user['id']
         return redirect(url_for('social.feed'))
 
     # New user — stash OAuth info, send to the profile-completion form
-    session.clear()
+    # Important: do NOT session.clear() here — keep existing session data intact
+    # and just add oauth_pending. We clear it after the profile is saved.
     session['oauth_pending'] = {
         'provider':     provider,
         'email':        email,

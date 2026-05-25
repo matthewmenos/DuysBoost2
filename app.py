@@ -142,6 +142,7 @@ def create_app() -> Flask:
             'CRYPTO_NETWORKS': CRYPTO_NETWORKS,
             'CRYPTO_WALLETS':  CRYPTO_WALLETS,
             'CRYPTO_ENABLED':  any(CRYPTO_WALLETS.values()),
+            'GOOGLE_ENABLED':  bool(os.environ.get('GOOGLE_CLIENT_ID')),
             'open_report_count':  0,
             'pending_wdr_count':  0,
         }
