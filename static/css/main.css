@@ -1346,6 +1346,8 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .post-action-btn.like-btn.liked { color: var(--red); }
 .post-action-btn.bookmark-btn.bookmarked { color: var(--accent-light); }
 .post-action-btn.repost-btn:hover { background: rgba(44,182,125,.1); color: var(--green); }
+.post-action-btn.repost-btn.reposted { color: var(--green, #2cb67d); }
+.post-action-btn.repost-btn.reposted .action-icon { transform: rotate(0deg); }
 
 .action-icon { font-size: 16px; line-height: 1; }
 .action-count { font-size: 12.5px; min-width: 14px; }

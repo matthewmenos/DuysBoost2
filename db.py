@@ -115,19 +115,43 @@ class _ResultWrapper:
 class _DictRow:
     """
     Wraps a RealDictRow so it supports both dict-style (row['col'])
-    and .keys() — matching sqlite3.Row's interface used throughout the app.
+    AND integer indexing (row[0]) — matching sqlite3.Row's full interface
+    used throughout the app.
     """
     def __init__(self, data):
         self._d = dict(data)
+        self._values_cache = None
+
+    def _values_list(self):
+        if self._values_cache is None:
+            self._values_cache = list(self._d.values())
+        return self._values_cache
 
     def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values_list()[key]
         return self._d[key]
 
     def __contains__(self, key):
         return key in self._d
 
+    def __iter__(self):
+        return iter(self._values_list())
+
+    def __len__(self):
+        return len(self._d)
+
+    def get(self, key, default=None):
+        return self._d.get(key, default)
+
     def keys(self):
         return self._d.keys()
+
+    def values(self):
+        return self._d.values()
+
+    def items(self):
+        return self._d.items()
 
     def get(self, key, default=None):
         return self._d.get(key, default)

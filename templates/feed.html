@@ -180,12 +180,11 @@
 <div class="modal-overlay" id="repost-modal" role="dialog" aria-modal="true" aria-label="Repost">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Repost</div>
+      <div class="modal-title" id="repost-modal-title">Repost</div>
       <button class="modal-close" onclick="closeModal('repost-modal')">✕</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="btn btn-outline btn-block" onclick="quickRepost()">🔁 Repost</button>
-      <button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote &amp; comment</button>
+    <div style="display:flex;flex-direction:column;gap:10px" id="repost-modal-actions">
+      <!-- Filled dynamically by openRepostModal() -->
     </div>
   </div>
 </div>
@@ -368,10 +367,28 @@ async function submitReply() {
 window.submitReply = submitReply;
 
 // ── Repost ───────────────────────────────────────────────────────────────────
-let _repostTargetId = null;
-function openRepostModal(postId) {
-  _repostTargetId = postId;
+let _repostTargetId  = null;
+let _repostWasActive = false;
+
+function openRepostModal(postId, isReposted) {
+  _repostTargetId  = postId;
+  _repostWasActive = !!isReposted;
   document.getElementById('repost-target-id').value = postId;
+
+  // Render different buttons based on whether the user has already reposted
+  const titleEl   = document.getElementById('repost-modal-title');
+  const actionsEl = document.getElementById('repost-modal-actions');
+  if (_repostWasActive) {
+    titleEl.textContent = 'You reposted this';
+    actionsEl.innerHTML =
+      '<button class="btn btn-outline btn-block" onclick="undoRepost()" style="color:var(--red,#e53e3e)">↩️ Undo repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote &amp; comment instead</button>';
+  } else {
+    titleEl.textContent = 'Repost';
+    actionsEl.innerHTML =
+      '<button class="btn btn-outline btn-block" onclick="quickRepost()">🔁 Repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote &amp; comment</button>';
+  }
   openModal('repost-modal');
 }
 window.openRepostModal = openRepostModal;
@@ -384,14 +401,41 @@ async function quickRepost() {
   const d = await r.json();
   closeModal('repost-modal');
   if (d.success) {
-    const cnt = document.getElementById('repost-count-' + _repostTargetId);
-    if (cnt) cnt.textContent = parseInt(cnt.textContent || '0') + 1;
+    _updateRepostButton(_repostTargetId, true, 1);
     showToast('Reposted!');
   } else {
     showToast(d.error || 'Could not repost.', 'error');
   }
 }
 window.quickRepost = quickRepost;
+
+async function undoRepost() {
+  const r = await fetch('/post/' + _repostTargetId + '/unrepost', { method: 'POST' });
+  const d = await r.json();
+  closeModal('repost-modal');
+  if (d.success) {
+    _updateRepostButton(_repostTargetId, false, -(d.removed || 1));
+    showToast('Repost removed.');
+  } else {
+    showToast(d.error || 'Could not remove repost.', 'error');
+  }
+}
+window.undoRepost = undoRepost;
+
+function _updateRepostButton(postId, isReposted, delta) {
+  const cnt = document.getElementById('repost-count-' + postId);
+  if (cnt) {
+    const next = Math.max(0, parseInt(cnt.textContent || '0') + delta);
+    cnt.textContent = next || '';
+  }
+  // Update every repost-btn for this post on the page (feed may show multiple)
+  document.querySelectorAll(`[data-post-id="${postId}"] .repost-btn, .repost-btn[data-post-id="${postId}"]`).forEach(function(btn){
+    btn.classList.toggle('reposted', isReposted);
+    btn.setAttribute('aria-pressed', isReposted ? 'true' : 'false');
+    // Rebind the onclick so the toggle state is up to date next click
+    btn.setAttribute('onclick', `openRepostModal(${postId}, ${isReposted})`);
+  });
+}
 
 function openQuoteModal() {
   closeModal('repost-modal');

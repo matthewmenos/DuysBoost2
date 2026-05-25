@@ -24,16 +24,19 @@ def index():
 @limiter.limit(LIMIT_SIGNUP)
 def signup():
     if request.method == 'POST':
-        db       = get_db()
-        username = request.form.get('username', '').strip()
-        email    = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '')
-        confirm  = request.form.get('confirm_password', '')
-        ref_code = request.form.get('referral_code', '').strip()
+        db           = get_db()
+        username     = request.form.get('username', '').strip()
+        display_name = request.form.get('display_name', '').strip()[:60]
+        email        = request.form.get('email', '').strip().lower()
+        password     = request.form.get('password', '')
+        confirm      = request.form.get('confirm_password', '')
+        ref_code     = request.form.get('referral_code', '').strip()
 
         errors = []
         if len(username) < 3:
             errors.append('Username must be at least 3 characters.')
+        if not display_name or len(display_name) < 1:
+            errors.append('Display name is required.')
         if not username.replace('_', '').replace('-', '').isalnum():
             errors.append('Username may only contain letters, numbers, _ and -.')
         if '@' not in email or '.' not in email.split('@')[-1]:
@@ -58,9 +61,9 @@ def signup():
             if ref_code else None
         )
         db.execute(
-            'INSERT INTO users (username,email,password,referred_by,referral_code) '
-            'VALUES (%s,%s,%s,%s,%s)',
-            (username, email, hash_password(password),
+            'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
+            'VALUES (%s,%s,%s,%s,%s,%s)',
+            (username, display_name or username, email, hash_password(password),
              referrer['id'] if referrer else None, secrets.token_hex(5))
         )
         db.commit()
@@ -138,27 +141,101 @@ def google_auth_callback():
 
 
 def _finalize_oauth_login(userinfo, provider):
+    """
+    Google sign-in handler.
+    For EXISTING accounts → log in directly to the feed.
+    For NEW accounts → stash the OAuth info in the session and send them
+    to /auth/complete-profile where they fill in username, display name,
+    and optional referral code before the account is actually created.
+    """
     email = (userinfo or {}).get('email')
     name  = (userinfo or {}).get('name') or (email.split('@')[0] if email else None)
     if not email:
         return redirect(url_for('auth.login'))
+
     db   = get_db()
     user = db.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
-    if not user:
-        base     = (name or email.split('@')[0]).replace(' ', '').lower()
-        username = base or 'user'
-        i = 1
-        while db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone():
-            username = f'{base}{i}'
-            i += 1
+
+    if user:
+        # Returning user — sign in directly
+        session.clear()
+        session['user_id'] = user['id']
+        return redirect(url_for('social.feed'))
+
+    # New user — stash OAuth info, send to the profile-completion form
+    session.clear()
+    session['oauth_pending'] = {
+        'provider':     provider,
+        'email':        email,
+        'suggested_name': name or '',
+    }
+    return redirect(url_for('auth.complete_profile'))
+
+
+@bp.route('/auth/complete-profile', methods=['GET', 'POST'])
+@limiter.limit(LIMIT_SIGNUP)
+def complete_profile():
+    """
+    First-time profile completion for users signing in via Google.
+    Asks for username, display name, and optional referral code.
+    """
+    pending = session.get('oauth_pending')
+    if not pending:
+        return redirect(url_for('auth.login'))
+
+    if request.method == 'POST':
+        db           = get_db()
+        username     = request.form.get('username', '').strip()
+        display_name = request.form.get('display_name', '').strip()[:60]
+        ref_code     = request.form.get('referral_code', '').strip()
+
+        errors = []
+        if len(username) < 3:
+            errors.append('Username must be at least 3 characters.')
+        if not username.replace('_', '').replace('-', '').isalnum():
+            errors.append('Username may only contain letters, numbers, _ and -.')
+        if not display_name:
+            errors.append('Display name is required.')
+        if db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone():
+            errors.append('Username already taken.')
+        if errors:
+            return jsonify({'success': False, 'errors': errors})
+
+        referrer = (
+            db.execute('SELECT * FROM users WHERE referral_code=%s', (ref_code,)).fetchone()
+            if ref_code else None
+        )
+
+        email    = pending['email']
+        provider = pending.get('provider', 'OAuth')
+
         db.execute(
-            'INSERT INTO users (username,email,password,referral_code) VALUES (%s,%s,%s,%s)',
-            (username, email, None, secrets.token_hex(5))
+            'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
+            'VALUES (%s,%s,%s,%s,%s,%s)',
+            (username, display_name, email, None,
+             referrer['id'] if referrer else None, secrets.token_hex(5))
         )
         db.commit()
         user = db.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
-        add_notification(db, user['id'], f'🔐 Signed in with {provider}.')
+
+        if referrer:
+            CURRENCY_SYMBOL = current_app.config['CURRENCY_SYMBOL']
+            add_notification(
+                db, referrer['id'],
+                f'👤 {username} signed up using your referral code! '
+                f'Bonus will be awarded when they activate their account by spending {CURRENCY_SYMBOL}1.'
+            )
+        add_notification(db, user['id'], f'🔐 Welcome! Signed in with {provider}.')
         db.commit()
-    session.clear()
-    session['user_id'] = user['id']
-    return redirect(url_for('social.feed'))
+
+        # Clean up and log in
+        session.pop('oauth_pending', None)
+        session['user_id'] = user['id']
+        return jsonify({'success': True, 'redirect': url_for('social.feed')})
+
+    return render_template(
+        'complete_profile.html',
+        provider=pending.get('provider', 'Google'),
+        email=pending.get('email', ''),
+        suggested_name=pending.get('suggested_name', ''),
+    )

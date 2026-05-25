@@ -202,6 +202,10 @@ body.auth-body { background: var(--bg); }
 
     {% else %}
     <form id="auth-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="su-display">Display name</label>
+        <input class="form-input" id="su-display" name="display_name" type="text" autocomplete="name" placeholder="How others see you" maxlength="60" required>
+      </div>
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label" for="su-username">Username</label>

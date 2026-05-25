@@ -229,6 +229,49 @@ def delete_post(post_id):
     return jsonify({'success': True})
 
 
+@bp.route('/post/<int:post_id>/unrepost', methods=['POST'])
+@login_required
+@csrf_exempt   # JSON POST
+def unrepost(post_id):
+    """Delete any reposts/quotes the current user made of this post."""
+    db  = get_db()
+    uid = session['user_id']
+
+    # Find all reposts/quotes of this post by the current user
+    reposts = db.execute(
+        'SELECT id FROM posts WHERE user_id=%s AND repost_of_id=%s',
+        (uid, post_id)
+    ).fetchall()
+
+    if not reposts:
+        return jsonify({'success': False, 'error': 'You have not reposted this.'}), 404
+
+    deleted_ids = [r['id'] for r in reposts]
+    for rid in deleted_ids:
+        db.execute('DELETE FROM post_likes WHERE post_id=%s', (rid,))
+        db.execute('DELETE FROM bookmarks  WHERE post_id=%s', (rid,))
+        db.execute('DELETE FROM posts      WHERE id=%s',       (rid,))
+
+    # Decrement repost_count by the number of reposts removed
+    db.execute(
+        'UPDATE posts SET repost_count = GREATEST(0, repost_count - %s) WHERE id=%s',
+        (len(deleted_ids), post_id)
+    )
+    update_counts(db, uid)
+    recalc_post_score(db, post_id)
+    db.commit()
+
+    new_count = db.execute(
+        'SELECT repost_count FROM posts WHERE id=%s', (post_id,)
+    ).fetchone()
+    return jsonify({
+        'success':      True,
+        'reposted':     False,
+        'repost_count': new_count['repost_count'] if new_count else 0,
+        'removed':      len(deleted_ids),
+    })
+
+
 @bp.route('/post/<int:post_id>/edit', methods=['POST'])
 @login_required
 def edit_post(post_id):
@@ -943,12 +986,34 @@ def _format_conversation(conv, uid, db):
 def messages_inbox():
     db  = get_db()
     uid = session['user_id']
-    rows  = db.execute('SELECT * FROM conversations WHERE user_a=%s OR user_b=%s '
-                       'ORDER BY last_msg_at DESC', (uid, uid)).fetchall()
-    convs = [_format_conversation(r, uid, db) for r in rows]
+    tab = request.args.get('tab', 'all').lower()
+    if tab not in ('all', 'chats', 'groups'):
+        tab = 'all'
+
+    # ── Chats (1-to-1 DMs) ───────────────────────────────────────────────────
+    chat_rows = db.execute(
+        'SELECT * FROM conversations WHERE user_a=%s OR user_b=%s '
+        'ORDER BY last_msg_at DESC',
+        (uid, uid)
+    ).fetchall()
+    chats = [_format_conversation(r, uid, db) for r in chat_rows]
+
+    # ── Groups the user is a member of ───────────────────────────────────────
+    group_rows = db.execute("""
+        SELECT g.* FROM groups g
+        JOIN group_members gm ON gm.group_id = g.id
+        WHERE gm.user_id = %s
+        ORDER BY g.created_at DESC
+    """, (uid,)).fetchall()
+    groups = [_format_group(r, uid, db) for r in group_rows]
+
     db.execute('UPDATE users SET unread_dm_count=0 WHERE id=%s', (uid,))
     db.commit()
-    return render_template('messages.html', conversations=convs,
+
+    return render_template('messages.html',
+                           conversations=chats,
+                           groups=groups,
+                           tab=tab,
                            now_str=datetime.now(timezone.utc).isoformat()[:10])
 
 

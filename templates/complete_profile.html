@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Complete your profile — DUYS Boost{% endblock %}
+{% block page_title %}Complete your profile{% endblock %}
+
+{% block head_extra %}
+<style>
+.cp-wrap {
+  max-width: 460px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+.cp-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  box-shadow: var(--shadow-md);
+}
+.cp-icon {
+  width: 56px; height: 56px;
+  background: linear-gradient(135deg, var(--accent), #5a4af0);
+  border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  margin: 0 auto 18px;
+  color: #fff;
+}
+.cp-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.cp-sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 26px;
+}
+.cp-email-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  margin-bottom: 22px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.cp-email-row strong { color: var(--text); font-weight: 600; }
+.form-error {
+  background: rgba(229,62,62,.08);
+  border: 1px solid rgba(229,62,62,.3);
+  color: var(--red, #e53e3e);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  margin-bottom: 14px;
+  display: none;
+}
+.form-error.show { display: block; }
+.form-error ul { margin: 0; padding-left: 18px; }
+.optional { color: var(--muted); font-weight: 400; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cp-wrap">
+  <div class="cp-card">
+    <div class="cp-icon">👤</div>
+    <div class="cp-title">One more step</div>
+    <div class="cp-sub">Pick a username and display name to finish setting up your account.</div>
+
+    <div class="cp-email-row">
+      <span>📧</span>
+      <span>Signing in as <strong>{{ email }}</strong> via {{ provider }}</span>
+    </div>
+
+    <div class="form-error" id="cp-error"><ul></ul></div>
+
+    <form id="cp-form" novalidate>
+      <div class="form-group">
+        <label class="form-label" for="cp-display">Display name</label>
+        <input class="form-input" id="cp-display" name="display_name"
+               type="text" value="{{ suggested_name }}"
+               autocomplete="name"
+               placeholder="How others see you" maxlength="60" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cp-username">Username</label>
+        <input class="form-input" id="cp-username" name="username"
+               type="text" autocomplete="username"
+               placeholder="cooluser" minlength="3" maxlength="30" required>
+        <div class="text-xs text-muted" style="margin-top:4px">Letters, numbers, _ and - only</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cp-ref">
+          Referral code <span class="optional">(optional)</span>
+        </label>
+        <input class="form-input" id="cp-ref" name="referral_code"
+               type="text" placeholder="abc123" maxlength="20">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg">
+        Create my account →
+      </button>
+    </form>
+
+    <div style="margin-top:18px;text-align:center">
+      <a href="{{ url_for('auth.logout') }}" class="text-xs text-muted">
+        Cancel and sign out
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const form     = document.getElementById('cp-form');
+  const errorBox = document.getElementById('cp-error');
+  const usernameI = document.getElementById('cp-username');
+
+  // Pre-fill username from display name as a suggestion
+  const displayI = document.getElementById('cp-display');
+  if (displayI && !usernameI.value) {
+    usernameI.value = (displayI.value || '')
+      .replace(/[^A-Za-z0-9_-]/g, '')
+      .toLowerCase()
+      .slice(0, 20);
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    errorBox.classList.remove('show');
+    errorBox.querySelector('ul').innerHTML = '';
+
+    const fd = new FormData(form);
+    try {
+      const r = await fetch('{{ url_for("auth.complete_profile") }}', {
+        method: 'POST',
+        body: fd,
+      });
+      const d = await r.json();
+      if (d.success) {
+        location.href = d.redirect;
+      } else {
+        const ul = errorBox.querySelector('ul');
+        (d.errors || ['Please check your entries.']).forEach(function (msg) {
+          const li = document.createElement('li');
+          li.textContent = msg;
+          ul.appendChild(li);
+        });
+        errorBox.classList.add('show');
+      }
+    } catch (_) {
+      errorBox.querySelector('ul').innerHTML = '<li>Network error. Please try again.</li>';
+      errorBox.classList.add('show');
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -191,6 +191,10 @@ def format_post(row, current_uid, db):
     p['bookmarked'] = bool(db.execute(
         'SELECT 1 FROM bookmarks WHERE user_id=%s AND post_id=%s',
         (current_uid, p['id'])).fetchone())
+    # Whether the current user has reposted or quoted this post
+    p['reposted'] = bool(db.execute(
+        'SELECT 1 FROM posts WHERE user_id=%s AND repost_of_id=%s LIMIT 1',
+        (current_uid, p['id'])).fetchone())
     author = db.execute(
         'SELECT id,username,display_name,avatar_url,is_verified FROM users WHERE id=%s',
         (p['user_id'],)).fetchone()
@@ -295,7 +299,11 @@ def recalc_post_score(db, post_id):
     if not row:
         return
     try:
-        posted = datetime.fromisoformat(row['created_at'].replace('Z', ''))
+        ts = row['created_at']
+        if isinstance(ts, datetime):
+            posted = ts
+        else:
+            posted = datetime.fromisoformat(str(ts).replace('Z', '').rstrip('+00:00').rstrip())
         if posted.tzinfo is None:
             posted = posted.replace(tzinfo=timezone.utc)
         age_h = max(0.1, (datetime.now(timezone.utc) - posted).total_seconds() / 3600)

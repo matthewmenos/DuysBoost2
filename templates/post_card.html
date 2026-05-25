@@ -156,8 +156,10 @@
           <span class="action-icon">💬</span>
           <span class="action-count" id="reply-count-{{ p.id }}">{{ p.reply_count or '' }}</span>
         </button>
-        <button class="post-action-btn repost-btn"
-                onclick="openRepostModal({{ p.id }})" aria-label="Repost">
+        <button class="post-action-btn repost-btn {% if p.reposted %}reposted{% endif %}"
+                onclick="openRepostModal({{ p.id }}, {{ 'true' if p.reposted else 'false' }})"
+                aria-label="{{ 'Undo repost' if p.reposted else 'Repost' }}"
+                aria-pressed="{{ 'true' if p.reposted else 'false' }}">
           <span class="action-icon">🔁</span>
           <span class="action-count" id="repost-count-{{ p.id }}">{{ p.repost_count or '' }}</span>
         </button>

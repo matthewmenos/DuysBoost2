@@ -90,6 +90,67 @@
 .nm-name { font-weight: 700; font-size: 14px; }
 .nm-handle { font-size: 12px; color: var(--muted); }
 .nm-empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 13.5px; }
+
+/* ── WhatsApp-style segmented tabs ─────────────────────────────────── */
+.msg-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: calc(var(--topbar-height) + 60px);
+  z-index: 15;
+}
+.msg-tab {
+  flex: 1;
+  padding: 9px 18px;
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-decoration: none;
+  text-align: center;
+  transition: all var(--transition);
+  cursor: pointer;
+  position: relative;
+}
+.msg-tab:hover { background: rgba(127,90,240,.06); border-color: var(--accent); }
+.msg-tab.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.msg-tab .tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  background: rgba(255,255,255,.25);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.msg-tab:not(.active) .tab-count {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Group item shares conv-item styles but with a group icon */
+.conv-item .grp-icon-mark {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--surface);
+}
 </style>
 {% endblock %}
 
@@ -101,8 +162,26 @@
     <button class="btn btn-outline btn-sm" onclick="openNewMsg()">+ New message</button>
   </div>
 
+  {# WhatsApp-style segmented tabs #}
+  <nav class="msg-tabs" aria-label="Message filter">
+    <a href="{{ url_for('social.messages_inbox', tab='all') }}"
+       class="msg-tab {% if tab=='all' %}active{% endif %}">All</a>
+    <a href="{{ url_for('social.messages_inbox', tab='chats') }}"
+       class="msg-tab {% if tab=='chats' %}active{% endif %}">
+      Chats
+      {% if conversations|length %}<span class="tab-count">{{ conversations|length }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('social.messages_inbox', tab='groups') }}"
+       class="msg-tab {% if tab=='groups' %}active{% endif %}">
+      Groups
+      {% if groups|length %}<span class="tab-count">{{ groups|length }}</span>{% endif %}
+    </a>
+  </nav>
+
   <div class="conv-list">
-    {% if conversations %}
+
+    {# ── DM chats ──────────────────────────────────────────────────── #}
+    {% if tab in ('all', 'chats') %}
       {% for conv in conversations %}
       <a href="{{ url_for('social.message_thread', username=conv.other.username) }}"
          class="conv-item {% if conv.unread %}unread{% endif %}">
@@ -121,7 +200,8 @@
             </div>
             <div class="conv-time">
               {% if conv.last_msg %}
-                {% if conv.last_msg.created_at[:10] == now_str %}{{ conv.last_msg.created_at[11:16] }}{% else %}{{ conv.last_msg.created_at[:10] }}{% endif %}
+                {% set ca = conv.last_msg.created_at | string %}
+                {% if ca[:10] == now_str %}{{ ca[11:16] }}{% else %}{{ ca[:10] }}{% endif %}
               {% endif %}
             </div>
           </div>
@@ -143,12 +223,72 @@
         {% if conv.unread %}<div class="conv-unread-badge">{{ conv.unread }}</div>{% endif %}
       </a>
       {% endfor %}
-    {% else %}
+    {% endif %}
+
+    {# ── Groups ────────────────────────────────────────────────────── #}
+    {% if tab in ('all', 'groups') %}
+      {% for g in groups %}
+      <a href="{{ url_for('social.group_detail', slug=g.slug) }}"
+         class="conv-item {% if g.unread %}unread{% endif %}">
+        <div class="conv-avatar" style="position:relative">
+          <div class="avatar avatar-md" style="background:linear-gradient(135deg,var(--accent),#5a4af0);color:#fff">
+            {% if g.avatar_url %}<img src="{{ g.avatar_url }}" alt="">
+            {% else %}👥{% endif %}
+          </div>
+          <span class="grp-icon-mark" title="Group">G</span>
+        </div>
+        <div class="conv-body">
+          <div class="conv-top">
+            <div class="conv-name">{{ g.name }}</div>
+            <div class="conv-time">
+              {% if g.last_msg %}
+                {% set ga = g.last_msg.created_at | string %}
+                {% if ga[:10] == now_str %}{{ ga[11:16] }}{% else %}{{ ga[:10] }}{% endif %}
+              {% endif %}
+            </div>
+          </div>
+          <div class="conv-preview">
+            {% if g.last_msg %}
+              <strong>{{ g.last_msg.sender_name }}:</strong>
+              {% set mt = g.last_msg.msg_type or 'text' %}
+              {% if mt == 'image' %}📷 Photo
+              {% elif mt == 'video' %}🎬 Video
+              {% elif mt == 'voice' %}🎙 Voice note
+              {% elif mt == 'file' %}📎 File
+              {% elif g.last_msg.body %}{{ g.last_msg.body[:50] }}{% if g.last_msg.body|length > 50 %}…{% endif %}
+              {% else %}(empty){% endif %}
+            {% else %}
+              {{ g.member_count or 0 }} member{% if (g.member_count or 0) != 1 %}s{% endif %} • Tap to open
+            {% endif %}
+          </div>
+        </div>
+        {% if g.unread %}<div class="conv-unread-badge">{{ g.unread }}</div>{% endif %}
+      </a>
+      {% endfor %}
+    {% endif %}
+
+    {# ── Empty state ───────────────────────────────────────────────── #}
+    {% set chat_visible = tab in ('all','chats') and conversations|length %}
+    {% set grp_visible  = tab in ('all','groups') and groups|length %}
+    {% if not chat_visible and not grp_visible %}
       <div class="empty-state" style="padding:72px 20px">
-        <div class="empty-icon">💬</div>
-        <div class="empty-title">No messages yet</div>
-        <div class="empty-text">Tap "New message" above to find someone to chat with.</div>
-        <button onclick="openNewMsg()" class="btn btn-primary mt-16">+ New message</button>
+        <div class="empty-icon">
+          {% if tab=='groups' %}👥{% else %}💬{% endif %}
+        </div>
+        <div class="empty-title">
+          {% if tab=='groups' %}No groups yet{% else %}No messages yet{% endif %}
+        </div>
+        <div class="empty-text">
+          {% if tab=='groups' %}
+            <a href="{{ url_for('social.group_create') }}">Create a group</a> or
+            <a href="{{ url_for('social.groups_list') }}">browse public groups</a>.
+          {% else %}
+            Tap "New message" above to find someone to chat with.
+          {% endif %}
+        </div>
+        {% if tab != 'groups' %}
+          <button onclick="openNewMsg()" class="btn btn-primary mt-16">+ New message</button>
+        {% endif %}
       </div>
     {% endif %}
   </div>
