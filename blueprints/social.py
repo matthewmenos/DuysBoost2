@@ -485,6 +485,86 @@ def edit_profile():
     return render_template('edit_profile.html', user=dict(user))
 
 
+@bp.route('/account/delete', methods=['POST'])
+@login_required
+def delete_account():
+    """
+    Hard-delete the current user's account and all their data.
+    Requires the user to type their password to confirm.
+    """
+    import storage as _st
+    from helpers import verify_password
+    db  = get_db()
+    uid = session['user_id']
+
+    data     = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    user     = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+
+    # Require password confirmation (skip if Google-only account with no password)
+    if user['password']:
+        if not password:
+            return jsonify({'success': False, 'error': 'Please enter your password to confirm.'}), 400
+        from helpers import verify_password as _vp
+        if not _vp(password, user['password']):
+            return jsonify({'success': False, 'error': 'Incorrect password.'}), 403
+
+    # Delete R2 media files
+    for row in db.execute('SELECT media_url FROM stories WHERE user_id=%s', (uid,)).fetchall():
+        try: _st.delete_object(row['media_url'])
+        except Exception: pass
+    if user.get('avatar_url') and user['avatar_url'].startswith('http'):
+        try: _st.delete_object(user['avatar_url'])
+        except Exception: pass
+    if user.get('banner_url') and user['banner_url'].startswith('http'):
+        try: _st.delete_object(user['banner_url'])
+        except Exception: pass
+
+    # Delete all user data (cascades via FK where set, manual otherwise)
+    db.execute('DELETE FROM stories          WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM notifications    WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM transactions     WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM withdrawals      WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM task_completions WHERE worker_id=%s', (uid,))
+    db.execute('DELETE FROM post_likes       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM bookmarks        WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM follows          WHERE follower_id=%s OR following_id=%s', (uid, uid))
+    db.execute('DELETE FROM search_history   WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM post_views       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM poll_votes       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM tips             WHERE from_user_id=%s OR to_user_id=%s', (uid, uid))
+    db.execute("DELETE FROM subscriptions    WHERE subscriber_id=%s OR creator_id=%s", (uid, uid))
+    db.execute('DELETE FROM subscription_tiers WHERE creator_id=%s', (uid,))
+    # Delete posts (and cascade likes/bookmarks/reposts)
+    post_ids = [r['id'] for r in db.execute('SELECT id FROM posts WHERE user_id=%s', (uid,)).fetchall()]
+    for pid in post_ids:
+        db.execute('DELETE FROM post_likes    WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM bookmarks     WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM poll_options  WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM poll_votes    WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM post_hashtags WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM channel_posts WHERE post_id=%s', (pid,))
+    db.execute('DELETE FROM posts WHERE user_id=%s', (uid,))
+    # Leave groups/channels (don't delete them)
+    db.execute('DELETE FROM channel_members WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM group_members   WHERE user_id=%s', (uid,))
+    # Delete DMs
+    conv_ids = [r['id'] for r in db.execute(
+        'SELECT id FROM conversations WHERE user_a=%s OR user_b=%s', (uid, uid)
+    ).fetchall()]
+    for cid in conv_ids:
+        db.execute('DELETE FROM messages     WHERE conversation_id=%s', (cid,))
+        db.execute('DELETE FROM conversations WHERE id=%s', (cid,))
+    # Delete user
+    db.execute('DELETE FROM users WHERE id=%s', (uid,))
+    db.commit()
+
+    session.clear()
+    return jsonify({'success': True, 'redirect': url_for('auth.index')})
+
+
 @bp.route('/profile/upload-photo', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_UPLOAD)
@@ -1503,6 +1583,44 @@ def channel_leave(slug):
     return jsonify({'success': True})
 
 
+@bp.route('/channel/<slug>/edit', methods=['POST'])
+@login_required
+def channel_edit(slug):
+    """Owner can update channel name, description and avatar."""
+    import storage as _st
+    db  = get_db()
+    uid = session['user_id']
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
+    if not ch or ch['owner_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    name        = (request.form.get('name') or '').strip()[:60]
+    description = (request.form.get('description') or '').strip()[:300]
+    avatar_data = (request.form.get('avatar_data') or '').strip() or None
+
+    if not name:
+        return jsonify({'success': False, 'error': 'Channel name is required.'}), 400
+
+    avatar_url = ch.get('avatar_url')
+    if avatar_data:
+        try:
+            new_url = _st.upload_data_uri(avatar_data, f'channels/{ch["id"]}')
+            if avatar_url and avatar_url.startswith('http'):
+                try: _st.delete_object(avatar_url)
+                except Exception: pass
+            avatar_url = new_url
+        except (ValueError, RuntimeError) as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    db.execute(
+        'UPDATE channels SET name=%s, description=%s, avatar_url=%s WHERE id=%s',
+        (name, description or None, avatar_url, ch['id'])
+    )
+    db.commit()
+    return jsonify({'success': True, 'name': name, 'description': description,
+                    'avatar_url': avatar_url})
+
+
 @bp.route('/channel/<slug>/promote', methods=['POST'])
 @login_required
 def channel_promote(slug):
@@ -1755,6 +1873,44 @@ def group_poll_messages(slug):
         db.commit()
 
     return jsonify({'messages': [dict(r) for r in rows]})
+
+
+@bp.route('/group/<slug>/edit', methods=['POST'])
+@login_required
+def group_edit(slug):
+    """Owner can update group name, description and avatar."""
+    import storage as _st
+    db  = get_db()
+    uid = session['user_id']
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
+    if not g or g['owner_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    name        = (request.form.get('name') or '').strip()[:60]
+    description = (request.form.get('description') or '').strip()[:300]
+    avatar_data = (request.form.get('avatar_data') or '').strip() or None
+
+    if not name:
+        return jsonify({'success': False, 'error': 'Group name is required.'}), 400
+
+    avatar_url = g.get('avatar_url')
+    if avatar_data:
+        try:
+            new_url = _st.upload_data_uri(avatar_data, f'groups/{g["id"]}')
+            if avatar_url and avatar_url.startswith('http'):
+                try: _st.delete_object(avatar_url)
+                except Exception: pass
+            avatar_url = new_url
+        except (ValueError, RuntimeError) as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+
+    db.execute(
+        'UPDATE groups SET name=%s, description=%s, avatar_url=%s WHERE id=%s',
+        (name, description or None, avatar_url, g['id'])
+    )
+    db.commit()
+    return jsonify({'success': True, 'name': name, 'description': description,
+                    'avatar_url': avatar_url})
 
 
 @bp.route('/group/<slug>/join', methods=['POST'])

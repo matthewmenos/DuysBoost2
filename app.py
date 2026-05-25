@@ -142,19 +142,25 @@ def create_app() -> Flask:
         }
 
     # ── Blueprints ────────────────────────────────────────────────────────────
-    from blueprints.auth   import bp as auth_bp
-    from blueprints.social import bp as social_bp
-    from blueprints.boost  import bp as boost_bp
-    from blueprints.wallet import bp as wallet_bp
-    from blueprints.admin  import bp as admin_bp
-    from sse               import bp as sse_bp
+    from blueprints.auth    import bp as auth_bp
+    from blueprints.social  import bp as social_bp
+    from blueprints.boost   import bp as boost_bp
+    from blueprints.wallet  import bp as wallet_bp
+    from blueprints.admin   import bp as admin_bp
+    from blueprints.stories import bp as stories_bp
+    from sse                import bp as sse_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(boost_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(stories_bp)
     app.register_blueprint(sse_bp)   # SSE streams
+
+    # Start background story cleanup thread
+    from blueprints.stories import start_cleanup_thread
+    start_cleanup_thread(app)
 
     # ── Security (CSRF + rate limiting) ──────────────────────────────────────
     init_security(app)
@@ -463,6 +469,18 @@ def init_db():
     )''')
 
     cur.execute('''
+    CREATE TABLE IF NOT EXISTS stories (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id),
+        media_url  TEXT NOT NULL,
+        media_mime TEXT NOT NULL DEFAULT 'image/jpeg',
+        caption    TEXT,
+        viewed_by  TEXT DEFAULT '[]',
+        expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )''')
+
+    cur.execute('''
     CREATE TABLE IF NOT EXISTS search_history (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id),
@@ -648,6 +666,8 @@ def init_db():
         ('messages', 'file_mime',            'TEXT'),
         ('group_messages', 'file_url',       'TEXT'),
         ('group_members',  'last_read_at',   'TIMESTAMPTZ'),
+        # stories table added in full schema, no alter needed for fresh installs
+        # For existing installs the CREATE TABLE IF NOT EXISTS above handles it
     ]
     for tbl, col, defn in column_migrations:
         cur.execute(
@@ -683,6 +703,8 @@ def init_db():
         ('tips',             'idx_tips_from',         'from_user_id'),
         ('subscriptions',    'idx_sub_creator',       'creator_id'),
         ('subscriptions',    'idx_sub_subscriber',    'subscriber_id'),
+        ('stories',          'idx_stories_user',      'user_id'),
+        ('stories',          'idx_stories_expires',   'expires_at'),
         ('search_history',   'idx_sh_user',           'user_id'),
         ('search_history',   'idx_sh_query',          'query'),
         ('post_views',       'idx_pv_post',           'post_id'),

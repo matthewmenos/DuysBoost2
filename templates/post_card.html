@@ -54,6 +54,7 @@
             <button class="post-menu-item danger" onclick="deletePost({{ p.id }})">🗑 Delete post</button>
             {% endif %}
             <a class="post-menu-item" href="{{ url_for('social.post_detail', post_id=p.id) }}">🔗 View post</a>
+            <button class="post-menu-item" onclick="sharePost({{ p.id }}, {{ (p.body or '') | tojson }})">📤 Share post</button>
             <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
           </div>
         </div>
@@ -76,14 +77,20 @@
         {% if p.body %}
         <div class="post-body" id="post-body-{{ p.id }}">{{ p.body | linkify_tags | safe }}{% if p.get('edited_at') %}&nbsp;<span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>{% endif %}</div>
         {% endif %}
-        {% if p.get("media_data") %}
+        {% if p.get("media_url") %}
           {% if p.get("media_mime","").startswith("video/") %}
-          <div class="post-media-wrap"><video class="post-media-video" src="{{ p.media_data }}" controls preload="metadata" playsinline></video></div>
+          <div class="post-media-wrap">
+            <video class="post-media-video" src="{{ p.media_url }}"
+                   controls preload="metadata" playsinline
+                   style="max-width:100%;border-radius:var(--radius);max-height:480px"></video>
+          </div>
           {% else %}
           <div class="post-media-wrap" style="position:relative">
-            <img class="post-media-img" src="{{ p.media_data }}" alt="Post image" loading="lazy">
+            <img class="post-media-img" src="{{ p.media_url }}" alt="Post image"
+                 loading="lazy" onclick="openPostLightbox({{ p.id }})">
             {% if a.get('allow_post_saves', 1) != 0 %}
-            <a href="{{ p.media_data }}" download="post-{{ p.id }}.jpg"
+            <a href="{{ p.media_url }}" download="post-{{ p.id }}"
+               target="_blank"
                class="post-save-btn" title="Save to gallery" aria-label="Save image">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </a>

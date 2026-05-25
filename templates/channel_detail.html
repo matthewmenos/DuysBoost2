@@ -339,5 +339,46 @@ function renderPollBlock(postId, d) {
     return '<div class="poll-option-row" style="cursor:default"><div class="poll-option-label'+(o.id===d.user_vote?' poll-voted':'')+'">'+escapeHtml(o.label)+(o.id===d.user_vote?' ✓':'')+'</div><div class="poll-bar-wrap"><div class="poll-bar" style="width:'+o.pct+'%"></div></div><div class="poll-pct">'+o.pct+'%</div></div>';
   }).join('')+'<div class="text-xs text-muted" style="margin-top:6px">'+d.total+' vote'+(d.total!==1?'s':'')+'</div>';
 }
+
+// ── Channel settings ──────────────────────────────────────────────────────────
+let _chAvatarData = null;
+
+function previewChannelAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _chAvatarData = e.target.result;
+    const prev = document.getElementById('ch-avatar-preview');
+    prev.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveChannelSettings() {
+  const name = document.getElementById('ch-edit-name').value.trim();
+  const desc = document.getElementById('ch-edit-desc').value.trim();
+  if (!name) { showToast('Channel name is required.', 'error'); return; }
+
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('description', desc);
+  if (_chAvatarData) fd.append('avatar_data', _chAvatarData);
+
+  try {
+    const r = await fetch('/channel/{{ ch.slug }}/edit', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('channel-edit-modal');
+      showToast('Channel updated!');
+      // Update page title without reload
+      const titleEl = document.querySelector('.ch-name, .channel-name, h1');
+      if (titleEl) titleEl.textContent = d.name;
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Could not update channel.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
 </script>
 {% endblock %}

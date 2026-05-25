@@ -120,6 +120,9 @@
       {% elif not is_member %}
       <button class="btn btn-primary btn-sm" onclick="joinGroup()">Join</button>
       {% endif %}
+      {% if is_owner %}
+      <button class="btn btn-ghost btn-sm" onclick="openModal('grp-edit-modal')" title="Group settings">⚙️</button>
+      {% endif %}
     </div>
 
     <!-- Messages -->
@@ -393,6 +396,44 @@ function lbOpen(src){document.getElementById('lb-img').src=src;document.getEleme
 window.lbOpen=lbOpen;
 
 // Join / leave
+// Group edit modal placeholder — injected into DOM
+(function() {
+  {% if is_owner %}
+  const modal = document.createElement('div');
+  modal.innerHTML = `
+  <div class="modal-overlay" id="grp-edit-modal">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <div class="modal-title">Edit group</div>
+        <button class="modal-close" onclick="closeModal('grp-edit-modal')">✕</button>
+      </div>
+      <div style="text-align:center;margin-bottom:16px">
+        <div id="grp-avatar-preview" style="width:72px;height:72px;border-radius:50%;overflow:hidden;margin:0 auto 10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:28px">
+          {% if g.avatar_url %}<img src="{{ g.avatar_url }}" style="width:100%;height:100%;object-fit:cover">{% else %}👥{% endif %}
+        </div>
+        <button type="button" class="btn btn-outline btn-sm"
+                onclick="document.getElementById('grp-avatar-input').click()">
+          Change photo
+        </button>
+        <input type="file" id="grp-avatar-input" accept="image/*" style="display:none"
+               onchange="previewGroupAvatar(this)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Group name</label>
+        <input class="form-input" id="grp-edit-name" value="{{ g.name | e }}" maxlength="60">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span style="color:var(--muted);font-size:12px">(optional)</span></label>
+        <textarea class="form-input" id="grp-edit-desc" rows="3" maxlength="300"
+                  placeholder="What's this group about?">{{ g.description or '' | e }}</textarea>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="saveGroupSettings()">Save changes</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal.firstElementChild);
+  {% endif %}
+})();
+
 async function joinGroup(){
   const r=await fetch('/group/'+GRP_SLUG+'/join',{method:'POST'});
   const d=await r.json();
@@ -411,6 +452,44 @@ function toggleMembers(){
   const panel=document.getElementById('grp-members-panel');
   panel.classList.toggle('open');
 }
+
+// ── Group settings ────────────────────────────────────────────────────────────
+let _grpAvatarData = null;
+
+function previewGroupAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _grpAvatarData = e.target.result;
+    const prev = document.getElementById('grp-avatar-preview');
+    if (prev) prev.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  };
+  reader.readAsDataURL(file);
+}
+window.previewGroupAvatar = previewGroupAvatar;
+
+async function saveGroupSettings() {
+  const name = document.getElementById('grp-edit-name').value.trim();
+  const desc = document.getElementById('grp-edit-desc').value.trim();
+  if (!name) { showToast('Group name is required.', 'error'); return; }
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('description', desc);
+  if (_grpAvatarData) fd.append('avatar_data', _grpAvatarData);
+  try {
+    const r = await fetch('/group/{{ g.slug }}/edit', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('grp-edit-modal');
+      showToast('Group updated!');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Could not update group.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.saveGroupSettings = saveGroupSettings;
 
 window.addEventListener('pagehide',function(){if(_grpSrc){_grpSrc.close();_grpSrc=null;}if(isRec)stopRec();if(curAudio)curAudio.pause();});
 </script>

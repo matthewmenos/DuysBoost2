@@ -1,0 +1,453 @@
+{% if current_user %}
+<!-- ── Stories bar ───────────────────────────────────────────────────────── -->
+<style>
+.stories-bar {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.stories-bar::-webkit-scrollbar { display: none; }
+
+.story-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+.story-ring {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+}
+.story-ring.seen {
+  background: var(--border);
+}
+.story-ring.own {
+  background: var(--accent);
+}
+.story-ring-inner {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  border: 2.5px solid var(--surface);
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.story-ring-inner img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.story-add-btn {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 2px dashed var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.story-add-btn:hover { background: rgba(127,90,240,.1); }
+.story-username {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  max-width: 60px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Story viewer overlay ───────────────────────────────────────────────── */
+.story-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  display: none;
+  flex-direction: column;
+}
+.story-overlay.open { display: flex; }
+.story-progress-bar {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px 6px;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+}
+.story-progress-seg {
+  flex: 1;
+  height: 2.5px;
+  background: rgba(255,255,255,.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.story-progress-fill {
+  height: 100%;
+  background: #fff;
+  width: 0%;
+  transition: width linear;
+}
+.story-progress-fill.done { width: 100%; }
+.story-header {
+  position: absolute;
+  top: 22px; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  z-index: 10;
+}
+.story-author-info {
+  display: flex; align-items: center; gap: 9px; flex: 1;
+}
+.story-author-info .avatar { width: 36px; height: 36px; }
+.story-author-name { color: #fff; font-weight: 700; font-size: 14px; }
+.story-time { color: rgba(255,255,255,.7); font-size: 12px; }
+.story-close-btn {
+  background: none; border: none; color: #fff; font-size: 22px;
+  cursor: pointer; padding: 4px; line-height: 1;
+}
+.story-delete-btn {
+  background: none; border: none; color: rgba(255,255,255,.8); font-size: 18px;
+  cursor: pointer; padding: 4px;
+}
+.story-media {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.story-media img, .story-media video {
+  max-width: 100%;
+  max-height: 100vh;
+  object-fit: contain;
+}
+.story-caption {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 24px 16px 28px;
+  background: linear-gradient(transparent, rgba(0,0,0,.7));
+  color: #fff;
+  font-size: 15px;
+  text-align: center;
+}
+.story-nav-btn {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 35%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 5;
+}
+.story-nav-prev { left: 0; }
+.story-nav-next { right: 0; }
+</style>
+
+<!-- Stories bar HTML -->
+<div class="stories-bar" id="stories-bar">
+  <!-- Add own story -->
+  <div class="story-bubble" onclick="document.getElementById('story-upload-input').click()">
+    <div class="story-add-btn">＋</div>
+    <span class="story-username">Your story</span>
+  </div>
+  <!-- Story bubbles populated by JS -->
+  <span id="stories-loading" style="display:none;align-self:center;color:var(--muted);font-size:13px">Loading…</span>
+</div>
+
+<!-- Hidden file input for story upload -->
+<input type="file" id="story-upload-input" accept="image/*,video/mp4,video/webm"
+       style="display:none" onchange="uploadStory(this)">
+
+<!-- Story viewer overlay -->
+<div class="story-overlay" id="story-overlay">
+  <div class="story-progress-bar" id="story-progress"></div>
+  <div class="story-header">
+    <div class="story-author-info">
+      <div class="avatar story-author-avatar" id="sv-avatar"></div>
+      <div>
+        <div class="story-author-name" id="sv-name"></div>
+        <div class="story-time" id="sv-time"></div>
+      </div>
+    </div>
+    <button class="story-delete-btn" id="sv-delete" style="display:none"
+            onclick="deleteCurrentStory()" title="Delete story">🗑</button>
+    <button class="story-close-btn" onclick="closeStoryViewer()">✕</button>
+  </div>
+  <div class="story-media" id="sv-media"></div>
+  <div class="story-caption" id="sv-caption" style="display:none"></div>
+  <button class="story-nav-btn story-nav-prev" onclick="prevStory()"></button>
+  <button class="story-nav-btn story-nav-next" onclick="nextStory()"></button>
+</div>
+
+<!-- Story upload caption modal -->
+<div class="modal-overlay" id="story-caption-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">Add a caption</div>
+      <button class="modal-close" onclick="closeModal('story-caption-modal')">✕</button>
+    </div>
+    <div id="story-preview-wrap" style="text-align:center;margin-bottom:12px">
+      <img id="story-preview-img" style="max-width:100%;max-height:220px;border-radius:8px;display:none">
+      <video id="story-preview-video" style="max-width:100%;max-height:220px;border-radius:8px;display:none" muted playsinline></video>
+    </div>
+    <textarea class="form-input" id="story-caption-input"
+              placeholder="Caption (optional)…" rows="2" maxlength="200"
+              style="margin-bottom:12px"></textarea>
+    <button class="btn btn-primary btn-block" onclick="submitStory()">Post story</button>
+  </div>
+</div>
+
+<script>
+/* ── Story state ─────────────────────────────────────────────────────────── */
+let _storyGroups     = [];
+let _svGroupIdx      = 0;
+let _svStoryIdx      = 0;
+let _svTimer         = null;
+let _svDuration      = 5000;
+let _svPendingFile   = null;
+let _svPendingData   = null;
+let _svPendingMime   = null;
+
+/* ── Load stories feed ───────────────────────────────────────────────────── */
+async function loadStories() {
+  try {
+    const r = await fetch('/api/stories/feed');
+    const d = await r.json();
+    _storyGroups = d.groups || [];
+    renderStoryBar();
+  } catch (_) {}
+}
+loadStories();
+
+function renderStoryBar() {
+  const bar = document.getElementById('stories-bar');
+  // Keep the "add" button (first child)
+  while (bar.children.length > 1) bar.removeChild(bar.lastChild);
+
+  _storyGroups.forEach(function(grp, gi) {
+    const bubble = document.createElement('div');
+    bubble.className = 'story-bubble';
+    bubble.onclick   = function() { openStoryGroup(gi); };
+
+    const allSeen   = !grp.has_unseen;
+    const ringClass = grp.is_own ? 'own' : (allSeen ? 'seen' : '');
+    const imgTag    = grp.avatar_url
+      ? `<img src="${grp.avatar_url}" alt="">`
+      : `<span>${(grp.display_name||grp.username||'?')[0].toUpperCase()}</span>`;
+
+    bubble.innerHTML = `
+      <div class="story-ring ${ringClass}">
+        <div class="story-ring-inner">${imgTag}</div>
+      </div>
+      <span class="story-username">${escapeHtml(grp.display_name||grp.username)}</span>`;
+    bar.appendChild(bubble);
+  });
+}
+
+/* ── Story viewer ────────────────────────────────────────────────────────── */
+function openStoryGroup(groupIdx, storyIdx) {
+  _svGroupIdx = groupIdx;
+  _svStoryIdx = storyIdx || 0;
+  document.getElementById('story-overlay').classList.add('open');
+  document.body.classList.add('no-scroll');
+  _showCurrentStory();
+}
+window.openStoryGroup = openStoryGroup;
+
+function _showCurrentStory() {
+  clearTimeout(_svTimer);
+  const grp    = _storyGroups[_svGroupIdx];
+  const story  = grp && grp.stories[_svStoryIdx];
+  if (!story) { closeStoryViewer(); return; }
+
+  // Header
+  const avEl = document.getElementById('sv-avatar');
+  avEl.innerHTML = grp.avatar_url
+    ? `<img src="${grp.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : `<span style="color:#fff">${(grp.display_name||grp.username||'?')[0].toUpperCase()}</span>`;
+  avEl.style.background = 'var(--accent)';
+  avEl.style.display    = 'flex';
+  avEl.style.alignItems = 'center';
+  avEl.style.justifyContent = 'center';
+
+  document.getElementById('sv-name').textContent = grp.display_name || grp.username;
+  document.getElementById('sv-time').textContent = story.hours_left + 'h left';
+  document.getElementById('sv-delete').style.display = story.is_own ? '' : 'none';
+  document.getElementById('sv-delete').dataset.storyId = story.id;
+
+  // Media
+  const mediaEl = document.getElementById('sv-media');
+  if (story.media_mime && story.media_mime.startsWith('video/')) {
+    mediaEl.innerHTML = `<video src="${story.media_url}" autoplay muted playsinline
+      style="max-width:100%;max-height:100vh;object-fit:contain"></video>`;
+    const vid = mediaEl.querySelector('video');
+    vid.onloadedmetadata = function() { _svDuration = Math.min(vid.duration * 1000, 30000); };
+  } else {
+    mediaEl.innerHTML = `<img src="${story.media_url}" alt="">`;
+    _svDuration = 5000;
+  }
+
+  // Caption
+  const capEl = document.getElementById('sv-caption');
+  if (story.caption) { capEl.textContent = story.caption; capEl.style.display = ''; }
+  else { capEl.style.display = 'none'; }
+
+  // Progress bars
+  const total    = grp.stories.length;
+  const progEl   = document.getElementById('story-progress');
+  progEl.innerHTML = grp.stories.map(function(_, i) {
+    const fill = i < _svStoryIdx ? 'done' : (i === _svStoryIdx ? 'active' : '');
+    return `<div class="story-progress-seg"><div class="story-progress-fill ${fill}"
+      style="${fill==='active'?'transition:width '+_svDuration+'ms linear':''}"
+      id="spf-${i}"></div></div>`;
+  }).join('');
+
+  // Animate current bar
+  setTimeout(function() {
+    const active = document.getElementById('spf-' + _svStoryIdx);
+    if (active) active.style.width = '100%';
+  }, 50);
+
+  // Mark viewed
+  fetch('/api/story/' + story.id + '/view', { method: 'POST' }).catch(function(){});
+
+  // Auto-advance
+  _svTimer = setTimeout(function() { nextStory(); }, _svDuration);
+}
+
+function nextStory() {
+  clearTimeout(_svTimer);
+  const grp = _storyGroups[_svGroupIdx];
+  if (grp && _svStoryIdx < grp.stories.length - 1) {
+    _svStoryIdx++;
+    _showCurrentStory();
+  } else if (_svGroupIdx < _storyGroups.length - 1) {
+    _svGroupIdx++;
+    _svStoryIdx = 0;
+    _showCurrentStory();
+  } else {
+    closeStoryViewer();
+  }
+}
+function prevStory() {
+  clearTimeout(_svTimer);
+  if (_svStoryIdx > 0) {
+    _svStoryIdx--;
+    _showCurrentStory();
+  } else if (_svGroupIdx > 0) {
+    _svGroupIdx--;
+    _svStoryIdx = (_storyGroups[_svGroupIdx].stories.length - 1) || 0;
+    _showCurrentStory();
+  }
+}
+function closeStoryViewer() {
+  clearTimeout(_svTimer);
+  document.getElementById('story-overlay').classList.remove('open');
+  document.body.classList.remove('no-scroll');
+  document.getElementById('sv-media').innerHTML = '';
+}
+window.nextStory     = nextStory;
+window.prevStory     = prevStory;
+window.closeStoryViewer = closeStoryViewer;
+
+/* ── Delete story ────────────────────────────────────────────────────────── */
+async function deleteCurrentStory() {
+  const btn = document.getElementById('sv-delete');
+  const sid = btn.dataset.storyId;
+  if (!sid || !confirm('Delete this story?')) return;
+  try {
+    const r = await fetch('/api/story/' + sid, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Story deleted.');
+      // Remove from local state
+      const grp = _storyGroups[_svGroupIdx];
+      if (grp) {
+        grp.stories.splice(_svStoryIdx, 1);
+        if (!grp.stories.length) {
+          _storyGroups.splice(_svGroupIdx, 1);
+          renderStoryBar();
+          closeStoryViewer();
+        } else {
+          _svStoryIdx = Math.min(_svStoryIdx, grp.stories.length - 1);
+          renderStoryBar();
+          _showCurrentStory();
+        }
+      }
+    } else {
+      showToast(d.error || 'Could not delete story.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.deleteCurrentStory = deleteCurrentStory;
+
+/* ── Upload story ────────────────────────────────────────────────────────── */
+function uploadStory(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 25 * 1024 * 1024) {
+    showToast('File too large (max 25 MB).', 'error');
+    input.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    _svPendingData = e.target.result;
+    _svPendingMime = file.type;
+    // Show preview + caption modal
+    const img = document.getElementById('story-preview-img');
+    const vid = document.getElementById('story-preview-video');
+    if (file.type.startsWith('video/')) {
+      vid.src = e.target.result; vid.style.display = '';
+      img.style.display = 'none';
+    } else {
+      img.src = e.target.result; img.style.display = '';
+      vid.style.display = 'none';
+    }
+    document.getElementById('story-caption-input').value = '';
+    openModal('story-caption-modal');
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+window.uploadStory = uploadStory;
+
+async function submitStory() {
+  if (!_svPendingData) return;
+  const caption = document.getElementById('story-caption-input').value.trim();
+  const fd = new FormData();
+  fd.append('media_data', _svPendingData);
+  fd.append('media_mime', _svPendingMime);
+  if (caption) fd.append('caption', caption);
+  try {
+    const r = await fetch('/api/story/create', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('story-caption-modal');
+      showToast('Story posted! 🎉');
+      _svPendingData = null;
+      loadStories();  // Refresh the bar
+    } else {
+      showToast(d.error || 'Could not post story.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.submitStory = submitStory;
+
+// Close overlay on backdrop click (but not on media)
+document.getElementById('story-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeStoryViewer();
+});
+</script>
+{% endif %}

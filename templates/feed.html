@@ -4,6 +4,7 @@
 {% block page_title %}Home{% endblock %}
 
 {% block content %}
+{% include 'stories_bar.html' %}
 <div class="social-layout">
   <!-- Main feed column -->
   <div class="feed-col">
@@ -201,6 +202,20 @@
               style="margin-bottom:12px"></textarea>
     <input type="hidden" id="repost-target-id" value="">
     <button class="btn btn-primary btn-block" onclick="submitQuote()">Post</button>
+  </div>
+</div>
+<!-- Edit post modal -->
+<div class="modal-overlay" id="edit-post-modal" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit post</div>
+      <button class="modal-close" onclick="closeModal('edit-post-modal')">✕</button>
+    </div>
+    <input type="hidden" id="edit-post-id">
+    <textarea class="compose-input form-input" id="edit-post-body"
+              maxlength="500" rows="4" style="margin-bottom:12px"
+              placeholder="What's on your mind?"></textarea>
+    <button class="btn btn-primary btn-block" onclick="submitEditPost()">Save changes</button>
   </div>
 </div>
 {% endblock %}
@@ -536,6 +551,56 @@ function copyPostLink(postId) {
   showToast('Link copied!');
 }
 window.copyPostLink = copyPostLink;
+
+// ── Share post ────────────────────────────────────────────────────────────────
+async function sharePost(postId, body) {
+  const url = window.location.origin + '/post/' + postId;
+  const text = (body || '').slice(0, 80) + (body && body.length > 80 ? '…' : '');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Post on DUYS Boost', text: text, url: url });
+      return;
+    } catch (_) {}
+  }
+  // Fallback: copy link
+  try { await navigator.clipboard.writeText(url); }
+  catch (_) { /* ignore */ }
+  showToast('Link copied to clipboard!');
+}
+window.sharePost = sharePost;
+
+// ── Edit post ─────────────────────────────────────────────────────────────────
+function openEditPost(postId, body) {
+  const modal = document.getElementById('edit-post-modal');
+  if (!modal) return;
+  document.getElementById('edit-post-id').value   = postId;
+  document.getElementById('edit-post-body').value = body || '';
+  openModal('edit-post-modal');
+}
+window.openEditPost = openEditPost;
+
+async function submitEditPost() {
+  const postId = document.getElementById('edit-post-id').value;
+  const body   = document.getElementById('edit-post-body').value.trim();
+  if (!postId) return;
+  const fd = new FormData();
+  fd.append('body', body);
+  try {
+    const r = await fetch('/post/' + postId + '/edit', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('edit-post-modal');
+      // Update the post body in the DOM without a reload
+      const bodyEl = document.getElementById('post-body-' + postId);
+      if (bodyEl) bodyEl.innerHTML = escapeHtml(body).replace(/\n/g, '<br>') +
+        ' <span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>';
+      showToast('Post updated!');
+    } else {
+      showToast(d.error || 'Could not update post.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.submitEditPost = submitEditPost;
 
 // ── Load more ──────────────────────────────────────────────────────────────────
 const loadMoreBtn = document.getElementById('load-more-btn');
