@@ -42,7 +42,7 @@ _cleanup_lock    = threading.Lock()
 def _run_cleanup(app):
     """Delete expired stories every 10 minutes."""
     import sqlite3
-    import sqlite3.extras
+    
     import os
 
     while True:
@@ -58,7 +58,7 @@ def _run_cleanup(app):
                 dsn = 'postgresql://' + dsn[len('postgres://'):]
 
             conn = sqlite3.connect(dsn)
-            cur  = conn.cursor(cursor_factory=sqlite3.extras.RealDictCursor)
+            cur  = conn.cursor()
 
             cur.execute(
                 "SELECT id, media_url FROM stories WHERE expires_at < datetime('now')"
