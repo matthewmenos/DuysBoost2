@@ -155,14 +155,14 @@
       </div>
       {% for m in members %}
       <div class="member-card">
-        <a href="{{ url_for('profile', username=m.username) }}">
+        <a href="{{ url_for('social.profile', username=m.username) }}">
           <div class="avatar avatar-xs">
             {% if m.avatar_url %}<img src="{{ m.avatar_url }}" alt="">
             {% else %}{{ (m.display_name or m.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div style="flex:1;min-width:0">
-          <a href="{{ url_for('profile', username=m.username) }}" class="fw-600" style="font-size:13.5px">{{ m.display_name or m.username }}</a>
+          <a href="{{ url_for('social.profile', username=m.username) }}" class="fw-600" style="font-size:13.5px">{{ m.display_name or m.username }}</a>
           <div class="text-xs text-muted">@{{ m.username }}</div>
         </div>
         {% if m.role != 'member' %}

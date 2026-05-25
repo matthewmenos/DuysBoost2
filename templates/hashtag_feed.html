@@ -33,7 +33,7 @@
       <div class="widget-title">Trending hashtags</div>
       <div style="display:flex;flex-direction:column;gap:4px">
         {% for t in trending_tags %}
-        <a href="{{ url_for('hashtag_feed', tag=t.name) }}"
+        <a href="{{ url_for('social.hashtag_feed', tag=t.name) }}"
            class="trending-tag-pill {% if t.name == tag %}active{% endif %}">
           #{{ t.name }}
           <span class="trending-tag-cnt">{{ t.cnt }}</span>

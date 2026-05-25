@@ -36,12 +36,12 @@
         </div>
       </div>
       <div class="info-box" style="margin-bottom:16px">
-        💡 In groups, <strong>all members can send messages</strong>. For broadcast-only channels where only admins can post, use <a href="{{ url_for('channel_create') }}" class="text-accent">Channels</a> instead.
+        💡 In groups, <strong>all members can send messages</strong>. For broadcast-only channels where only admins can post, use <a href="{{ url_for('social.channel_create') }}" class="text-accent">Channels</a> instead.
       </div>
       <div id="grp-error" class="error-list" style="display:none"></div>
       <div style="display:flex;gap:10px">
         <button type="submit" class="btn btn-primary">Create group 💬</button>
-        <a href="{{ url_for('groups_list') }}" class="btn btn-ghost">Cancel</a>
+        <a href="{{ url_for('social.groups_list') }}" class="btn btn-ghost">Cancel</a>
       </div>
     </form>
   </div>

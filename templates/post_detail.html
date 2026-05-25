@@ -14,7 +14,7 @@
     <div class="post-card post-expanded card">
       <div class="post-inner" style="gap:14px">
         <div class="post-avatar-col">
-          <a href="{{ url_for('profile', username=post.author.username) }}">
+          <a href="{{ url_for('social.profile', username=post.author.username) }}">
             <div class="avatar avatar-md">
               {% if post.author.avatar_url %}<img src="{{ post.author.avatar_url }}" alt="">
               {% else %}{{ (post.author.display_name or post.author.username or '?')[0].upper() }}{% endif %}
@@ -24,7 +24,7 @@
         <div class="post-content-col" style="flex:1">
           <div class="post-header">
             <div>
-              <a href="{{ url_for('profile', username=post.author.username) }}"
+              <a href="{{ url_for('social.profile', username=post.author.username) }}"
                  class="post-display-name" style="font-size:16px">
                 {{ post.author.display_name or post.author.username }}
                 {% if post.author.is_verified %}<span class="verified-badge">✓</span>{% endif %}
@@ -91,7 +91,7 @@
   <aside class="feed-sidebar">
     <div class="sidebar-widget">
       <div class="widget-title">About @{{ post.author.username }}</div>
-      <a href="{{ url_for('profile', username=post.author.username) }}" class="suggest-row" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:4px 0">
+      <a href="{{ url_for('social.profile', username=post.author.username) }}" class="suggest-row" style="text-decoration:none;display:flex;align-items:center;gap:10px;padding:4px 0">
         <div class="avatar avatar-sm">
           {% if post.author.avatar_url %}<img src="{{ post.author.avatar_url }}" alt="">
           {% else %}{{ (post.author.display_name or post.author.username or '?')[0].upper() }}{% endif %}

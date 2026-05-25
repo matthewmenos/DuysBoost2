@@ -121,14 +121,14 @@
 
     <!-- Search bar with autocomplete -->
     <div class="explore-search-wrap" id="search-wrap">
-      <form method="get" action="{{ url_for('explore') }}" id="explore-form" autocomplete="off">
+      <form method="get" action="{{ url_for('social.explore') }}" id="explore-form" autocomplete="off">
         <div class="explore-search-bar">
           <span style="font-size:18px;flex-shrink:0;color:var(--muted)">🔍</span>
           <input class="search-input" name="q" id="search-input"
                  value="{{ q }}" placeholder="Search posts, people, tags…"
                  spellcheck="false" autocomplete="off">
           {% if q %}
-          <a href="{{ url_for('explore') }}" style="color:var(--muted);font-size:20px;line-height:1;flex-shrink:0">✕</a>
+          <a href="{{ url_for('social.explore') }}" style="color:var(--muted);font-size:20px;line-height:1;flex-shrink:0">✕</a>
           {% endif %}
           <button type="submit" class="btn btn-primary btn-sm" style="flex-shrink:0;border-radius:50px">Search</button>
         </div>
@@ -142,7 +142,7 @@
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 4px;margin-bottom:4px">
       <span class="text-xs text-muted fw-700" style="text-transform:uppercase;letter-spacing:.06em">Recent</span>
       {% for s in recent_searches %}
-      <a href="{{ url_for('explore', q=s) }}" class="recent-pill">{{ s }}</a>
+      <a href="{{ url_for('social.explore', q=s) }}" class="recent-pill">{{ s }}</a>
       {% endfor %}
       <button onclick="clearHistory()" class="text-xs text-muted" style="background:none;border:none;cursor:pointer;padding:4px 8px">Clear</button>
     </div>
@@ -151,11 +151,11 @@
     {% if q %}
     <!-- Search tabs -->
     <div class="explore-tabs">
-      <a href="{{ url_for('explore', q=q, tab='top') }}"     class="explore-tab {% if tab=='top' %}active{% endif %}">Top</a>
-      <a href="{{ url_for('explore', q=q, tab='latest') }}"  class="explore-tab {% if tab=='latest' %}active{% endif %}">Latest</a>
-      <a href="{{ url_for('explore', q=q, tab='people') }}"  class="explore-tab {% if tab=='people' %}active{% endif %}">People</a>
-      <a href="{{ url_for('explore', q=q, tab='posts') }}"   class="explore-tab {% if tab=='posts' %}active{% endif %}">Posts</a>
-      <a href="{{ url_for('explore', q=q, tab='tags') }}"    class="explore-tab {% if tab=='tags' %}active{% endif %}">Tags</a>
+      <a href="{{ url_for('social.explore', q=q, tab='top') }}"     class="explore-tab {% if tab=='top' %}active{% endif %}">Top</a>
+      <a href="{{ url_for('social.explore', q=q, tab='latest') }}"  class="explore-tab {% if tab=='latest' %}active{% endif %}">Latest</a>
+      <a href="{{ url_for('social.explore', q=q, tab='people') }}"  class="explore-tab {% if tab=='people' %}active{% endif %}">People</a>
+      <a href="{{ url_for('social.explore', q=q, tab='posts') }}"   class="explore-tab {% if tab=='posts' %}active{% endif %}">Posts</a>
+      <a href="{{ url_for('social.explore', q=q, tab='tags') }}"    class="explore-tab {% if tab=='tags' %}active{% endif %}">Tags</a>
     </div>
 
     <!-- Results -->
@@ -166,14 +166,14 @@
         {% for u in users %}
         <div class="people-card">
           <div class="people-card-top">
-            <a href="{{ url_for('profile', username=u.username) }}">
+            <a href="{{ url_for('social.profile', username=u.username) }}">
               <div class="avatar avatar-md">
                 {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
                 {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
               </div>
             </a>
             <div class="people-card-info">
-              <a href="{{ url_for('profile', username=u.username) }}" class="people-card-name">
+              <a href="{{ url_for('social.profile', username=u.username) }}" class="people-card-name">
                 {{ u.display_name or u.username }}
                 {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
               </a>
@@ -207,7 +207,7 @@
       {% if tab == 'top' %}<div class="section-title mb-12">Tags</div>{% endif %}
       <div class="tag-grid">
         {% for t in tags %}
-        <a href="{{ url_for('hashtag_feed', tag=t.name) }}" class="tag-card">
+        <a href="{{ url_for('social.hashtag_feed', tag=t.name) }}" class="tag-card">
           <div class="tag-card-name">#{{ t.name }}</div>
           <div class="tag-card-cnt">{{ t.cnt }} post{{ 's' if t.cnt != 1 else '' }}</div>
         </a>
@@ -249,13 +249,13 @@
       <div class="widget-title">🔥 Trending tags</div>
       <div style="display:flex;flex-direction:column;gap:4px">
         {% for t in trending_tags[:10] %}
-        <a href="{{ url_for('hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
+        <a href="{{ url_for('social.hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
           #{{ t.name }}
           <span class="trending-tag-cnt">{{ t.cnt }}</span>
         </a>
         {% endfor %}
       </div>
-      <a href="{{ url_for('trending') }}" class="text-accent text-sm mt-12" style="display:block">
+      <a href="{{ url_for('social.trending') }}" class="text-accent text-sm mt-12" style="display:block">
         See all trending →
       </a>
     </div>
@@ -267,14 +267,14 @@
       <div class="widget-title">👥 Who to follow</div>
       {% for u in who_to_follow %}
       <div class="suggest-row" id="wtf-{{ u.id }}">
-        <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
+        <a href="{{ url_for('social.profile', username=u.username) }}" class="suggest-avatar">
           <div class="avatar avatar-sm">
             {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
             {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div class="suggest-info">
-          <a href="{{ url_for('profile', username=u.username) }}" class="fw-700 suggest-name">
+          <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700 suggest-name">
             {{ u.display_name or u.username }}
             {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
           </a>

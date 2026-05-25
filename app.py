@@ -16,6 +16,7 @@ from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, render_template, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
+from security import init_security
 
 # ── Load .env ────────────────────────────────────────────────────────────────
 _base_dir    = os.path.dirname(__file__)
@@ -71,6 +72,7 @@ def create_app() -> Flask:
         R2_BUCKET_NAME=os.environ.get('R2_BUCKET_NAME', ''),
         R2_ACCOUNT_ID=os.environ.get('R2_ACCOUNT_ID', ''),
         R2_PUBLIC_URL=os.environ.get('R2_PUBLIC_URL', ''),
+        REDIS_URL=os.environ.get('REDIS_URL', ''),
         CURRENCY_CODE=CURRENCY_CODE,
         CURRENCY_SYMBOL=CURRENCY_SYMBOL,
         WORKER_REWARD_PER_TASK=WORKER_REWARD_PER_TASK,
@@ -145,12 +147,17 @@ def create_app() -> Flask:
     from blueprints.boost  import bp as boost_bp
     from blueprints.wallet import bp as wallet_bp
     from blueprints.admin  import bp as admin_bp
+    from sse               import bp as sse_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(boost_bp)
     app.register_blueprint(wallet_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(sse_bp)   # SSE streams
+
+    # ── Security (CSRF + rate limiting) ──────────────────────────────────────
+    init_security(app)
 
     # ── Auto-initialise database on startup ───────────────────────────────────
     # Runs init_db() once when the app starts — safe to call every time

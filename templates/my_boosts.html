@@ -26,7 +26,7 @@
 <div class="card">
   <div class="section-header">
     <div class="section-title">📣 Boost history</div>
-    <a href="{{ url_for('feed') }}" class="btn btn-ghost btn-sm">← Back to feed</a>
+    <a href="{{ url_for('social.feed') }}" class="btn btn-ghost btn-sm">← Back to feed</a>
   </div>
 
   {% if boosts %}
@@ -63,13 +63,13 @@
     </div>
     {% if b.status == 'active' %}
     <div style="display:flex;gap:8px;margin-top:10px">
-      <a href="{{ url_for('post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm">View post ↗</a>
+      <a href="{{ url_for('social.post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm">View post ↗</a>
       <button class="btn btn-danger btn-sm" onclick="cancelBoost({{ b.post_id }}, {{ b.id }}, this)">
         Cancel &amp; Refund
       </button>
     </div>
     {% else %}
-    <a href="{{ url_for('post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm" style="margin-top:10px">View post ↗</a>
+    <a href="{{ url_for('social.post_detail', post_id=b.post_id) }}" class="btn btn-ghost btn-sm" style="margin-top:10px">View post ↗</a>
     {% endif %}
   </div>
   {% endfor %}
@@ -81,7 +81,7 @@
     <div class="empty-text">
       Tap ⋯ on any of your posts and choose "Boost this post" to get started.
     </div>
-    <a href="{{ url_for('feed') }}" class="btn btn-primary mt-16">Go to feed →</a>
+    <a href="{{ url_for('social.feed') }}" class="btn btn-primary mt-16">Go to feed →</a>
   </div>
   {% endif %}
 </div>

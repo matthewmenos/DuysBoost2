@@ -37,7 +37,7 @@
       <div class="section-title">🔥 Trending on DUYS Boost</div>
       <div class="window-pills mt-12">
         {% for w, label in [('6h','Last 6h'), ('24h','24 hours'), ('48h','48 hours'), ('7d','7 days')] %}
-        <a href="{{ url_for('trending', w=w) }}"
+        <a href="{{ url_for('social.trending', w=w) }}"
            class="window-pill {% if window==w %}active{% endif %}">{{ label }}</a>
         {% endfor %}
       </div>
@@ -61,14 +61,14 @@
       <div class="widget-title">🚀 Rising creators</div>
       {% for u in rising %}
       <div class="rising-card mb-8">
-        <a href="{{ url_for('profile', username=u.username) }}">
+        <a href="{{ url_for('social.profile', username=u.username) }}">
           <div class="avatar avatar-sm">
             {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
             {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div style="flex:1;min-width:0">
-          <a href="{{ url_for('profile', username=u.username) }}" class="fw-700" style="font-size:13.5px">
+          <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700" style="font-size:13.5px">
             {{ u.display_name or u.username }}
           </a>
           <div class="text-xs text-muted">{{ u.follower_count or 0 }} followers</div>
@@ -85,7 +85,7 @@
       <div class="widget-title">🏷 Top hashtags</div>
       <div style="display:flex;flex-direction:column;gap:4px">
         {% for t in top_tags[:12] %}
-        <a href="{{ url_for('hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
+        <a href="{{ url_for('social.hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
           #{{ t.name }} <span class="trending-tag-cnt">{{ t.cnt }}</span>
         </a>
         {% endfor %}
@@ -99,14 +99,14 @@
       <div class="widget-title">👥 Who to follow</div>
       {% for u in who_to_follow %}
       <div class="suggest-row">
-        <a href="{{ url_for('profile', username=u.username) }}" class="suggest-avatar">
+        <a href="{{ url_for('social.profile', username=u.username) }}" class="suggest-avatar">
           <div class="avatar avatar-sm">
             {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
             {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div class="suggest-info">
-          <a href="{{ url_for('profile', username=u.username) }}" class="fw-700 suggest-name">
+          <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700 suggest-name">
             {{ u.display_name or u.username }}
           </a>
           <div class="text-xs text-muted">{{ u.follower_count or 0 }} followers</div>

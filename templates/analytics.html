@@ -148,7 +148,7 @@
 <div class="analytics-page">
   <div class="analytics-header">
     <h1>📊 Campaign Analytics</h1>
-    <a href="{{ url_for('ads') }}" class="btn btn-secondary">← Back to Ads</a>
+    <a href="{{ url_for('boost.ads') }}" class="btn btn-secondary">← Back to Ads</a>
   </div>
 
   {% if not summary %}
@@ -156,7 +156,7 @@
     <div class="empty-state-icon">📭</div>
     <h2>No campaigns yet</h2>
     <p>Create your first ad campaign to see analytics and performance metrics.</p>
-    <a href="{{ url_for('ads') }}" class="btn-primary-outline">Create Campaign</a>
+    <a href="{{ url_for('boost.ads') }}" class="btn-primary-outline">Create Campaign</a>
   </div>
   {% else %}
 

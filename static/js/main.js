@@ -184,30 +184,83 @@
       } catch (_err) { /* silent */ }
     }
 
-    // Only poll / load if user is logged in (notif btn only exists when logged in)
+    // ── Global SSE stream (replaces all badge polling) ────────────────
     if (notifBtn) {
+      // Do an immediate fetch for first paint, then SSE takes over
       loadNotifications();
-      setInterval(loadNotifications, 30000);
-    }
 
-    // ── DM unread count polling ─────────────────────────────────────────
-    async function loadDmCount() {
-      try {
-        const r = await fetch('/api/messages/unread');
-        const d = await r.json();
+      const _globalSrc = new EventSource('/api/stream');
+
+      _globalSrc.addEventListener('notifications', function(e) {
+        const d = JSON.parse(e.data);
+        const dot          = document.getElementById('notif-dot');
+        const sidebarBadge = document.getElementById('sidebar-notif-count');
+        const bottomBadge  = document.getElementById('bottom-notif-badge');
+        const hasUnread = d.count > 0;
+        if (dot) dot.style.display = hasUnread ? 'block' : 'none';
+        [sidebarBadge, bottomBadge].forEach(function(el) {
+          if (!el) return;
+          el.textContent = d.count;
+          el.style.display = hasUnread ? 'inline-block' : 'none';
+        });
+        const list = document.getElementById('notif-list');
+        if (list && d.recent) {
+          if (!d.recent.length) {
+            list.innerHTML = '<div class="notif-item text-muted text-center" style="padding:24px 18px">No new notifications</div>';
+          } else {
+            list.innerHTML = d.recent.map(function(n) {
+              return '<div class="notif-item"><div>' + escapeHtml(n.msg) +
+                     '</div><div class="notif-time">' + escapeHtml(n.time) + '</div></div>';
+            }).join('');
+          }
+        }
+      });
+
+      _globalSrc.addEventListener('dm_unread', function(e) {
+        const d = JSON.parse(e.data);
         const cnt = d.count || 0;
-        const bottomDmBadge  = document.getElementById('bottom-dm-badge');
-        const sidebarDmBadge = document.getElementById('sidebar-dm-badge');
-        [bottomDmBadge, sidebarDmBadge].forEach(function(el) {
+        ['bottom-dm-badge','sidebar-dm-badge'].forEach(function(id) {
+          const el = document.getElementById(id);
           if (!el) return;
           el.textContent = cnt;
           el.style.display = cnt > 0 ? 'inline-flex' : 'none';
         });
-      } catch(_) {}
-    }
-    if (notifBtn) {
-      loadDmCount();
-      setInterval(loadDmCount, 15000);
+      });
+
+      _globalSrc.addEventListener('group_unread', function(e) {
+        const d = JSON.parse(e.data);
+        const cnt = d.count || 0;
+        const badge = document.getElementById('sidebar-grp-badge');
+        if (badge) {
+          badge.textContent = cnt;
+          badge.style.display = cnt > 0 ? 'inline-flex' : 'none';
+        }
+      });
+
+      _globalSrc.addEventListener('activity', function(e) {
+        const d = JSON.parse(e.data);
+        // Update dashboard activity feed if it exists on this page
+        const feed = document.getElementById('activity-feed');
+        if (feed && d.items && d.items.length) {
+          d.items.forEach(function(item) {
+            const row = document.createElement('div');
+            row.className = 'activity-row';
+            row.innerHTML = '<span class="act-worker">@' + escapeHtml(item.worker) +
+              '</span> completed <span class="act-ad">' + escapeHtml(item.ad) +
+              '</span> <span class="act-reward">+$' + item.reward.toFixed(2) +
+              '</span> <span class="act-time">' + escapeHtml(item.time) + '</span>';
+            feed.insertBefore(row, feed.firstChild);
+            // Keep max 10 rows
+            while (feed.children.length > 10) feed.removeChild(feed.lastChild);
+          });
+        }
+      });
+
+      _globalSrc.onerror = function() {
+        // Browser auto-reconnects — no manual retry needed
+      };
+
+      window.addEventListener('beforeunload', function() { _globalSrc.close(); });
     }
 
     // ── Modal helpers ───────────────────────────────────────────────────
@@ -302,15 +355,18 @@
   });
 })();
 
-// ── Online heartbeat (runs on every page when logged in) ─────────────────
+// ── Online presence — handled by SSE keepalive, no polling needed ────────
+// The global SSE stream (/api/stream) updates online_at on every cycle.
+// A lightweight fallback heartbeat fires only when SSE is unavailable.
 (function() {
   const notifBtn = document.getElementById('notif-btn');
-  if (!notifBtn) return;  // not logged in
-  function heartbeat() {
-    fetch('/api/online/heartbeat', { method: 'POST' }).catch(() => {});
+  if (!notifBtn) return;
+  // Only send REST heartbeat if EventSource is not supported
+  if (typeof EventSource === 'undefined') {
+    setInterval(function() {
+      fetch('/api/online/heartbeat', { method: 'POST' }).catch(() => {});
+    }, 30000);
   }
-  heartbeat();
-  setInterval(heartbeat, 30000);
 })();
 
 // ── Post image lightbox (for feed media images) ───────────────────────────
@@ -365,22 +421,6 @@ async function castVote(postId, optionId, btn) {
 }
 window.castVote = castVote;
 
-// ── Group unread badge polling ──────────────────────────────────────────────
-(function() {
-  const notifBtn = document.getElementById('notif-btn');
-  if (!notifBtn) return;
-  async function loadGroupCount() {
-    try {
-      const r = await fetch('/api/groups/unread');
-      const d = await r.json();
-      const cnt = d.count || 0;
-      const badge = document.getElementById('sidebar-grp-badge');
-      if (badge) {
-        badge.textContent = cnt;
-        badge.style.display = cnt > 0 ? 'inline-flex' : 'none';
-      }
-    } catch(_) {}
-  }
-  loadGroupCount();
-  setInterval(loadGroupCount, 20000);
-})();
+// ── Group unread badge — now pushed via SSE global stream ───────────────────
+// Handled by the 'group_unread' event in the EventSource above.
+// This block intentionally left empty (polling removed).

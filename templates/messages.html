@@ -104,7 +104,7 @@
   <div class="conv-list">
     {% if conversations %}
       {% for conv in conversations %}
-      <a href="{{ url_for('message_thread', username=conv.other.username) }}"
+      <a href="{{ url_for('social.message_thread', username=conv.other.username) }}"
          class="conv-item {% if conv.unread %}unread{% endif %}">
         <div class="conv-avatar">
           <div class="avatar avatar-md">

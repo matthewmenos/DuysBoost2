@@ -152,7 +152,7 @@
 
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" class="btn btn-primary">Save changes</button>
-        <a href="{{ url_for('profile', username=user.username) }}" class="btn btn-ghost">Cancel</a>
+        <a href="{{ url_for('social.profile', username=user.username) }}" class="btn btn-ghost">Cancel</a>
       </div>
     </form>
   </div>

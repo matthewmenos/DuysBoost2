@@ -53,17 +53,17 @@
     <div style="font-family:var(--font-display);font-size:22px;font-weight:800">📡 Channels</div>
     <div class="text-sm text-muted">Join communities around topics you care about</div>
   </div>
-  <a href="{{ url_for('channel_create') }}" class="btn btn-primary btn-sm">+ Create channel</a>
+  <a href="{{ url_for('social.channel_create') }}" class="btn btn-primary btn-sm">+ Create channel</a>
 </div>
 
 <div class="ch-tabs">
-  <a href="{{ url_for('channels_browse', tab='discover') }}" class="ch-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
-  <a href="{{ url_for('channels_browse', tab='joined') }}"   class="ch-tab {% if tab=='joined' %}active{% endif %}">✅ Joined</a>
-  <a href="{{ url_for('channels_browse', tab='owned') }}"    class="ch-tab {% if tab=='owned' %}active{% endif %}">👑 My Channels</a>
+  <a href="{{ url_for('social.channels_browse', tab='discover') }}" class="ch-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
+  <a href="{{ url_for('social.channels_browse', tab='joined') }}"   class="ch-tab {% if tab=='joined' %}active{% endif %}">✅ Joined</a>
+  <a href="{{ url_for('social.channels_browse', tab='owned') }}"    class="ch-tab {% if tab=='owned' %}active{% endif %}">👑 My Channels</a>
 </div>
 
 {% if tab == 'discover' %}
-<form method="get" action="{{ url_for('channels_browse') }}" style="padding:12px 16px;border-bottom:1px solid var(--border)">
+<form method="get" action="{{ url_for('social.channels_browse') }}" style="padding:12px 16px;border-bottom:1px solid var(--border)">
   <input type="hidden" name="tab" value="discover">
   <div class="ch-search-bar">
     <span style="color:var(--muted)">🔍</span>
@@ -76,7 +76,7 @@
 {% if channels %}
 <div class="ch-grid">
   {% for ch in channels %}
-  <a href="{{ url_for('channel_detail', slug=ch.slug) }}" class="ch-card">
+  <a href="{{ url_for('social.channel_detail', slug=ch.slug) }}" class="ch-card">
     <div style="display:flex;align-items:center;gap:12px">
       <div class="ch-avatar">
         {% if ch.avatar_url %}<img src="{{ ch.avatar_url }}" alt="">
@@ -110,7 +110,7 @@
     {% else %}No channels yet{% endif %}
   </div>
   {% if tab == 'discover' and not q %}
-  <a href="{{ url_for('channel_create') }}" class="btn btn-primary mt-16">Create the first one →</a>
+  <a href="{{ url_for('social.channel_create') }}" class="btn btn-primary mt-16">Create the first one →</a>
   {% endif %}
 </div>
 {% endif %}

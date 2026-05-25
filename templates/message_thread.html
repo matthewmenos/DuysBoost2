@@ -243,10 +243,10 @@
 
   <!-- Header -->
   <div class="chat-hdr">
-    <a href="{{ url_for('messages_inbox') }}" class="btn-ghost-icon" aria-label="Back">
+    <a href="{{ url_for('social.messages_inbox') }}" class="btn-ghost-icon" aria-label="Back">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
     </a>
-    <a href="{{ url_for('profile', username=other.username) }}" style="flex-shrink:0">
+    <a href="{{ url_for('social.profile', username=other.username) }}" style="flex-shrink:0">
       <div class="avatar avatar-sm">
         {% if other.avatar_url %}<img src="{{ other.avatar_url }}" alt="">
         {% else %}{{ (other.display_name or other.username or '?')[0].upper() }}{% endif %}
@@ -261,7 +261,7 @@
         <span id="status-txt">checking…</span>
       </div>
     </div>
-    <a href="{{ url_for('profile', username=other.username) }}" class="btn btn-outline btn-sm" style="flex-shrink:0">Profile</a>
+    <a href="{{ url_for('social.profile', username=other.username) }}" class="btn btn-outline btn-sm" style="flex-shrink:0">Profile</a>
   </div>
 
   <!-- Messages -->
@@ -700,35 +700,56 @@ function lbClose() { document.getElementById('lb').classList.remove('open'); }
 window.lbOpen = lbOpen;
 window.lbClose = lbClose;
 
-/* ── Poll new messages ───────────────────────────────────────────────── */
-async function pollNew() {
-  try {
-    const r = await fetch('/api/messages/' + OTHER.username + '/poll?after=' + lastId);
-    const d = await r.json();
-    if (d.messages && d.messages.length) {
-      const atBot = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
-      d.messages.forEach(function(msg) {
-        if (msg.sender_id === ME) { lastId = Math.max(lastId, msg.id); return; }
-        appendMsg(msg);
-      });
-      if (atBot) scrollBot(true);
-    }
-  } catch (_) {}
-  pollTimer = setTimeout(pollNew, 2500);
-}
-pollTimer = setTimeout(pollNew, 2500);
+/* ── SSE: real-time message stream (replaces polling) ────────────────── */
+let _dmSrc = null;
 
-async function pollTyping() {
-  try {
-    const r = await fetch('/api/messages/' + OTHER.username + '/is-typing');
-    const d = await r.json();
-    const row = document.getElementById('typing-row');
-    if (d.typing && !typingShown) { row.style.display = 'flex'; typingShown = true; scrollBot(true); }
-    else if (!d.typing && typingShown) { row.style.display = 'none'; typingShown = false; }
-  } catch (_) {}
-}
-setInterval(pollTyping, 1500);
+function _startDmStream() {
+  if (_dmSrc) _dmSrc.close();
+  _dmSrc = new EventSource('/api/messages/' + OTHER.username + '/stream?after=' + lastId);
 
+  _dmSrc.addEventListener('messages', function(e) {
+    const d = JSON.parse(e.data);
+    if (!d.messages || !d.messages.length) return;
+    const atBot = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 80;
+    d.messages.forEach(function(msg) {
+      if (msg.sender_id === ME) { lastId = Math.max(lastId, msg.id); return; }
+      lastId = Math.max(lastId, msg.id);
+      appendMsg(msg);
+    });
+    if (atBot) scrollBot(true);
+  });
+
+  _dmSrc.onerror = function() {
+    // Browser auto-reconnects — update the after param so we don't re-fetch old messages
+    setTimeout(function() {
+      if (_dmSrc) { _dmSrc.close(); _startDmStream(); }
+    }, 3000);
+  };
+}
+_startDmStream();
+
+/* ── Typing indicator — kept as lightweight poll (1.5s, only while focused) */
+let _typingPoll = null;
+function _startTypingPoll() {
+  _typingPoll = setInterval(async function() {
+    try {
+      const r = await fetch('/api/messages/' + OTHER.username + '/is-typing');
+      const d = await r.json();
+      const row = document.getElementById('typing-row');
+      if (d.typing && !typingShown) { row.style.display = 'flex'; typingShown = true; scrollBot(true); }
+      else if (!d.typing && typingShown) { row.style.display = 'none'; typingShown = false; }
+    } catch (_) {}
+  }, 1500);
+}
+function _stopTypingPoll() {
+  if (_typingPoll) { clearInterval(_typingPoll); _typingPoll = null; }
+}
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) _stopTypingPoll(); else _startTypingPoll();
+});
+_startTypingPoll();
+
+/* ── Online status — single fetch on load, then updated by SSE presence ── */
 async function checkOnline() {
   try {
     const r = await fetch('/api/online/check/' + OTHER.username);
@@ -739,13 +760,12 @@ async function checkOnline() {
   } catch (_) {}
 }
 checkOnline();
-setInterval(checkOnline, 30000);
-
-fetch('/api/online/heartbeat', {method: 'POST'}).catch(function(){});
-setInterval(function() { fetch('/api/online/heartbeat', {method: 'POST'}).catch(function(){}); }, 30000);
+// Refresh online status every 60s (much less frequent than old 30s poll)
+setInterval(checkOnline, 60000);
 
 window.addEventListener('pagehide', function() {
-  if (pollTimer) clearTimeout(pollTimer);
+  if (_dmSrc) { _dmSrc.close(); _dmSrc = null; }
+  _stopTypingPoll();
   if (isRec) stopRec();
   if (curAudio) curAudio.pause();
 });

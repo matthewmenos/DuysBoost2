@@ -9,7 +9,7 @@
   <div class="feed-col">
     <!-- Mobile search bar (hidden on desktop via CSS) -->
     <div class="mobile-search-bar">
-      <a href="{{ url_for('explore') }}" class="mobile-search-link" aria-label="Search">
+      <a href="{{ url_for('social.explore') }}" class="mobile-search-link" aria-label="Search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <span>Search posts, people, tags…</span>
       </a>
@@ -62,13 +62,13 @@
 
     <!-- Feed tabs -->
     <div class="feed-tabs">
-      <a href="{{ url_for('feed', tab='for_you') }}"
+      <a href="{{ url_for('social.feed', tab='for_you') }}"
          class="feed-tab {% if tab=='for_you' %}active{% endif %}">For You</a>
-      <a href="{{ url_for('feed', tab='following') }}"
+      <a href="{{ url_for('social.feed', tab='following') }}"
          class="feed-tab {% if tab=='following' %}active{% endif %}">Following</a>
-      <a href="{{ url_for('channels_browse') }}"
+      <a href="{{ url_for('social.channels_browse') }}"
          class="feed-tab {% if request.endpoint=='channels_browse' %}active{% endif %}">📡 Channels</a>
-      <a href="{{ url_for('feed', tab='earn') }}"
+      <a href="{{ url_for('social.feed', tab='earn') }}"
          class="feed-tab earn-tab {% if tab=='earn' %}active{% endif %}">
         ⚡ Earn
       </a>
@@ -106,7 +106,7 @@
   <!-- Right sidebar -->
   <aside class="feed-sidebar">
     <!-- Search shortcut -->
-    <a href="{{ url_for('explore') }}" class="search-bar-link">
+    <a href="{{ url_for('social.explore') }}" class="search-bar-link">
       <div class="search-bar-fake">
         <span class="search-icon">🔍</span>
         <span class="text-muted">Search people &amp; posts…</span>
@@ -118,7 +118,7 @@
     <div class="sidebar-widget" id="wtf-widget" style="display:none">
       <div class="widget-title">👥 Who to follow</div>
       <div id="wtf-list"></div>
-      <a href="{{ url_for('explore') }}" class="text-accent text-sm mt-8" style="display:block">
+      <a href="{{ url_for('social.explore') }}" class="text-accent text-sm mt-8" style="display:block">
         Find more people →
       </a>
     </div>
@@ -128,7 +128,7 @@
     <div class="sidebar-widget" id="trending-widget" style="display:none">
       <div class="widget-title">🔥 Trending</div>
       <div id="trending-posts-list"></div>
-      <a href="{{ url_for('trending') }}" class="text-accent text-sm mt-8" style="display:block">
+      <a href="{{ url_for('social.trending') }}" class="text-accent text-sm mt-8" style="display:block">
         See all trending →
       </a>
     </div>
@@ -139,7 +139,7 @@
       <p class="text-sm text-muted" style="margin:6px 0 12px">
         Pay to surface any of your posts in the feed. Others earn by engaging.
       </p>
-      <a href="{{ url_for('my_boosts') }}" class="btn btn-primary btn-sm btn-block">My boosts →</a>
+      <a href="{{ url_for('boost.my_boosts') }}" class="btn btn-primary btn-sm btn-block">My boosts →</a>
     </div>
 
     <!-- Trending tags -->

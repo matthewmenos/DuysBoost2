@@ -5,7 +5,7 @@
 <div style="max-width:600px;margin:0 auto">
   <div class="card mb-12" style="padding:14px 20px">
     <div class="section-title">
-      <a href="{{ url_for('profile', username=target.username) }}"
+      <a href="{{ url_for('social.profile', username=target.username) }}"
          class="text-accent">@{{ target.username }}</a>'s {{ list_type }}
     </div>
   </div>
@@ -13,14 +13,14 @@
   {% for u in users %}
   <div class="card mb-8" style="padding:14px 18px">
     <div style="display:flex;align-items:center;gap:12px">
-      <a href="{{ url_for('profile', username=u.username) }}">
+      <a href="{{ url_for('social.profile', username=u.username) }}">
         <div class="avatar avatar-md">
           {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
           {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
         </div>
       </a>
       <div style="flex:1;min-width:0">
-        <a href="{{ url_for('profile', username=u.username) }}" class="fw-700">
+        <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700">
           {{ u.display_name or u.username }}
           {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
         </a>

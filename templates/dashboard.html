@@ -80,7 +80,7 @@
 <div class="card">
   <div class="section-header">
     <div class="section-title">📊 Campaign Analytics</div>
-    <a href="{{ url_for('analytics') }}" class="btn btn-outline btn-sm">View Full Analytics</a>
+    <a href="{{ url_for('boost.analytics') }}" class="btn btn-outline btn-sm">View Full Analytics</a>
   </div>
   
   {% if ads %}
@@ -138,7 +138,7 @@
     <div class="empty-icon">📊</div>
     <div class="empty-title">No analytics yet</div>
     <div class="empty-text">Create your first ad campaign to see performance metrics.</div>
-    <a href="{{ url_for('ads') }}" class="btn btn-primary btn-sm mt-16">Create Campaign</a>
+    <a href="{{ url_for('boost.ads') }}" class="btn btn-primary btn-sm mt-16">Create Campaign</a>
   </div>
   {% endif %}
 </div>
@@ -148,7 +148,7 @@
   <div class="card">
     <div class="section-header">
       <div class="section-title">My Ads</div>
-      <a href="{{ url_for('ads') }}" class="btn btn-outline btn-sm">View All</a>
+      <a href="{{ url_for('boost.ads') }}" class="btn btn-outline btn-sm">View All</a>
     </div>
     {% if ads %}
     {% for ad in ads %}
@@ -172,7 +172,7 @@
       <div class="empty-icon">📢</div>
       <div class="empty-title">No campaigns yet</div>
       <div class="empty-text">Create one to start gaining followers.</div>
-      <a href="{{ url_for('ads') }}" class="btn btn-primary btn-sm mt-16">Create Ad</a>
+      <a href="{{ url_for('boost.ads') }}" class="btn btn-primary btn-sm mt-16">Create Ad</a>
     </div>
     {% endif %}
   </div>
@@ -181,7 +181,7 @@
   <div class="card">
     <div class="section-header">
       <div class="section-title">Available Tasks</div>
-      <a href="{{ url_for('tasks') }}" class="btn btn-outline btn-sm">View All</a>
+      <a href="{{ url_for('boost.tasks') }}" class="btn btn-outline btn-sm">View All</a>
     </div>
     {% if available_ads %}
     {% for ad in available_ads[:5] %}
@@ -192,7 +192,7 @@
       </div>
       <div class="text-center" style="flex-shrink:0">
         <div class="fw-700 text-green" style="font-size:15px">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(ad.reward_per_task) }}</div>
-        <a href="{{ url_for('tasks') }}" class="btn btn-green btn-sm mt-8">Do it</a>
+        <a href="{{ url_for('boost.tasks') }}" class="btn btn-green btn-sm mt-8">Do it</a>
       </div>
     </div>
     {% endfor %}
@@ -316,7 +316,9 @@ async function loadActivity() {
     }
   }
 }
+// Initial load via REST, then SSE global stream pushes updates.
 loadActivity();
-setInterval(loadActivity, 10000);
+// 'activity' events from /api/stream (in main.js) update activity-feed live.
+// setInterval removed — SSE handles this now.
 </script>
 {% endblock %}

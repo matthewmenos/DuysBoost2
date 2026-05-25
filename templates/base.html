@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f7f7fb" media="(prefers-color-scheme: light)">
 <meta name="description" content="DUYS Boost — grow your social media with real engagement campaigns.">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}DUYS Boost{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -142,7 +143,7 @@
           <div class="notif-dropdown" id="notif-dropdown" role="menu">
             <div class="notif-header">
               <span>Notifications</span>
-              <a href="{{ url_for('notifications') }}" class="text-accent text-xs fw-700">See all →</a>
+              <a href="{{ url_for('wallet.notifications') }}" class="text-accent text-xs fw-700">See all →</a>
             </div>
             <div class="notif-list" id="notif-list">
               <div class="notif-item text-muted text-center" style="padding:28px 18px">Loading…</div>
@@ -161,7 +162,7 @@
     <nav class="bottom-nav {% if request.endpoint == 'message_thread' %}force-hidden{% endif %}" aria-label="Bottom navigation" id="bottom-nav">
 
       {# ── Home ─────────────────────────────────────────────────────────── #}
-      <a href="{{ url_for('feed') }}"
+      <a href="{{ url_for('social.feed') }}"
          class="bottom-nav-item {% if request.endpoint=='feed' %}active{% endif %}"
          aria-label="Home">
         <div class="bn-icon">
@@ -182,7 +183,7 @@
       </a>
 
       {# ── Wallet ───────────────────────────────────────────────────────── #}
-      <a href="{{ url_for('wallet') }}"
+      <a href="{{ url_for('wallet.wallet') }}"
          class="bottom-nav-item {% if request.endpoint=='wallet' %}active{% endif %}"
          aria-label="Wallet">
         <div class="bn-icon">
@@ -216,7 +217,7 @@
       </button>
 
       {# ── Chat / Messages ──────────────────────────────────────────────── #}
-      <a href="{{ url_for('messages_inbox') }}"
+      <a href="{{ url_for('social.messages_inbox') }}"
          class="bottom-nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
          aria-label="Messages"
          style="position:relative">
@@ -235,7 +236,7 @@
 
       {# ── Profile ─────────────────────────────────────────────────────── #}
       <a href="{% if current_user %}{{ url_for('social.profile', username=current_user.username) }}{% else %}{{ url_for('auth.login') }}{% endif %}"
-         class="bottom-nav-item {% if request.endpoint=='social.profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
+         class="bottom-nav-item {% if request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
          aria-label="Profile"
          style="position:relative">
         <div class="bn-icon">
@@ -406,6 +407,38 @@
   </div>
 </div>
 {% endif %}
+
+
+<script>
+/* ── CSRF: attach token to every fetch() POST automatically ─────────────── */
+(function () {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content;
+  if (!token) return;
+
+  const _origFetch = window.fetch;
+  window.fetch = function (url, opts = {}) {
+    const method = (opts.method || 'GET').toUpperCase();
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+      opts.headers = Object.assign({}, opts.headers, { 'X-CSRF-Token': token });
+    }
+    return _origFetch(url, opts);
+  };
+
+  /* Also patch XMLHttpRequest for any legacy XHR calls */
+  const _origOpen = XMLHttpRequest.prototype.open;
+  const _origSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    this._method = method;
+    return _origOpen.call(this, method, url, ...rest);
+  };
+  XMLHttpRequest.prototype.send = function (...args) {
+    if (['POST','PUT','PATCH','DELETE'].includes((this._method || '').toUpperCase())) {
+      this.setRequestHeader('X-CSRF-Token', token);
+    }
+    return _origSend.apply(this, args);
+  };
+})();
+</script>
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 

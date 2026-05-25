@@ -32,7 +32,7 @@
   <div class="card">
     <div class="section-header">
       <div class="section-title">💎 Your Tier</div>
-      <a href="{{ url_for('creator_setup') }}" class="btn btn-outline btn-sm">
+      <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-outline btn-sm">
         {{ 'Edit' if tier else 'Set up' }}
       </a>
     </div>
@@ -69,7 +69,7 @@
       <div class="empty-icon">💎</div>
       <div class="empty-title">No tier yet</div>
       <div class="empty-text">Set up a subscription tier to earn recurring income from your followers.</div>
-      <a href="{{ url_for('creator_setup') }}" class="btn btn-primary mt-16">Create tier →</a>
+      <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-primary mt-16">Create tier →</a>
     </div>
     {% endif %}
   </div>
@@ -79,21 +79,21 @@
     <div class="section-header">
       <div class="section-title">👥 Active Subscribers</div>
       {% if me.username %}
-      <a href="{{ url_for('subscriber_list', username=me.username) }}" class="btn btn-ghost btn-sm">See all</a>
+      <a href="{{ url_for('boost.subscriber_list', username=me.username) }}" class="btn btn-ghost btn-sm">See all</a>
       {% endif %}
     </div>
     {% if subscribers %}
     <div class="flex flex-col gap-12">
       {% for s in subscribers[:6] %}
       <div class="suggest-row">
-        <a href="{{ url_for('profile', username=s.username) }}">
+        <a href="{{ url_for('social.profile', username=s.username) }}">
           <div class="avatar avatar-sm">
             {% if s.avatar_url %}<img src="{{ s.avatar_url }}" alt="">
             {% else %}{{ (s.display_name or s.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div class="suggest-info">
-          <a href="{{ url_for('profile', username=s.username) }}" class="fw-700 suggest-name">
+          <a href="{{ url_for('social.profile', username=s.username) }}" class="fw-700 suggest-name">
             {{ s.display_name or s.username }}
           </a>
           <div class="text-xs text-muted">{{ s.tier_title }} · ${{ '%.2f'|format(s.price_usd) }}/mo · since {{ s.started_at[:10] }}</div>
@@ -135,14 +135,14 @@
               {% if t.sender_avatar %}<img src="{{ t.sender_avatar }}" alt="">
               {% else %}{{ (t.sender_name or '?')[0].upper() }}{% endif %}
             </div>
-            <a href="{{ url_for('profile', username=t.sender_name) }}" class="fw-600">@{{ t.sender_name }}</a>
+            <a href="{{ url_for('social.profile', username=t.sender_name) }}" class="fw-600">@{{ t.sender_name }}</a>
           </div>
         </td>
         <td class="fw-800 text-green">${{ '%.2f'|format(t.amount) }}</td>
         <td class="text-muted text-sm">{{ t.message or '—' }}</td>
         <td class="col-hide-xs text-muted text-xs">
           {% if t.post_id %}
-          <a href="{{ url_for('post_detail', post_id=t.post_id) }}" class="text-accent">View →</a>
+          <a href="{{ url_for('social.post_detail', post_id=t.post_id) }}" class="text-accent">View →</a>
           {% else %}—{% endif %}
         </td>
         <td class="col-hide-sm text-muted text-xs">{{ t.created_at[:10] }}</td>

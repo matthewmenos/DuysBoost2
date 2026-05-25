@@ -103,7 +103,7 @@
   <!-- Header -->
   <div style="display:flex;flex-direction:column;flex:1;min-height:0;min-width:0">
     <div class="grp-hdr">
-      <a href="{{ url_for('groups_list') }}" class="btn-ghost-icon" aria-label="Back">
+      <a href="{{ url_for('social.groups_list') }}" class="btn-ghost-icon" aria-label="Back">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
       </a>
       <div class="grp-av-sm" style="width:36px;height:36px;border-radius:10px;font-size:14px">
@@ -341,20 +341,30 @@ function appendMsg(msg){
   lastId=Math.max(lastId,msg.id);
 }
 
-// Poll new messages
-async function pollNew(){
-  try{
-    const r=await fetch('/api/group/'+GRP_SLUG+'/poll?after='+lastId);
-    const d=await r.json();
-    if(d.messages&&d.messages.length){
-      const atBot=msgsEl.scrollHeight-msgsEl.scrollTop-msgsEl.clientHeight<80;
-      d.messages.forEach(function(m){if(m.sender_id===ME){lastId=Math.max(lastId,m.id);return;}appendMsg(m);});
-      if(atBot) scrollBot(true);
-    }
-  }catch(_){}
-  pollTimer=setTimeout(pollNew,2500);
+// SSE: real-time group message stream (replaces polling)
+let _grpSrc = null;
+function _startGroupStream() {
+  if (_grpSrc) _grpSrc.close();
+  _grpSrc = new EventSource('/api/group/' + GRP_SLUG + '/stream?after=' + lastId);
+
+  _grpSrc.addEventListener('messages', function(e) {
+    const d = JSON.parse(e.data);
+    if (!d.messages || !d.messages.length) return;
+    const atBot = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 80;
+    d.messages.forEach(function(m) {
+      if (m.sender_id === ME) { lastId = Math.max(lastId, m.id); return; }
+      appendMsg(m);
+    });
+    if (atBot) scrollBot(true);
+  });
+
+  _grpSrc.onerror = function() {
+    setTimeout(function() {
+      if (_grpSrc) { _grpSrc.close(); _startGroupStream(); }
+    }, 3000);
+  };
 }
-if(IS_MEMBER) pollTimer=setTimeout(pollNew,2500);
+if (IS_MEMBER) _startGroupStream();
 
 // Voice recording
 let curAudio=null;
@@ -402,6 +412,6 @@ function toggleMembers(){
   panel.classList.toggle('open');
 }
 
-window.addEventListener('pagehide',function(){if(pollTimer)clearTimeout(pollTimer);if(isRec)stopRec();if(curAudio)curAudio.pause();});
+window.addEventListener('pagehide',function(){if(_grpSrc){_grpSrc.close();_grpSrc=null;}if(isRec)stopRec();if(curAudio)curAudio.pause();});
 </script>
 {% endblock %}

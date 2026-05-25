@@ -9,7 +9,7 @@
   {% if p.repost_of_id and not p.body %}
   <div class="post-repost-label">
     <span class="icon-sm">🔁</span>
-    <a href="{{ url_for('profile', username=a.username) }}" class="text-muted hover-accent">
+    <a href="{{ url_for('social.profile', username=a.username) }}" class="text-muted hover-accent">
       {{ a.display_name or a.username }} reposted
     </a>
   </div>
@@ -18,7 +18,7 @@
   <div class="post-inner">
     {# Avatar #}
     <div class="post-avatar-col">
-      <a href="{{ url_for('profile', username=a.username) }}">
+      <a href="{{ url_for('social.profile', username=a.username) }}">
         <div class="avatar avatar-md">
           {% if a.avatar_url %}<img src="{{ a.avatar_url }}" alt="{{ a.username }}" loading="lazy">
           {% else %}{{ (a.display_name or a.username or '?')[0].upper() }}{% endif %}
@@ -32,11 +32,11 @@
       {# Header #}
       <div class="post-header">
         <div class="post-author-info">
-          <a href="{{ url_for('profile', username=a.username) }}" class="post-display-name">
+          <a href="{{ url_for('social.profile', username=a.username) }}" class="post-display-name">
             {{ a.display_name or a.username }}
             {% if a.is_verified %}<span class="verified-badge" title="Verified">✓</span>{% endif %}
           </a>
-          <a href="{{ url_for('profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
+          <a href="{{ url_for('social.profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
           <span class="post-dot" aria-hidden="true">·</span>
           <time class="post-time" datetime="{{ p.created_at }}" title="{{ p.created_at }}">
             {{ p.created_at[:10] }}
@@ -53,7 +53,7 @@
             {% if current_user and (current_user.id == p.user_id or current_user.is_admin) %}
             <button class="post-menu-item danger" onclick="deletePost({{ p.id }})">🗑 Delete post</button>
             {% endif %}
-            <a class="post-menu-item" href="{{ url_for('post_detail', post_id=p.id) }}">🔗 View post</a>
+            <a class="post-menu-item" href="{{ url_for('social.post_detail', post_id=p.id) }}">🔗 View post</a>
             <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
           </div>
         </div>
@@ -62,7 +62,7 @@
       {# Reply context #}
       {% if p.reply_to_username %}
       <div class="post-reply-context">
-        Replying to <a href="{{ url_for('profile', username=p.reply_to_username) }}"
+        Replying to <a href="{{ url_for('social.profile', username=p.reply_to_username) }}"
                        class="text-accent">@{{ p.reply_to_username }}</a>
       </div>
       {% endif %}
@@ -118,7 +118,7 @@
 
       {# Quoted repost #}
       {% if p.repost_of %}
-      <a href="{{ url_for('post_detail', post_id=p.repost_of.id) }}" class="post-quote">
+      <a href="{{ url_for('social.post_detail', post_id=p.repost_of.id) }}" class="post-quote">
         <div class="post-quote-header">
           <div class="avatar avatar-xs">
             {% if p.repost_of.author.avatar_url %}<img src="{{ p.repost_of.author.avatar_url }}" alt="">
@@ -186,7 +186,7 @@
       <div class="post-locked-icon">🔒</div>
       <div class="post-locked-title">Subscribers only</div>
       <div class="post-locked-sub">Subscribe to @{{ a.username }} to unlock.</div>
-      <a href="{{ url_for('profile', username=a.username) }}" class="btn btn-primary btn-sm">View subscription →</a>
+      <a href="{{ url_for('social.profile', username=a.username) }}" class="btn btn-primary btn-sm">View subscription →</a>
     </div>
   </div>
   {% endif %}

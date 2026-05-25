@@ -63,7 +63,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           {% if is_own %}
-            <a href="{{ url_for('edit_profile') }}" class="btn btn-outline btn-sm">Edit profile</a>
+            <a href="{{ url_for('social.edit_profile') }}" class="btn btn-outline btn-sm">Edit profile</a>
           {% else %}
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn {% if is_following %}btn-ghost{% else %}btn-primary{% endif %} btn-sm"
@@ -72,7 +72,7 @@
                       onclick="profileFollow('{{ target.username }}', this)">
                 {{ 'Following' if is_following else 'Follow' }}
               </button>
-              <a href="{{ url_for('message_thread', username=target.username) }}"
+              <a href="{{ url_for('social.message_thread', username=target.username) }}"
                  class="btn btn-outline btn-sm" title="Send message">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle">
@@ -106,11 +106,11 @@
       </div>
 
       <div class="profile-stats">
-        <a href="{{ url_for('following_list', username=target.username) }}" class="profile-stat">
+        <a href="{{ url_for('social.following_list', username=target.username) }}" class="profile-stat">
           <span class="profile-stat-val">{{ target.following_count or 0 }}</span>
           <span class="profile-stat-label">Following</span>
         </a>
-        <a href="{{ url_for('follower_list', username=target.username) }}" class="profile-stat">
+        <a href="{{ url_for('social.follower_list', username=target.username) }}" class="profile-stat">
           <span class="profile-stat-val">{{ target.follower_count or 0 }}</span>
           <span class="profile-stat-label">Followers</span>
         </a>
@@ -123,14 +123,14 @@
 
     <!-- Tabs -->
     <div class="profile-tabs">
-      <a href="{{ url_for('profile', username=target.username, tab='posts') }}"
+      <a href="{{ url_for('social.profile', username=target.username, tab='posts') }}"
          class="profile-tab {% if tab=='posts' %}active{% endif %}">Posts</a>
-      <a href="{{ url_for('profile', username=target.username, tab='replies') }}"
+      <a href="{{ url_for('social.profile', username=target.username, tab='replies') }}"
          class="profile-tab {% if tab=='replies' %}active{% endif %}">Replies</a>
-      <a href="{{ url_for('profile', username=target.username, tab='likes') }}"
+      <a href="{{ url_for('social.profile', username=target.username, tab='likes') }}"
          class="profile-tab {% if tab=='likes' %}active{% endif %}">Likes</a>
       {% if tier %}
-      <a href="{{ url_for('profile', username=target.username, tab='exclusive') }}"
+      <a href="{{ url_for('social.profile', username=target.username, tab='exclusive') }}"
          class="profile-tab {% if tab=='exclusive' %}active{% endif %}">🔒 Exclusive</a>
       {% endif %}
     </div>
@@ -190,11 +190,11 @@
     <div class="sidebar-widget">
       <div class="widget-title">💎 Creator Tools</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <a href="{{ url_for('creator_setup') }}" class="btn btn-outline btn-sm btn-block">
+        <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-outline btn-sm btn-block">
           {{ '✏️ Edit tier' if tier else '+ Create subscription tier' }}
         </a>
-        <a href="{{ url_for('creator_earnings') }}" class="btn btn-ghost btn-sm btn-block">📊 Earnings dashboard</a>
-        <a href="{{ url_for('subscriber_list', username=target.username) }}" class="btn btn-ghost btn-sm btn-block">
+        <a href="{{ url_for('boost.creator_earnings') }}" class="btn btn-ghost btn-sm btn-block">📊 Earnings dashboard</a>
+        <a href="{{ url_for('boost.subscriber_list', username=target.username) }}" class="btn btn-ghost btn-sm btn-block">
           👥 Subscribers ({{ target.subscriber_count or 0 }})
         </a>
       </div>
@@ -221,7 +221,7 @@
           {% if t.avatar_url %}<img src="{{ t.avatar_url }}" alt="">
           {% else %}{{ (t.username or '?')[0].upper() }}{% endif %}
         </div>
-        <a href="{{ url_for('profile', username=t.username) }}" class="suggest-info" style="flex:1">
+        <a href="{{ url_for('social.profile', username=t.username) }}" class="suggest-info" style="flex:1">
           <span class="fw-600">@{{ t.username }}</span>
         </a>
         <span class="text-green fw-700 text-sm">${{ '%.2f'|format(t.amount) }}</span>
@@ -235,14 +235,14 @@
       <div class="widget-title">Followers you may know</div>
       {% for f in followers[:3] %}
       <div class="suggest-row">
-        <a href="{{ url_for('profile', username=f.username) }}" class="suggest-avatar">
+        <a href="{{ url_for('social.profile', username=f.username) }}" class="suggest-avatar">
           <div class="avatar avatar-sm">
             {% if f.avatar_url %}<img src="{{ f.avatar_url }}" alt="">
             {% else %}{{ (f.display_name or f.username or '?')[0].upper() }}{% endif %}
           </div>
         </a>
         <div class="suggest-info">
-          <a href="{{ url_for('profile', username=f.username) }}" class="fw-700 suggest-name">
+          <a href="{{ url_for('social.profile', username=f.username) }}" class="fw-700 suggest-name">
             {{ f.display_name or f.username }}
           </a>
           <div class="text-xs text-muted">@{{ f.username }}</div>
