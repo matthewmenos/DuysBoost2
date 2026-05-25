@@ -61,7 +61,7 @@ def feed():
     else:
         ranked_ids = get_personalized_post_ids(db, uid, limit=per, offset=off)
         if ranked_ids:
-            ph   = ','.join('%s' * len(ranked_ids))
+            ph   = ','.join(['%s'] * len(ranked_ids))
             rows = db.execute(f'SELECT * FROM posts WHERE id IN ({ph})', ranked_ids).fetchall()
             row_map = {r['id']: r for r in rows}
             rows    = [row_map[pid] for pid in ranked_ids if pid in row_map]
@@ -554,7 +554,7 @@ def _who_to_follow(db, uid, limit=8):
 
     if len(rows) < limit:
         existing_ids = [r['id'] for r in rows] + [uid]
-        ph    = ','.join('%s' * len(existing_ids))
+        ph    = ','.join(['%s'] * len(existing_ids))
         extra = db.execute(
             f'SELECT id,username,display_name,avatar_url,is_verified,follower_count,bio,'
             f'subscriber_count, 0 AS mutual_count FROM users WHERE id NOT IN ({ph}) '

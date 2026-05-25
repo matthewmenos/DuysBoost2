@@ -719,7 +719,7 @@ def init_db():
     db.commit()
     cur.close()
     db.close()
-    print('PostgreSQL schema initialised.')
+    print('✅ PostgreSQL schema initialised.')
 
 
 if __name__ == '__main__':

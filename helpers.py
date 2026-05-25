@@ -330,7 +330,7 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
     results = {}
 
     if following_ids:
-        ph = ','.join('%s' * len(following_ids))
+        ph = ','.join(['%s'] * len(following_ids))
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE user_id IN ({ph}) AND reply_to_id IS NULL '
@@ -343,7 +343,7 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
                 results[r['id']] = float(r['score'] or 0) * 1.6
 
     if following_ids:
-        ph = ','.join('%s' * len(following_ids))
+        ph = ','.join(['%s'] * len(following_ids))
         rows = db.execute(
             f'SELECT DISTINCT p.id, p.score FROM posts p '
             f'JOIN post_likes l ON l.post_id=p.id '
@@ -359,7 +359,7 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
     need = max(0, limit + offset - len(results))
     if need > 0:
         known = list(results.keys()) + list(exclude) + [0]
-        ph = ','.join('%s' * len(known))
+        ph = ','.join(['%s'] * len(known))
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE id NOT IN ({ph}) AND reply_to_id IS NULL AND user_id != %s '
