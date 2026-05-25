@@ -113,7 +113,9 @@ CREATE TABLE IF NOT EXISTS users (
     online_at            TEXT,
     show_online          INTEGER DEFAULT 1,
     allow_post_saves     INTEGER DEFAULT 1,
-    created_at           TEXT    DEFAULT (datetime('now'))
+    created_at           TEXT    DEFAULT (datetime('now')),
+    is_banned            INTEGER DEFAULT 0,
+    ban_reason           TEXT
 );
 
 -- ── Posts ────────────────────────────────────────────────────────────────────
@@ -424,6 +426,60 @@ CREATE TABLE IF NOT EXISTS stories (
     created_at TEXT    DEFAULT (datetime('now'))
 );
 
+
+-- ── Admin: Reports ───────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    reporter_id INTEGER NOT NULL,
+    target_type TEXT    NOT NULL,   -- 'post' | 'user' | 'message'
+    target_id   INTEGER NOT NULL,
+    reason      TEXT    NOT NULL,
+    details     TEXT,
+    status      TEXT    DEFAULT 'open',   -- open | reviewed | dismissed | actioned
+    reviewed_by INTEGER,
+    reviewed_at TEXT,
+    action_taken TEXT,
+    created_at  TEXT    DEFAULT (datetime('now'))
+);
+
+-- ── Admin: Bans / Suspensions ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS user_bans (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL UNIQUE,
+    banned_by   INTEGER NOT NULL,
+    reason      TEXT    NOT NULL,
+    expires_at  TEXT,               -- NULL = permanent
+    is_active   INTEGER DEFAULT 1,
+    created_at  TEXT    DEFAULT (datetime('now')),
+    lifted_at   TEXT,
+    lifted_by   INTEGER
+);
+
+-- ── Admin: Reviews (app/platform reviews) ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS platform_reviews (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    rating      INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    title       TEXT,
+    body        TEXT,
+    status      TEXT    DEFAULT 'published',   -- published | hidden | flagged
+    is_featured INTEGER DEFAULT 0,
+    admin_reply TEXT,
+    created_at  TEXT    DEFAULT (datetime('now')),
+    updated_at  TEXT
+);
+
+-- ── Admin: Audit log ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id    INTEGER NOT NULL,
+    action      TEXT    NOT NULL,
+    target_type TEXT,
+    target_id   INTEGER,
+    details     TEXT,
+    ip_address  TEXT,
+    created_at  TEXT    DEFAULT (datetime('now'))
+);
 -- ── Search history ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS search_history (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

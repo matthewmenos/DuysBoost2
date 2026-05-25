@@ -1,0 +1,102 @@
+{% extends "admin/base.html" %}
+{% block title %}Reports — Admin{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block content %}
+<div class="adm-card">
+  <div class="adm-filters">
+    <div class="adm-tabs">
+      {% for s in ['open','reviewed','dismissed','actioned'] %}
+      <a href="{{ url_for('admin.admin_reports', status=s) }}"
+         class="adm-tab {% if status==s %}active{% endif %}">
+        {{ s.capitalize() }} <span class="cnt">({{ counts[s] }})</span>
+      </a>
+      {% endfor %}
+    </div>
+    <span style="font-size:12px;color:var(--muted)">{{ total }} total</span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="adm-table">
+      <thead>
+        <tr><th>ID</th><th>Reporter</th><th>Target</th><th>Reason</th><th>Status</th><th>Date</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr id="report-row-{{ r.id }}">
+          <td style="font-size:12px;color:var(--muted)">#{{ r.id }}</td>
+          <td>
+            <div class="adm-user-cell">
+              <div class="adm-avatar" style="width:26px;height:26px;font-size:10px">
+                {% if r.reporter_avatar %}<img src="{{ r.reporter_avatar }}" alt="">
+                {% else %}{{ (r.reporter_name or '?')[0].upper() }}{% endif %}
+              </div>
+              <span style="font-size:12.5px">@{{ r.reporter_name }}</span>
+            </div>
+          </td>
+          <td>
+            <span class="badge badge-pending">{{ r.target_type }}</span>
+            <span style="font-size:12px;color:var(--muted)">#{{ r.target_id }}</span>
+          </td>
+          <td style="max-width:200px">
+            <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                 title="{{ r.details or '' }}">{{ r.reason }}</div>
+          </td>
+          <td>
+            <span class="badge badge-{{ 'active' if r.status=='actioned' else ('pending' if r.status=='open' else 'completed') }}">
+              {{ r.status }}</span>
+          </td>
+          <td style="font-size:12px;color:var(--muted)">{{ (r.created_at or '')[:10] }}</td>
+          <td>
+            {% if r.status == 'open' %}
+            <div class="actions" style="flex-wrap:wrap;gap:4px">
+              <button class="adm-btn" style="font-size:11px"
+                      onclick="resolveReport({{ r.id }},'dismiss')">Dismiss</button>
+              <button class="adm-btn" style="font-size:11px;color:var(--yellow)"
+                      onclick="resolveReport({{ r.id }},'warn')">Warn</button>
+              <button class="adm-btn danger" style="font-size:11px"
+                      onclick="resolveReport({{ r.id }},'delete')">Delete</button>
+              <button class="adm-btn danger" style="font-size:11px"
+                      onclick="resolveReport({{ r.id }},'ban')">Ban</button>
+            </div>
+            {% else %}
+            <span style="font-size:12px;color:var(--muted)">{{ r.action_taken or '—' }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">
+          ✅ No {{ status }} reports.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% set pages = (total // per) + (1 if total % per else 0) %}
+  {% if pages > 1 %}
+  <div class="adm-pagination">
+    <a href="{{ url_for('admin.admin_reports', status=status, page=page-1) }}"
+       class="adm-page-btn {% if page<=1 %}disabled{% endif %}">← Prev</a>
+    <span style="font-size:12.5px;color:var(--muted)">Page {{ page }} / {{ pages }}</span>
+    <a href="{{ url_for('admin.admin_reports', status=status, page=page+1) }}"
+       class="adm-page-btn {% if page>=pages %}disabled{% endif %}">Next →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function resolveReport(id, action) {
+  let note = '';
+  if (['warn','ban'].includes(action)) {
+    note = prompt(`Note for ${action} action (shown to user):`);
+    if (note === null) return;
+  } else if (action === 'delete') {
+    if (!confirm('Delete the reported content? This cannot be undone.')) return;
+  }
+  const d = await api(`/admin/report/${id}/action`, { action, note });
+  if (d.success) {
+    document.getElementById('report-row-' + id)?.remove();
+    showToast('✅ Report actioned');
+  } else showToast(d.error || 'Failed.', 'error');
+}
+</script>
+{% endblock %}

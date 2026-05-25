@@ -1,0 +1,187 @@
+{% extends "admin/base.html" %}
+{% block title %}Overview — Admin{% endblock %}
+{% block page_title %}Overview{% endblock %}
+
+{% block content %}
+
+<!-- Stats -->
+<div class="adm-stats">
+  <div class="adm-stat">
+    <div class="adm-stat-label">Total Users</div>
+    <div class="adm-stat-value cyan">{{ total_users }}</div>
+    <div class="adm-stat-sub">{{ active_users }} active this week</div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Banned</div>
+    <div class="adm-stat-value red">{{ banned_users }}</div>
+    <div class="adm-stat-sub">of {{ total_users }} total</div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Total Posts</div>
+    <div class="adm-stat-value cyan">{{ total_posts }}</div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Active Ads</div>
+    <div class="adm-stat-value">{{ total_ads }}</div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Total Volume</div>
+    <div class="adm-stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(total_vol) }}</div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Pending Withdrawals</div>
+    <div class="adm-stat-value {{ 'red' if pending_wdrs > 0 else '' }}">{{ pending_wdrs }}</div>
+    <div class="adm-stat-sub"><a href="{{ url_for('admin.admin_withdrawals') }}" style="color:inherit">View all</a></div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Open Reports</div>
+    <div class="adm-stat-value {{ 'red' if open_reports > 0 else '' }}">{{ open_reports }}</div>
+    <div class="adm-stat-sub"><a href="{{ url_for('admin.admin_reports') }}" style="color:inherit">Review</a></div>
+  </div>
+  <div class="adm-stat">
+    <div class="adm-stat-label">Avg Rating</div>
+    <div class="adm-stat-value yellow">{{ avg_rating }}⭐</div>
+    <div class="adm-stat-sub">{{ total_reviews }} reviews</div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">📈 New signups (7 days)</span>
+    </div>
+    <div style="padding:16px">
+      <canvas id="signup-chart" height="160"></canvas>
+    </div>
+  </div>
+
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">💰 Deposits (7 days)</span>
+    </div>
+    <div style="padding:16px">
+      <canvas id="revenue-chart" height="160"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bottom row -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+
+  <!-- Recent users -->
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">👥 New Users</span>
+      <a href="{{ url_for('admin.admin_users') }}" class="adm-btn">View all</a>
+    </div>
+    {% for u in recent_users %}
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
+      <div class="adm-avatar" style="width:30px;height:30px;font-size:12px">
+        {% if u.avatar_url %}<img src="{{ u.avatar_url }}" alt="">
+        {% else %}{{ (u.display_name or u.username or '?')[0].upper() }}{% endif %}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {{ u.display_name or u.username }}
+          {% if u.is_banned %}<span class="badge badge-failed" style="font-size:9px">banned</span>{% endif %}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">@{{ u.username }}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);white-space:nowrap">
+        {{ u.created_at[:10] }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Open reports -->
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">🚩 Open Reports</span>
+      <a href="{{ url_for('admin.admin_reports') }}" class="adm-btn">View all</a>
+    </div>
+    {% if recent_reports %}
+      {% for r in recent_reports %}
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px">
+          <span class="badge badge-pending">{{ r.target_type }}</span>
+          #{{ r.target_id }}
+        </div>
+        <div style="font-size:12px;color:var(--muted)">{{ r.reason[:50] }}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">
+          by @{{ r.reporter_name }} · {{ r.created_at[:10] }}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+        ✅ No open reports
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Pending withdrawals -->
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">⏳ Pending Withdrawals</span>
+      <a href="{{ url_for('admin.admin_withdrawals') }}" class="adm-btn">View all</a>
+    </div>
+    {% if recent_wdrs %}
+      {% for w in recent_wdrs %}
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:700;font-size:13px">@{{ w.username }}</span>
+          <span style="font-weight:700;color:var(--green);font-size:13px">
+            {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount) }}
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          {{ w.method }} · {{ w.created_at[:10] }}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+        ✅ No pending withdrawals
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const signupData  = {{ signup_chart  | tojson }};
+const revenueData = {{ revenue_chart | tojson }};
+const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7f5af0';
+
+function makeChart(id, data, label, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.day),
+      datasets: [{ label, data: data.map(d => d.cnt ?? d.total ?? 0),
+        backgroundColor: color + '33', borderColor: color, borderWidth: 2,
+        borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#888', font: { size: 11 } } },
+        y: { grid: { color: 'rgba(128,128,128,.1)' }, ticks: { color: '#888', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+makeChart('signup-chart',  signupData,  'New Users', '#7f5af0');
+makeChart('revenue-chart', revenueData, 'Deposits',  '#2cb67d');
+</script>
+{% endblock %}

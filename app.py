@@ -134,14 +134,30 @@ def create_app() -> Flask:
 
     @app.context_processor
     def inject_user():
-        return {
-            'current_user':  get_current_user(),
+        user = get_current_user()
+        ctx  = {
+            'current_user':  user,
             'CURRENCY_SYMBOL': CURRENCY_SYMBOL,
             'CURRENCY_CODE':   CURRENCY_CODE,
             'CRYPTO_NETWORKS': CRYPTO_NETWORKS,
             'CRYPTO_WALLETS':  CRYPTO_WALLETS,
             'CRYPTO_ENABLED':  any(CRYPTO_WALLETS.values()),
+            'open_report_count':  0,
+            'pending_wdr_count':  0,
         }
+        # For admin pages, inject badge counts
+        if user and user['is_admin']:
+            try:
+                db = get_db()
+                ctx['open_report_count'] = db.execute(
+                    "SELECT COUNT(*) FROM reports WHERE status='open'"
+                ).fetchone()[0]
+                ctx['pending_wdr_count'] = db.execute(
+                    "SELECT COUNT(*) FROM withdrawals WHERE status='pending'"
+                ).fetchone()[0]
+            except Exception:
+                pass
+        return ctx
 
     # ── Blueprints ────────────────────────────────────────────────────────────
     from blueprints.auth    import bp as auth_bp

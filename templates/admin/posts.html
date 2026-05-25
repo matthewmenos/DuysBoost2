@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+{% block title %}Posts — Admin{% endblock %}
+{% block page_title %}Posts{% endblock %}
+{% block content %}
+<div class="adm-card">
+  <div class="adm-filters">
+    <form method="get" class="adm-search">
+      <input class="adm-form-input" name="q" value="{{ q }}" placeholder="Search post content…">
+      <input type="hidden" name="flagged" value="{{ '1' if flagged else '0' }}">
+    </form>
+    <a href="{{ url_for('admin.admin_posts') }}"
+       class="adm-tab {% if not flagged %}active{% endif %}">All Posts</a>
+    <a href="{{ url_for('admin.admin_posts', flagged='1') }}"
+       class="adm-tab {% if flagged %}active{% endif %}">🚩 Flagged</a>
+    <span style="font-size:12px;color:var(--muted)">{{ total }} posts</span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="adm-table">
+      <thead><tr><th>#</th><th>Author</th><th>Content</th><th>Likes</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for p in posts %}
+        <tr id="post-row-{{ p.id }}">
+          <td style="color:var(--muted);font-size:12px">{{ p.id }}</td>
+          <td>
+            <div class="adm-user-cell">
+              <div class="adm-avatar" style="width:28px;height:28px;font-size:11px">
+                {% if p.avatar_url %}<img src="{{ p.avatar_url }}" alt="">
+                {% else %}{{ (p.username or '?')[0].upper() }}{% endif %}
+              </div>
+              <a href="{{ url_for('admin.admin_user_detail', user_id=p.user_id) }}"
+                 style="font-size:12.5px;font-weight:700;color:var(--text)">@{{ p.username }}</a>
+            </div>
+          </td>
+          <td style="max-width:340px">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">
+              {% if p.media_url %}📸 {% endif %}{{ p.body or '(media-only)' }}
+            </div>
+          </td>
+          <td>{{ p.like_count or 0 }}</td>
+          <td style="font-size:12px;color:var(--muted)">{{ (p.created_at or '')[:10] }}</td>
+          <td>
+            <div class="actions">
+              <a href="{{ url_for('social.post_detail', post_id=p.id) }}" target="_blank"
+                 class="adm-btn" style="font-size:11px">View</a>
+              <button class="adm-btn danger" style="font-size:11px"
+                      onclick="deletePost({{ p.id }})">Delete</button>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted)">No posts found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% set pages = (total // per) + (1 if total % per else 0) %}
+  {% if pages > 1 %}
+  <div class="adm-pagination">
+    <a href="{{ url_for('admin.admin_posts', q=q, flagged='1' if flagged else '0', page=page-1) }}"
+       class="adm-page-btn {% if page<=1 %}disabled{% endif %}">← Prev</a>
+    <span style="font-size:12.5px;color:var(--muted)">Page {{ page }} / {{ pages }}</span>
+    <a href="{{ url_for('admin.admin_posts', q=q, flagged='1' if flagged else '0', page=page+1) }}"
+       class="adm-page-btn {% if page>=pages %}disabled{% endif %}">Next →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function deletePost(id) {
+  if (!confirm('Delete this post?')) return;
+  const d = await api(`/admin/post/${id}/delete`, {});
+  if (d.success) { document.getElementById('post-row-'+id)?.remove(); showToast('✅ Deleted'); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+</script>
+{% endblock %}

@@ -56,6 +56,8 @@
             <a class="post-menu-item" href="{{ url_for('social.post_detail', post_id=p.id) }}">🔗 View post</a>
             <button class="post-menu-item" onclick="sharePost({{ p.id }}, {{ (p.body or '') | tojson }})">📤 Share post</button>
             <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
+            <button class="post-menu-item" style="color:var(--red,#e53e3e)"
+                    onclick="reportPost({{ p.id }})">🚩 Report post</button>
           </div>
         </div>
       </div>

@@ -1,0 +1,389 @@
+{% extends "admin/base.html" %}
+{% block title %}User: {{ user.username }} — Admin{% endblock %}
+{% block page_title %}User: @{{ user.username }}{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
+
+  <!-- Left: profile card + actions -->
+  <div>
+    <div class="adm-card" style="margin-bottom:16px">
+      <div style="padding:20px;text-align:center;border-bottom:1px solid var(--border)">
+        <div class="adm-avatar" style="width:72px;height:72px;font-size:28px;margin:0 auto 12px">
+          {% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="">
+          {% else %}{{ (user.display_name or user.username or '?')[0].upper() }}{% endif %}
+        </div>
+        <div style="font-weight:800;font-size:17px">{{ user.display_name or user.username }}</div>
+        <div style="color:var(--muted);font-size:13px">@{{ user.username }}</div>
+        <div style="margin-top:8px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+          {% if user.is_admin %}<span class="badge badge-active">🛡 Admin</span>{% endif %}
+          {% if user.is_verified %}<span class="badge badge-active">✅ Verified</span>{% endif %}
+          {% if user.is_banned %}<span class="badge badge-failed">🚫 Banned</span>{% endif %}
+        </div>
+      </div>
+      <div style="padding:14px 18px">
+        {% for label, value, color in [
+          ('Balance', CURRENCY_SYMBOL ~ '%.2f'|format(user.balance or 0), 'var(--green)'),
+          ('Posts', stats.post_count, None),
+          ('Followers', stats.follower_count, None),
+          ('Following', stats.following_count, None),
+          ('Total earned', CURRENCY_SYMBOL ~ '%.2f'|format(stats.total_earned or 0), 'var(--green)'),
+          ('Total spent', CURRENCY_SYMBOL ~ '%.2f'|format(stats.total_spent or 0), None),
+        ] %}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;
+                    border-bottom:1px solid var(--border);font-size:13px">
+          <span style="color:var(--muted)">{{ label }}</span>
+          <span style="font-weight:700{% if color %};color:{{ color }}{% endif %}">{{ value }}</span>
+        </div>
+        {% endfor %}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px">
+          <span style="color:var(--muted)">Joined</span>
+          <span>{{ (user.created_at or '')[:10] }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="adm-card">
+      <div class="adm-card-header"><span class="adm-card-title">⚡ Actions</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:8px">
+        <button class="adm-btn" style="justify-content:center"
+                onclick="openModal('adjust-modal')">💰 Adjust Balance</button>
+        <button class="adm-btn" style="justify-content:center"
+                onclick="openModal('notify-modal')">🔔 Send Notification</button>
+        <button class="adm-btn" style="justify-content:center"
+                onclick="doToggleVerify()">
+          {{ '❌ Remove verify' if user.is_verified else '✅ Verify account' }}
+        </button>
+        <button class="adm-btn" style="justify-content:center"
+                onclick="openModal('pw-modal')">🔑 Reset Password</button>
+        {% if user.is_banned %}
+        <button class="adm-btn success" style="justify-content:center"
+                onclick="doUnban()">🔓 Lift Ban</button>
+        {% else %}
+        <button class="adm-btn danger" style="justify-content:center"
+                onclick="openModal('ban-modal')">🚫 Ban User</button>
+        {% endif %}
+        <button class="adm-btn danger" style="justify-content:center"
+                onclick="doDeleteUser()">🗑️ Delete Account</button>
+        <a href="{{ url_for('social.profile', username=user.username) }}"
+           target="_blank" class="adm-btn" style="justify-content:center">
+          🔗 View Profile
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: tabs -->
+  <div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);
+                padding-bottom:10px">
+      {% for tab_id, tab_label in [('posts','Posts'),('wallet','Wallet'),
+         ('reports','Reports'),('ban','Ban History'),('audit','Audit')] %}
+      <button class="adm-tab" id="tab-{{ tab_id }}"
+              onclick="showTab('{{ tab_id }}')">{{ tab_label }}</button>
+      {% endfor %}
+    </div>
+
+    <!-- Posts tab -->
+    <div id="panel-posts" class="tab-panel">
+      <div class="adm-card">
+        <div class="adm-card-header"><span class="adm-card-title">📝 Recent Posts</span></div>
+        <table class="adm-table">
+          <thead><tr><th>#</th><th>Content</th><th>Likes</th><th>Date</th><th></th></tr></thead>
+          <tbody>
+            {% for p in posts %}
+            <tr>
+              <td style="color:var(--muted);font-size:12px">{{ p.id }}</td>
+              <td style="max-width:320px">
+                <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">
+                  {{ p.body or '(media post)' }}
+                </div>
+              </td>
+              <td>{{ p.like_count or 0 }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ (p.created_at or '')[:10] }}</td>
+              <td>
+                <button class="adm-btn danger" onclick="deletePost({{ p.id }}, this)">Delete</button>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">No posts</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Wallet tab -->
+    <div id="panel-wallet" class="tab-panel" style="display:none">
+      <div class="adm-card" style="margin-bottom:16px">
+        <div class="adm-card-header"><span class="adm-card-title">💰 Transactions</span></div>
+        <table class="adm-table">
+          <thead><tr><th>Type</th><th>Amount</th><th>Description</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for t in transactions %}
+            <tr>
+              <td><span class="badge badge-{{ 'active' if t.amount > 0 else 'failed' }}">
+                {{ t.type or 'n/a' }}
+              </span></td>
+              <td style="font-weight:700;color:{{ 'var(--green)' if (t.amount or 0) > 0 else 'var(--red)' }}">
+                {{ '+' if (t.amount or 0) > 0 else '' }}{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(t.amount or 0) }}
+              </td>
+              <td style="font-size:12px;color:var(--muted)">{{ t.description or '—' }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ (t.created_at or '')[:16] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">No transactions</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="adm-card">
+        <div class="adm-card-header"><span class="adm-card-title">💸 Withdrawals</span></div>
+        <table class="adm-table">
+          <thead><tr><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for w in withdrawals %}
+            <tr>
+              <td style="font-weight:700">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount or 0) }}</td>
+              <td style="font-size:12px">{{ w.method or '—' }}</td>
+              <td><span class="badge badge-{{ w.status }}">{{ w.status }}</span></td>
+              <td style="font-size:12px;color:var(--muted)">{{ (w.created_at or '')[:10] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">No withdrawals</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Reports tab -->
+    <div id="panel-reports" class="tab-panel" style="display:none">
+      <div class="adm-card">
+        <div class="adm-card-header"><span class="adm-card-title">🚩 Reports Against This User</span></div>
+        <table class="adm-table">
+          <thead><tr><th>Type</th><th>Reason</th><th>Reporter</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for r in reports_against %}
+            <tr>
+              <td><span class="badge badge-pending">{{ r.target_type }}</span></td>
+              <td style="font-size:13px">{{ r.reason }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ r.reporter_id }}</td>
+              <td><span class="badge badge-{{ 'active' if r.status=='actioned' else 'pending' }}">
+                {{ r.status }}</span></td>
+              <td style="font-size:12px;color:var(--muted)">{{ (r.created_at or '')[:10] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">No reports</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Ban history tab -->
+    <div id="panel-ban" class="tab-panel" style="display:none">
+      <div class="adm-card">
+        <div class="adm-card-header"><span class="adm-card-title">🚫 Ban Record</span></div>
+        <div style="padding:16px">
+          {% if ban_record %}
+          <div style="background:rgba(239,69,101,.08);border:1px solid rgba(239,69,101,.3);
+                      border-radius:var(--radius);padding:14px;margin-bottom:14px">
+            <div style="font-weight:700;color:var(--red,#e53e3e);margin-bottom:6px">
+              🚫 Currently Banned
+            </div>
+            <div style="font-size:13px;margin-bottom:4px">
+              <strong>Reason:</strong> {{ ban_record.reason }}
+            </div>
+            <div style="font-size:12px;color:var(--muted)">
+              Since {{ (ban_record.created_at or '')[:16] }}
+              {% if ban_record.expires_at %}· Expires {{ ban_record.expires_at[:10] }}
+              {% else %}· Permanent{% endif %}
+            </div>
+          </div>
+          {% else %}
+          <div style="color:var(--muted);font-size:13px">No active ban.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit tab -->
+    <div id="panel-audit" class="tab-panel" style="display:none">
+      <div class="adm-card">
+        <div class="adm-card-header"><span class="adm-card-title">📋 Admin Actions on This Account</span></div>
+        <table class="adm-table">
+          <thead><tr><th>Action</th><th>Details</th><th>Admin</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for a in audit_entries %}
+            <tr>
+              <td><code style="font-size:11px">{{ a.action }}</code></td>
+              <td style="font-size:12px;color:var(--muted)">{{ a.details or '—' }}</td>
+              <td style="font-size:12px">{{ a.admin_id }}</td>
+              <td style="font-size:12px;color:var(--muted)">{{ (a.created_at or '')[:16] }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">No admin actions recorded.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="adm-modal-overlay" id="adjust-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">💰 Adjust Balance</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Amount (positive=credit, negative=deduct)</label>
+      <input class="adm-form-input" id="adj-amount" type="number" step="0.01" placeholder="e.g. 5.00 or -2.00">
+    </div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Note</label>
+      <input class="adm-form-input" id="adj-note" placeholder="Reason for adjustment">
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('adjust-modal')">Cancel</button>
+      <button class="adm-btn primary" onclick="submitAdjust()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="adm-modal-overlay" id="notify-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">🔔 Send Notification</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Message</label>
+      <textarea class="adm-form-input" id="notify-msg" rows="4" maxlength="500"></textarea>
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('notify-modal')">Cancel</button>
+      <button class="adm-btn primary" onclick="submitNotify()">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="adm-modal-overlay" id="pw-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">🔑 Reset Password</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">New Password (leave blank to auto-generate)</label>
+      <input class="adm-form-input" id="new-pw" type="text" placeholder="Auto-generate if empty">
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('pw-modal')">Cancel</button>
+      <button class="adm-btn primary" onclick="submitResetPw()">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="adm-modal-overlay" id="ban-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">🚫 Ban @{{ user.username }}</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Reason</label>
+      <input class="adm-form-input" id="ban-reason" placeholder="Reason for ban…">
+    </div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Duration</label>
+      <select class="adm-form-input" id="ban-duration">
+        <option value="">Permanent</option>
+        <option value="1">1 day</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="30">30 days</option>
+      </select>
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('ban-modal')">Cancel</button>
+      <button class="adm-btn danger" onclick="submitBan()">Ban</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const USER_ID = {{ user.id }};
+
+/* Tab switching */
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.style.display='none');
+  document.querySelectorAll('.adm-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + id).style.display = '';
+  document.getElementById('tab-' + id).classList.add('active');
+}
+showTab('posts');
+
+/* Actions */
+async function submitAdjust() {
+  const amount = parseFloat(document.getElementById('adj-amount').value);
+  const note   = document.getElementById('adj-note').value.trim();
+  if (isNaN(amount) || amount === 0) return showToast('Enter a valid amount.', 'error');
+  const d = await api(`/admin/user/${USER_ID}/adjust-balance`, { amount, note });
+  if (d.success) {
+    showToast(`✅ Balance updated to $${d.new_balance.toFixed(2)}`);
+    closeModal('adjust-modal');
+    setTimeout(() => location.reload(), 1200);
+  } else showToast(d.error || 'Failed.', 'error');
+}
+
+async function submitNotify() {
+  const message = document.getElementById('notify-msg').value.trim();
+  if (!message) return showToast('Enter a message.', 'error');
+  const d = await api(`/admin/user/${USER_ID}/notify`, { message });
+  if (d.success) { showToast('✅ Notification sent'); closeModal('notify-modal'); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+async function submitResetPw() {
+  const password = document.getElementById('new-pw').value.trim();
+  const d = await api(`/admin/user/${USER_ID}/reset-password`, { password });
+  if (d.success) {
+    showToast(`✅ Password reset: ${d.new_password}`);
+    closeModal('pw-modal');
+  } else showToast(d.error || 'Failed.', 'error');
+}
+
+async function doToggleVerify() {
+  if (!confirm('Toggle verification badge?')) return;
+  const d = await api(`/admin/user/${USER_ID}/verify`, {});
+  if (d.success) { showToast('✅ Verification toggled'); setTimeout(() => location.reload(), 800); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+async function submitBan() {
+  const reason   = document.getElementById('ban-reason').value.trim();
+  const duration = document.getElementById('ban-duration').value || null;
+  if (!reason) return showToast('Reason required.', 'error');
+  const d = await api(`/admin/user/${USER_ID}/ban`, { action:'ban', reason, duration });
+  if (d.success) { showToast('🚫 User banned'); setTimeout(() => location.reload(), 800); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+async function doUnban() {
+  if (!confirm('Lift ban for this user?')) return;
+  const d = await api(`/admin/user/${USER_ID}/ban`, { action:'unban' });
+  if (d.success) { showToast('🔓 Ban lifted'); setTimeout(() => location.reload(), 800); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+async function doDeleteUser() {
+  if (!confirm('Permanently delete this account? This cannot be undone.')) return;
+  if (!confirm('Are you ABSOLUTELY sure? All data will be deleted.')) return;
+  const d = await api(`/admin/user/${USER_ID}/delete`, {});
+  if (d.success) { showToast('✅ Account deleted'); location.href = '{{ url_for("admin.admin_users") }}'; }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+async function deletePost(postId, btn) {
+  if (!confirm('Delete this post?')) return;
+  const d = await api(`/admin/post/${postId}/delete`, {});
+  if (d.success) { btn.closest('tr').remove(); showToast('✅ Post deleted'); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+</script>
+{% endblock %}

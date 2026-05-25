@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ current_user.theme if current_user else 'dark' }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}Admin — DUYS Boost{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<style>
+/* ── Admin shell ─────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { display: flex; min-height: 100vh; background: var(--bg); color: var(--text);
+       font-family: var(--font-body); }
+
+/* Sidebar */
+.adm-sidebar {
+  width: 230px; min-height: 100vh; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0;
+}
+.adm-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+.adm-logo-text { font-weight: 800; font-size: 17px; letter-spacing: -.02em; }
+.adm-logo-badge { font-size: 10px; background: var(--red,#e53e3e); color: #fff;
+                  padding: 2px 7px; border-radius: 99px; margin-left: 6px;
+                  vertical-align: middle; font-weight: 700; }
+.adm-nav { flex: 1; padding: 10px 0; }
+.adm-nav-section { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+                   text-transform: uppercase; color: var(--muted);
+                   padding: 14px 18px 5px; }
+.adm-nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 18px; color: var(--text-dim); text-decoration: none;
+  font-size: 13.5px; font-weight: 500; border-radius: 0;
+  transition: background var(--transition), color var(--transition);
+  position: relative;
+}
+.adm-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.adm-nav-item.active { background: rgba(127,90,240,.12); color: var(--accent);
+                       font-weight: 700; }
+.adm-nav-item.active::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--accent); border-radius: 0 2px 2px 0;
+}
+.adm-nav-badge {
+  margin-left: auto; background: var(--red,#e53e3e); color: #fff;
+  font-size: 10px; font-weight: 700; padding: 1px 6px;
+  border-radius: 99px; min-width: 18px; text-align: center;
+}
+.adm-nav-icon { width: 16px; text-align: center; flex-shrink: 0; }
+.adm-footer { padding: 14px 18px; border-top: 1px solid var(--border);
+              font-size: 12px; color: var(--muted); }
+.adm-footer a { color: var(--muted); text-decoration: none; }
+.adm-footer a:hover { color: var(--text); }
+
+/* Main area */
+.adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.adm-topbar {
+  height: 56px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px; gap: 16px;
+  position: sticky; top: 0; z-index: 20;
+}
+.adm-topbar-title { font-weight: 700; font-size: 16px; flex: 1; }
+.adm-topbar-actions { display: flex; align-items: center; gap: 10px; }
+.adm-content { flex: 1; padding: 24px; overflow: auto; }
+
+/* ── Stat cards ──────────────────────────────────────────────────────────── */
+.adm-stats { display: grid; grid-template-columns: repeat(auto-fill,minmax(170px,1fr));
+             gap: 14px; margin-bottom: 24px; }
+.adm-stat { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 18px 20px;
+            transition: border-color var(--transition); }
+.adm-stat:hover { border-color: var(--accent); }
+.adm-stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase;
+                  letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; }
+.adm-stat-value { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.adm-stat-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.adm-stat-value.green { color: var(--green); }
+.adm-stat-value.cyan  { color: var(--accent-light); }
+.adm-stat-value.red   { color: var(--red,#e53e3e); }
+.adm-stat-value.yellow{ color: var(--yellow,#f4c94e); }
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.adm-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 20px; }
+.adm-card-header {
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.adm-card-title { font-weight: 700; font-size: 14px; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.adm-table th { padding: 10px 14px; text-align: left; font-size: 11px;
+                font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+                color: var(--muted); border-bottom: 1px solid var(--border);
+                white-space: nowrap; }
+.adm-table td { padding: 10px 14px; border-bottom: 1px solid var(--border);
+                vertical-align: middle; }
+.adm-table tr:last-child td { border-bottom: none; }
+.adm-table tr:hover td { background: var(--surface-2); }
+.adm-table .actions { display: flex; gap: 6px; }
+
+/* ── Action buttons ─────────────────────────────────────────────────────── */
+.adm-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  background: var(--surface-2); color: var(--text);
+  text-decoration: none; transition: all var(--transition); white-space: nowrap;
+}
+.adm-btn:hover { background: var(--surface); border-color: var(--accent); }
+.adm-btn.danger { color: var(--red,#e53e3e); border-color: rgba(239,69,101,.3); }
+.adm-btn.danger:hover { background: rgba(239,69,101,.08); }
+.adm-btn.success { color: var(--green); border-color: rgba(44,182,125,.3); }
+.adm-btn.success:hover { background: rgba(44,182,125,.08); }
+.adm-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.adm-btn.primary:hover { opacity: .88; }
+
+/* ── Filters bar ─────────────────────────────────────────────────────────── */
+.adm-filters {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.adm-search { flex: 1; min-width: 200px; max-width: 340px; }
+.adm-search input {
+  width: 100%; padding: 7px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 13px;
+}
+.adm-tabs { display: flex; gap: 4px; }
+.adm-tab {
+  padding: 6px 14px; border-radius: var(--radius); font-size: 12.5px;
+  font-weight: 600; text-decoration: none; color: var(--muted);
+  border: 1px solid transparent; transition: all var(--transition);
+  display: flex; align-items: center; gap: 5px;
+}
+.adm-tab:hover { background: var(--surface-2); color: var(--text); }
+.adm-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.adm-tab .cnt { font-size: 11px; opacity: .8; }
+
+/* ── User avatar row ─────────────────────────────────────────────────────── */
+.adm-user-cell { display: flex; align-items: center; gap: 10px; }
+.adm-avatar {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; overflow: hidden;
+}
+.adm-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.adm-user-name { font-weight: 700; font-size: 13.5px; }
+.adm-user-sub  { font-size: 11.5px; color: var(--muted); }
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.adm-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: none; align-items: center; justify-content: center; z-index: 1000;
+}
+.adm-modal-overlay.open { display: flex; }
+.adm-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px; width: 100%;
+  max-width: 480px; max-height: 90vh; overflow-y: auto;
+}
+.adm-modal-title { font-weight: 800; font-size: 18px; margin-bottom: 16px; }
+.adm-form-group { margin-bottom: 14px; }
+.adm-form-label { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .04em; color: var(--muted); margin-bottom: 5px;
+                  display: block; }
+.adm-form-input {
+  width: 100%; padding: 9px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 13.5px;
+}
+.adm-form-input:focus { outline: none; border-color: var(--accent); }
+.adm-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* ── Pagination ──────────────────────────────────────────────────────────── */
+.adm-pagination { display: flex; gap: 6px; align-items: center;
+                  padding: 14px 20px; border-top: 1px solid var(--border); }
+.adm-page-btn {
+  padding: 5px 11px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface-2); font-size: 12.5px; color: var(--text);
+  text-decoration: none; cursor: pointer;
+  transition: all var(--transition);
+}
+.adm-page-btn:hover { border-color: var(--accent); }
+.adm-page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.adm-page-btn.disabled { opacity: .4; pointer-events: none; }
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#adm-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 20px; font-size: 13.5px;
+  font-weight: 600; z-index: 9999; display: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+}
+#adm-toast.show { display: block; }
+#adm-toast.success { border-color: var(--green); color: var(--green); }
+#adm-toast.error   { border-color: var(--red,#e53e3e); color: var(--red,#e53e3e); }
+
+/* Mobile */
+@media (max-width: 768px) {
+  .adm-sidebar { display: none; }
+  .adm-content { padding: 16px; }
+}
+</style>
+{% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+<aside class="adm-sidebar">
+  <div class="adm-logo">
+    <div class="adm-logo-text">DUYS Boost <span class="adm-logo-badge">ADMIN</span></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">
+      {{ current_user.username if current_user }}
+    </div>
+  </div>
+
+  <nav class="adm-nav">
+    <div class="adm-nav-section">Main</div>
+    <a href="{{ url_for('admin.admin') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin' %}active{% endif %}">
+      <span class="adm-nav-icon">📊</span> Overview
+    </a>
+
+    <div class="adm-nav-section">Management</div>
+    <a href="{{ url_for('admin.admin_users') }}"
+       class="adm-nav-item {% if 'admin_user' in request.endpoint %}active{% endif %}">
+      <span class="adm-nav-icon">👥</span> Users
+    </a>
+    <a href="{{ url_for('admin.admin_posts') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin_posts' %}active{% endif %}">
+      <span class="adm-nav-icon">📝</span> Posts
+    </a>
+    <a href="{{ url_for('admin.admin_reports') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin_reports' %}active{% endif %}">
+      <span class="adm-nav-icon">🚩</span> Reports
+      {% set rc = open_report_count|default(0) %}
+      {% if rc %}<span class="adm-nav-badge">{{ rc }}</span>{% endif %}
+    </a>
+
+    <div class="adm-nav-section">Finance</div>
+    <a href="{{ url_for('admin.admin_withdrawals') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin_withdrawals' %}active{% endif %}">
+      <span class="adm-nav-icon">💸</span> Withdrawals
+      {% set wc = pending_wdr_count|default(0) %}
+      {% if wc %}<span class="adm-nav-badge">{{ wc }}</span>{% endif %}
+    </a>
+
+    <div class="adm-nav-section">Community</div>
+    <a href="{{ url_for('admin.admin_reviews') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin_reviews' %}active{% endif %}">
+      <span class="adm-nav-icon">⭐</span> Reviews
+    </a>
+    <a href="{{ url_for('admin.admin_audit') }}"
+       class="adm-nav-item {% if request.endpoint=='admin.admin_audit' %}active{% endif %}">
+      <span class="adm-nav-icon">📋</span> Audit Log
+    </a>
+  </nav>
+
+  <div class="adm-footer">
+    <a href="{{ url_for('social.feed') }}">← Back to app</a>
+  </div>
+</aside>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<main class="adm-main">
+  <div class="adm-topbar">
+    <div class="adm-topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
+    <div class="adm-topbar-actions">
+      <button class="adm-btn primary" onclick="openBroadcast()">📢 Broadcast</button>
+      <a href="{{ url_for('social.feed') }}" class="adm-btn">← App</a>
+    </div>
+  </div>
+  <div class="adm-content">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+<!-- ── Broadcast modal ────────────────────────────────────────────────── -->
+<div class="adm-modal-overlay" id="broadcast-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">📢 Broadcast Notification</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Audience</label>
+      <select class="adm-form-input" id="bc-segment">
+        <option value="all">All users</option>
+        <option value="active">Active users only</option>
+        <option value="banned">Banned users</option>
+      </select>
+    </div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Message</label>
+      <textarea class="adm-form-input" id="bc-message" rows="4"
+                placeholder="Enter your announcement…" maxlength="500"></textarea>
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('broadcast-modal')">Cancel</button>
+      <button class="adm-btn primary" onclick="submitBroadcast()">Send</button>
+    </div>
+  </div>
+</div>
+
+<div id="adm-toast"></div>
+
+<script>
+/* ── CSRF + fetch wrapper ────────────────────────────────────────────────── */
+const _csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+async function api(url, data) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrf },
+    body: JSON.stringify(data),
+  });
+  return r.json();
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+function showToast(msg, type='success') {
+  const t = document.getElementById('adm-toast');
+  t.textContent = msg;
+  t.className   = `show ${type}`;
+  setTimeout(() => t.className = '', 3000);
+}
+
+/* ── Modal helpers ───────────────────────────────────────────────────────── */
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function openBroadcast(){ openModal('broadcast-modal'); }
+
+async function submitBroadcast() {
+  const msg     = document.getElementById('bc-message').value.trim();
+  const segment = document.getElementById('bc-segment').value;
+  if (!msg) return showToast('Message is required.', 'error');
+  const d = await api('/admin/broadcast', { message: msg, segment });
+  if (d.success) {
+    showToast(`✅ Sent to ${d.sent_to} users`);
+    closeModal('broadcast-modal');
+    document.getElementById('bc-message').value = '';
+  } else {
+    showToast(d.error || 'Failed.', 'error');
+  }
+}
+
+/* ── Confirm helper ─────────────────────────────────────────────────────── */
+function confirmAction(msg) { return window.confirm(msg); }
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

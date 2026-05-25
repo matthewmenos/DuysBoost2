@@ -229,6 +229,42 @@ def delete_post(post_id):
     return jsonify({'success': True})
 
 
+@bp.route('/api/report', methods=['POST'])
+@login_required
+@csrf_exempt
+@limiter.limit('10 per hour')
+def report_content():
+    """Submit a content report (post, user, or message)."""
+    db          = get_db()
+    uid         = session['user_id']
+    target_type = (request.json or {}).get('target_type', '')
+    target_id   = safe_int((request.json or {}).get('target_id'), 0)
+    reason      = ((request.json or {}).get('reason') or '').strip()
+    details     = ((request.json or {}).get('details') or '').strip()
+
+    if target_type not in ('post', 'user', 'message'):
+        return jsonify({'success': False, 'error': 'Invalid target type.'}), 400
+    if not target_id or not reason:
+        return jsonify({'success': False, 'error': 'Target and reason required.'}), 400
+
+    # Prevent duplicate open reports from the same user
+    existing = db.execute(
+        "SELECT id FROM reports WHERE reporter_id=? AND target_type=? "
+        "AND target_id=? AND status='open'",
+        (uid, target_type, target_id)
+    ).fetchone()
+    if existing:
+        return jsonify({'success': False, 'error': 'You have already reported this content.'}), 400
+
+    db.execute(
+        'INSERT INTO reports (reporter_id, target_type, target_id, reason, details) '
+        'VALUES (?, ?, ?, ?, ?)',
+        (uid, target_type, target_id, reason, details or None)
+    )
+    db.commit()
+    return jsonify({'success': True})
+
+
 @bp.route('/post/<int:post_id>/unrepost', methods=['POST'])
 @login_required
 @csrf_exempt   # JSON POST

@@ -1,0 +1,129 @@
+{% extends "admin/base.html" %}
+{% block title %}Withdrawals — Admin{% endblock %}
+{% block page_title %}Withdrawals{% endblock %}
+{% block content %}
+
+<!-- Manual credit -->
+<div class="adm-card" style="margin-bottom:20px">
+  <div class="adm-card-header">
+    <span class="adm-card-title">💰 Manual Credit</span>
+  </div>
+  <div style="padding:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="adm-form-group" style="margin:0;flex:1;min-width:160px">
+      <label class="adm-form-label">User ID</label>
+      <input class="adm-form-input" id="dep-uid" type="number" placeholder="User ID">
+    </div>
+    <div class="adm-form-group" style="margin:0;flex:1;min-width:120px">
+      <label class="adm-form-label">Amount</label>
+      <input class="adm-form-input" id="dep-amount" type="number" step="0.01" placeholder="0.00">
+    </div>
+    <div class="adm-form-group" style="margin:0;flex:2;min-width:200px">
+      <label class="adm-form-label">Note</label>
+      <input class="adm-form-input" id="dep-note" placeholder="Reason for credit">
+    </div>
+    <button class="adm-btn primary" style="height:36px" onclick="submitDeposit()">
+      💰 Credit
+    </button>
+  </div>
+</div>
+
+<!-- Withdrawal tabs -->
+<div class="adm-card">
+  <div class="adm-filters">
+    <div class="adm-tabs">
+      {% for s in ['pending','approved','rejected','processing','failed'] %}
+      <a href="{{ url_for('admin.admin_withdrawals', status=s) }}"
+         class="adm-tab {% if status==s %}active{% endif %}">
+        {{ s.capitalize() }}
+        {% if counts[s] %}<span class="cnt">({{ counts[s] }})</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    <span style="font-size:12px;color:var(--muted)">{{ total }} records</span>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="adm-table">
+      <thead>
+        <tr><th>User</th><th>Amount</th><th>Method</th><th>Address</th><th>Status</th><th>Date</th>
+        {% if status=='pending' %}<th>Actions</th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for w in withdrawals %}
+        <tr id="wdr-row-{{ w.id }}">
+          <td>
+            <a href="{{ url_for('admin.admin_user_detail', user_id=w.user_id) }}"
+               style="font-weight:700;color:var(--text);text-decoration:none">
+              @{{ w.username }}
+            </a>
+          </td>
+          <td style="font-weight:700;color:var(--green)">
+            {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(w.amount or 0) }}
+          </td>
+          <td style="font-size:12px">{{ w.method or '—' }}</td>
+          <td style="font-size:11px;font-family:monospace;max-width:160px;
+                     overflow-wrap:anywhere;color:var(--muted)">
+            {{ (w.crypto_address or w.account or '—')[:30] }}
+          </td>
+          <td><span class="badge badge-{{ w.status }}">{{ w.status }}</span></td>
+          <td style="font-size:12px;color:var(--muted)">{{ (w.created_at or '')[:10] }}</td>
+          {% if status=='pending' %}
+          <td>
+            <div class="actions">
+              <button class="adm-btn success" style="font-size:11px"
+                      onclick="processWdr({{ w.id }},'approve')">✅ Approve</button>
+              <button class="adm-btn danger" style="font-size:11px"
+                      onclick="processWdr({{ w.id }},'reject')">❌ Reject</button>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">
+          No {{ status }} withdrawals.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% set pages = (total // per) + (1 if total % per else 0) %}
+  {% if pages > 1 %}
+  <div class="adm-pagination">
+    <a href="{{ url_for('admin.admin_withdrawals', status=status, page=page-1) }}"
+       class="adm-page-btn {% if page<=1 %}disabled{% endif %}">← Prev</a>
+    <span style="font-size:12.5px;color:var(--muted)">Page {{ page }} / {{ pages }}</span>
+    <a href="{{ url_for('admin.admin_withdrawals', status=status, page=page+1) }}"
+       class="adm-page-btn {% if page>=pages %}disabled{% endif %}">Next →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function processWdr(id, action) {
+  let reason = '';
+  if (action === 'reject') {
+    reason = prompt('Rejection reason (shown to user):') || '';
+    if (reason === null) return;
+  }
+  const d = await api(`/admin/withdrawal/${id}/${action}`, { reason });
+  if (d.success) {
+    document.getElementById('wdr-row-'+id)?.remove();
+    showToast(`✅ Withdrawal ${d.status}`);
+  } else showToast(d.error || 'Failed.', 'error');
+}
+
+async function submitDeposit() {
+  const user_id = parseInt(document.getElementById('dep-uid').value);
+  const amount  = parseFloat(document.getElementById('dep-amount').value);
+  const note    = document.getElementById('dep-note').value.trim();
+  if (!user_id || !amount || amount <= 0) return showToast('Enter valid user ID and amount.', 'error');
+  const d = await api('/admin/deposit', { user_id, amount, note });
+  if (d.success) {
+    showToast('✅ Balance credited');
+    document.getElementById('dep-uid').value = '';
+    document.getElementById('dep-amount').value = '';
+    document.getElementById('dep-note').value = '';
+  } else showToast(d.error || 'Failed.', 'error');
+}
+</script>
+{% endblock %}

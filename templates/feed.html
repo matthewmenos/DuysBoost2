@@ -204,6 +204,37 @@
     <button class="btn btn-primary btn-block" onclick="submitQuote()">Post</button>
   </div>
 </div>
+<!-- Report content modal -->
+<div class="modal-overlay" id="report-modal" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">🚩 Report content</div>
+      <button class="modal-close" onclick="closeModal('report-modal')">✕</button>
+    </div>
+    <input type="hidden" id="report-target-type">
+    <input type="hidden" id="report-target-id">
+    <div class="form-group">
+      <label class="form-label">Reason</label>
+      <select class="form-input" id="report-reason">
+        <option value="">Select a reason…</option>
+        <option value="spam">Spam or advertising</option>
+        <option value="harassment">Harassment or bullying</option>
+        <option value="hate_speech">Hate speech</option>
+        <option value="misinformation">Misinformation</option>
+        <option value="adult_content">Inappropriate / adult content</option>
+        <option value="scam">Scam or fraud</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Details <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <textarea class="form-input" id="report-details" rows="3" maxlength="300"
+                placeholder="Any additional context…"></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="submitReport()">Submit report</button>
+  </div>
+</div>
+
 <!-- Edit post modal -->
 <div class="modal-overlay" id="edit-post-modal" role="dialog" aria-modal="true">
   <div class="modal">
@@ -553,6 +584,38 @@ function copyPostLink(postId) {
 window.copyPostLink = copyPostLink;
 
 // ── Share post ────────────────────────────────────────────────────────────────
+function reportPost(postId) {
+  document.getElementById('report-target-type').value = 'post';
+  document.getElementById('report-target-id').value   = postId;
+  document.getElementById('report-reason').value      = '';
+  document.getElementById('report-details').value     = '';
+  openModal('report-modal');
+}
+window.reportPost = reportPost;
+
+async function submitReport() {
+  const target_type = document.getElementById('report-target-type').value;
+  const target_id   = parseInt(document.getElementById('report-target-id').value);
+  const reason      = document.getElementById('report-reason').value;
+  const details     = document.getElementById('report-details').value.trim();
+  if (!reason) return showToast('Please select a reason.', 'error');
+  try {
+    const r = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_type, target_id, reason, details }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('report-modal');
+      showToast('🚩 Report submitted. Thank you.');
+    } else {
+      showToast(d.error || 'Could not submit report.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.submitReport = submitReport;
+
 async function sharePost(postId, body) {
   const url = window.location.origin + '/post/' + postId;
   const text = (body || '').slice(0, 80) + (body && body.length > 80 ? '…' : '');

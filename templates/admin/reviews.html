@@ -1,0 +1,141 @@
+{% extends "admin/base.html" %}
+{% block title %}Reviews — Admin{% endblock %}
+{% block page_title %}Platform Reviews{% endblock %}
+{% block content %}
+
+<!-- Rating summary -->
+<div class="adm-stats" style="margin-bottom:20px">
+  <div class="adm-stat">
+    <div class="adm-stat-label">Avg Rating</div>
+    <div class="adm-stat-value yellow">{{ avg_rating }} ⭐</div>
+  </div>
+  {% for i in range(5,0,-1) %}
+  <div class="adm-stat">
+    <div class="adm-stat-label">{{ i }} Stars</div>
+    <div class="adm-stat-value">{{ rating_dist[i] }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="adm-card">
+  <div class="adm-filters">
+    <div class="adm-tabs">
+      {% for s in ['published','flagged','hidden'] %}
+      <a href="{{ url_for('admin.admin_reviews', status=s) }}"
+         class="adm-tab {% if status==s %}active{% endif %}">
+        {{ s.capitalize() }} <span class="cnt">({{ counts[s] }})</span>
+      </a>
+      {% endfor %}
+    </div>
+    <span style="font-size:12px;color:var(--muted)">{{ total }} total</span>
+  </div>
+  <div style="padding:4px 0">
+    {% for r in reviews %}
+    <div style="padding:18px 20px;border-bottom:1px solid var(--border)" id="review-{{ r.id }}">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div class="adm-avatar">
+          {% if r.avatar_url %}<img src="{{ r.avatar_url }}" alt="">
+          {% else %}{{ (r.display_name or r.username or '?')[0].upper() }}{% endif %}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <a href="{{ url_for('admin.admin_user_detail', user_id=r.user_id) }}"
+               style="font-weight:700;font-size:13.5px;color:var(--text)">
+              {{ r.display_name or r.username }}</a>
+            <span style="font-size:16px">{{ '⭐' * r.rating }}{{ '☆' * (5 - r.rating) }}</span>
+            {% if r.is_featured %}<span class="badge badge-active">⭐ Featured</span>{% endif %}
+          </div>
+          {% if r.title %}<div style="font-weight:700;margin-bottom:4px">{{ r.title }}</div>{% endif %}
+          <div style="font-size:13.5px;color:var(--text-dim);line-height:1.5">{{ r.body or '' }}</div>
+          {% if r.admin_reply %}
+          <div style="margin-top:10px;padding:10px 14px;background:rgba(127,90,240,.06);
+                      border-left:3px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0;
+                      font-size:13px">
+            <strong>Admin reply:</strong> {{ r.admin_reply }}
+          </div>
+          {% endif %}
+          <div style="font-size:11.5px;color:var(--muted);margin-top:6px">
+            {{ (r.created_at or '')[:16] }}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start">
+          {% if not r.is_featured %}
+          <button class="adm-btn" style="font-size:11px"
+                  onclick="reviewAction({{ r.id }},'feature')">⭐ Feature</button>
+          {% else %}
+          <button class="adm-btn" style="font-size:11px"
+                  onclick="reviewAction({{ r.id }},'unfeature')">Unfeature</button>
+          {% endif %}
+          <button class="adm-btn" style="font-size:11px"
+                  onclick="openReplyModal({{ r.id }})">💬 Reply</button>
+          {% if r.status == 'published' %}
+          <button class="adm-btn danger" style="font-size:11px"
+                  onclick="reviewAction({{ r.id }},'hide')">🙈 Hide</button>
+          {% else %}
+          <button class="adm-btn success" style="font-size:11px"
+                  onclick="reviewAction({{ r.id }},'restore')">🔄 Restore</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:var(--muted)">No {{ status }} reviews.</div>
+    {% endfor %}
+  </div>
+  {% set pages = (total // per) + (1 if total % per else 0) %}
+  {% if pages > 1 %}
+  <div class="adm-pagination">
+    <a href="{{ url_for('admin.admin_reviews', status=status, page=page-1) }}"
+       class="adm-page-btn {% if page<=1 %}disabled{% endif %}">← Prev</a>
+    <span style="font-size:12.5px;color:var(--muted)">Page {{ page }} / {{ pages }}</span>
+    <a href="{{ url_for('admin.admin_reviews', status=status, page=page+1) }}"
+       class="adm-page-btn {% if page>=pages %}disabled{% endif %}">Next →</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Reply modal -->
+<div class="adm-modal-overlay" id="reply-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">💬 Reply to Review</div>
+    <input type="hidden" id="reply-review-id">
+    <div class="adm-form-group">
+      <label class="adm-form-label">Your reply</label>
+      <textarea class="adm-form-input" id="reply-text" rows="4"
+                placeholder="Your official response…" maxlength="500"></textarea>
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeModal('reply-modal')">Cancel</button>
+      <button class="adm-btn primary" onclick="submitReply()">Post reply</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function reviewAction(id, action) {
+  const d = await api(`/admin/review/${id}/action`, { action });
+  if (d.success) { showToast('✅ Done'); setTimeout(() => location.reload(), 700); }
+  else showToast(d.error || 'Failed.', 'error');
+}
+
+function openReplyModal(id) {
+  document.getElementById('reply-review-id').value = id;
+  document.getElementById('reply-text').value = '';
+  openModal('reply-modal');
+}
+
+async function submitReply() {
+  const id    = document.getElementById('reply-review-id').value;
+  const reply = document.getElementById('reply-text').value.trim();
+  if (!reply) return showToast('Enter a reply.', 'error');
+  const d = await api(`/admin/review/${id}/action`, { action: 'reply', reply });
+  if (d.success) {
+    showToast('✅ Reply posted');
+    closeModal('reply-modal');
+    setTimeout(() => location.reload(), 700);
+  } else showToast(d.error || 'Failed.', 'error');
+}
+</script>
+{% endblock %}
