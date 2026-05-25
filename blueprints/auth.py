@@ -49,25 +49,25 @@ def signup():
             errors.append('Password must include upper, lower case letters and a number.')
         if password != confirm:
             errors.append('Passwords do not match.')
-        if db.execute('SELECT id FROM users WHERE email=%s', (email,)).fetchone():
+        if db.execute('SELECT id FROM users WHERE email=?', (email,)).fetchone():
             errors.append('Email already registered.')
-        if db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone():
+        if db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone():
             errors.append('Username already taken.')
         if errors:
             return jsonify({'success': False, 'errors': errors})
 
         referrer = (
-            db.execute('SELECT * FROM users WHERE referral_code=%s', (ref_code,)).fetchone()
+            db.execute('SELECT * FROM users WHERE referral_code=?', (ref_code,)).fetchone()
             if ref_code else None
         )
         db.execute(
             'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
-            'VALUES (%s,%s,%s,%s,%s,%s)',
+            'VALUES (?,?,?,?,?,?)',
             (username, display_name or username, email, hash_password(password),
              referrer['id'] if referrer else None, secrets.token_hex(5))
         )
         db.commit()
-        user = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+        user = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
         if referrer:
             CURRENCY_SYMBOL = current_app.config['CURRENCY_SYMBOL']
             add_notification(
@@ -90,7 +90,7 @@ def login():
         identifier = request.form.get('identifier', '').strip()
         password   = request.form.get('password', '')
         user = db.execute(
-            'SELECT * FROM users WHERE email=%s OR username=%s',
+            'SELECT * FROM users WHERE email=? OR username=?',
             (identifier.lower(), identifier)
         ).fetchone()
         if not user or not verify_password(password, user['password']):
@@ -154,7 +154,7 @@ def _finalize_oauth_login(userinfo, provider):
         return redirect(url_for('auth.login'))
 
     db   = get_db()
-    user = db.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
+    user = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
 
     if user:
         # Returning user — sign in directly
@@ -196,13 +196,13 @@ def complete_profile():
             errors.append('Username may only contain letters, numbers, _ and -.')
         if not display_name:
             errors.append('Display name is required.')
-        if db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone():
+        if db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone():
             errors.append('Username already taken.')
         if errors:
             return jsonify({'success': False, 'errors': errors})
 
         referrer = (
-            db.execute('SELECT * FROM users WHERE referral_code=%s', (ref_code,)).fetchone()
+            db.execute('SELECT * FROM users WHERE referral_code=?', (ref_code,)).fetchone()
             if ref_code else None
         )
 
@@ -211,12 +211,12 @@ def complete_profile():
 
         db.execute(
             'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
-            'VALUES (%s,%s,%s,%s,%s,%s)',
+            'VALUES (?,?,?,?,?,?)',
             (username, display_name, email, None,
              referrer['id'] if referrer else None, secrets.token_hex(5))
         )
         db.commit()
-        user = db.execute('SELECT * FROM users WHERE email=%s', (email,)).fetchone()
+        user = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
 
         if referrer:
             CURRENCY_SYMBOL = current_app.config['CURRENCY_SYMBOL']

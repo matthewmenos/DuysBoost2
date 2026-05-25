@@ -1,5 +1,15 @@
 """
-storage.py — Cloudflare R2 object storage via the S3-compatible API.
+storage.py — Cloudflare R2 object storage (two-bucket architecture).
+
+Bucket 1 (R2_BUCKET_NAME / existing media bucket):
+  Public media files: post images, videos, avatars, banners, stories.
+  Served via R2_PUBLIC_URL CDN.
+
+Bucket 2 (R2_DB_BUCKET_NAME):
+  Private per-user SQLite databases: users/{user_id}.db
+  Not publicly accessible. Only accessed by this server via boto3.
+
+Both buckets share the same boto3 client (same R2 account credentials).
 
 All media previously stored as base64 blobs in PostgreSQL is uploaded
 here and replaced with a public CDN URL.

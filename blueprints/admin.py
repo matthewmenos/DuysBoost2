@@ -13,7 +13,7 @@ bp = Blueprint('admin', __name__)
 @login_required
 def admin():
     db   = get_db()
-    user = db.execute('SELECT * FROM users WHERE id=%s', (session['user_id'],)).fetchone()
+    user = db.execute('SELECT * FROM users WHERE id=?', (session['user_id'],)).fetchone()
     if not user['is_admin']:
         return redirect(url_for('boost.dashboard'))
 
@@ -45,7 +45,7 @@ def process_withdrawal(wdr_id, action):
     db = get_db()
     if action not in ('approve', 'reject'):
         return jsonify({'success': False, 'error': 'Invalid action.'}), 400
-    wr = db.execute('SELECT * FROM withdrawals WHERE id=%s', (wdr_id,)).fetchone()
+    wr = db.execute('SELECT * FROM withdrawals WHERE id=?', (wdr_id,)).fetchone()
     if not wr:
         return jsonify({'success': False, 'error': 'Not found.'}), 404
     if wr['status'] not in ('pending', 'failed'):
@@ -53,14 +53,14 @@ def process_withdrawal(wdr_id, action):
 
     now = datetime.now(timezone.utc).isoformat()
     if action == 'reject':
-        db.execute('UPDATE withdrawals SET status=%s, processed_at=%s WHERE id=%s', ('rejected', now, wdr_id))
-        db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (wr['amount'], wr['user_id']))
+        db.execute('UPDATE withdrawals SET status=?, processed_at=? WHERE id=?', ('rejected', now, wdr_id))
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (wr['amount'], wr['user_id']))
         add_notification(db, wr['user_id'],
             f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} rejected. Amount refunded.')
         db.commit()
         return jsonify({'success': True, 'status': 'rejected'})
 
-    db.execute('UPDATE withdrawals SET status=%s, processed_at=%s WHERE id=%s', ('approved', now, wdr_id))
+    db.execute('UPDATE withdrawals SET status=?, processed_at=? WHERE id=?', ('approved', now, wdr_id))
     add_notification(db, wr['user_id'],
         f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} USDT approved. '
         f'Payment will be sent to your crypto address.')
@@ -78,11 +78,11 @@ def admin_deposit():
     amount  = safe_float(request.form.get('amount'), 0)
     if user_id <= 0 or amount <= 0:
         return jsonify({'success': False, 'error': 'Invalid input.'}), 400
-    target = db.execute('SELECT id FROM users WHERE id=%s', (user_id,)).fetchone()
+    target = db.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
     if not target:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
 
-    db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (amount, user_id))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount, user_id))
     add_transaction(db, user_id, 'deposit', amount, 'Admin deposit')
     add_notification(db, user_id, f'💰 Admin credited {CURRENCY_SYMBOL}{amount:.2f} to your account!')
     db.commit()
@@ -99,7 +99,7 @@ def send_notification():
         return jsonify({'success': False, 'error': 'Message cannot be empty.'}), 400
 
     if user_id:
-        user = db.execute('SELECT id FROM users WHERE id=%s', (user_id,)).fetchone()
+        user = db.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
         if not user:
             return jsonify({'success': False, 'error': 'User not found.'}), 404
         add_notification(db, user_id, f'📢 {message}')

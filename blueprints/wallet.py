@@ -19,13 +19,13 @@ def wallet():
     db  = get_db()
     uid = session['user_id']
     txs = db.execute(
-        'SELECT * FROM transactions WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+        'SELECT * FROM transactions WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
     wdrs = db.execute(
-        'SELECT * FROM withdrawals WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+        'SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
     pending_deposits = db.execute(
-        'SELECT * FROM crypto_deposits WHERE user_id=%s ORDER BY created_at DESC LIMIT 10', (uid,)
+        'SELECT * FROM crypto_deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 10', (uid,)
     ).fetchall()
     return render_template('wallet.html', transactions=txs, withdrawals=wdrs,
                            pending_deposits=pending_deposits)
@@ -54,7 +54,7 @@ def deposit():
         return jsonify({'success': False, 'error': 'Please enter a valid transaction hash.'}), 400
 
     existing = db.execute(
-        'SELECT id, status FROM crypto_deposits WHERE tx_hash=%s', (tx_hash,)
+        'SELECT id, status FROM crypto_deposits WHERE tx_hash=?', (tx_hash,)
     ).fetchone()
     if existing:
         if existing['status'] == 'confirmed':
@@ -73,11 +73,11 @@ def deposit():
     now = datetime.now(timezone.utc).isoformat()
 
     if dep_id:
-        db.execute('UPDATE crypto_deposits SET status=%s WHERE id=%s', ('verifying', dep_id))
+        db.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('verifying', dep_id))
     else:
         dep_id = db.execute(
             'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status, created_at) '
-            'VALUES (%s,%s,%s,0,%s,%s) RETURNING id',
+            'VALUES (?,?,?,0,?,?)',
             (uid, network, tx_hash, 'verifying', now)
         ).fetchone()['id']
     db.commit()
@@ -90,17 +90,17 @@ def deposit():
     )
 
     if not result['ok']:
-        wdr_id = db.execute('UPDATE crypto_deposits SET status=%s WHERE id=%s', ('failed', dep_id))
+        wdr_id = db.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('failed', dep_id))
         db.commit()
         return jsonify({'success': False, 'error': result['error']}), 400
 
     verified_amount = round(result['amount'], 6)
 
     db.execute(
-        'UPDATE crypto_deposits SET status=%s, amount=%s, confirmed_at=%s WHERE id=%s',
+        'UPDATE crypto_deposits SET status=?, amount=?, confirmed_at=? WHERE id=?',
         ('confirmed', verified_amount, datetime.now(timezone.utc).isoformat(), dep_id)
     )
-    db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (verified_amount, uid))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (verified_amount, uid))
     add_transaction(db, uid, 'deposit', verified_amount,
                     f'USDT deposit via {net_label} — TX: {tx_hash[:24]}...')
     check_and_award_referral_bonus(db, uid)
@@ -110,7 +110,7 @@ def deposit():
     db.commit()
 
     updated_balance = db.execute(
-        'SELECT balance FROM users WHERE id=%s', (uid,)
+        'SELECT balance FROM users WHERE id=?', (uid,)
     ).fetchone()['balance']
 
     return jsonify({
@@ -139,7 +139,7 @@ def save_crypto_address():
         return jsonify({'success': False, 'error': 'Please enter the account holder name.'})
 
     db.execute(
-        'UPDATE users SET crypto_network=%s, crypto_address=%s, crypto_name=%s WHERE id=%s',
+        'UPDATE users SET crypto_network=?, crypto_address=?, crypto_name=? WHERE id=?',
         (network, address, name, uid)
     )
     add_notification(db, uid,
@@ -159,7 +159,7 @@ def save_crypto_address():
 def remove_crypto_address():
     db = get_db()
     db.execute(
-        'UPDATE users SET crypto_network=NULL, crypto_address=NULL, crypto_name=NULL WHERE id=%s',
+        'UPDATE users SET crypto_network=NULL, crypto_address=NULL, crypto_name=NULL WHERE id=?',
         (session['user_id'],)
     )
     db.commit()
@@ -180,7 +180,7 @@ def withdraw():
     CURRENCY_SYMBOL = current_app.config['CURRENCY_SYMBOL']
 
     amount = safe_float(request.form.get('amount'), 0)
-    user   = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
+    user   = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
 
     if amount <= 0:
         return jsonify({'success': False, 'error': 'Enter a valid amount.'})
@@ -206,10 +206,10 @@ def withdraw():
                         'error': (f'Automatic withdrawals via {network_label} are temporarily '
                                   'unavailable. Please contact support.')}), 503
 
-    db.execute('UPDATE users SET balance=balance-%s WHERE id=%s', (amount, uid))
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (amount, uid))
     wdr_id = db.execute(
         'INSERT INTO withdrawals (user_id,amount,method,account,network,status) '
-        'VALUES (%s,%s,%s,%s,%s,%s) RETURNING id',
+        'VALUES (?,?,?,?,?,?)',
         (uid, amount, f'USDT ({network_label})', to_address, network, 'processing')
     ).fetchone()['id']
     add_transaction(db, uid, 'withdrawal', amount,
@@ -230,12 +230,12 @@ def withdraw():
     if result['ok']:
         tx_hash = result['tx_hash']
         db.execute(
-            'UPDATE withdrawals SET status=%s, tx_hash=%s, processed_at=%s WHERE id=%s',
+            'UPDATE withdrawals SET status=?, tx_hash=?, processed_at=? WHERE id=?',
             ('approved', tx_hash, now, wdr_id)
         )
         db.execute(
             "UPDATE transactions SET status='completed' "
-            "WHERE user_id=%s AND type='withdrawal' AND status='processing' "
+            "WHERE user_id=? AND type='withdrawal' AND status='processing' "
             "ORDER BY id DESC LIMIT 1",
             (uid,)
         )
@@ -245,7 +245,7 @@ def withdraw():
         db.commit()
 
         updated_balance = db.execute(
-            'SELECT balance FROM users WHERE id=%s', (uid,)
+            'SELECT balance FROM users WHERE id=?', (uid,)
         ).fetchone()['balance']
         return jsonify({
             'success': True,
@@ -255,13 +255,13 @@ def withdraw():
         })
     else:
         db.execute(
-            'UPDATE withdrawals SET status=%s, failure_reason=%s, processed_at=%s WHERE id=%s',
+            'UPDATE withdrawals SET status=?, failure_reason=?, processed_at=? WHERE id=?',
             ('failed', result['error'], now, wdr_id)
         )
-        db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (amount, uid))
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount, uid))
         db.execute(
             "UPDATE transactions SET status='failed' "
-            "WHERE user_id=%s AND type='withdrawal' AND status='processing' "
+            "WHERE user_id=? AND type='withdrawal' AND status='processing' "
             "ORDER BY id DESC LIMIT 1",
             (uid,)
         )
@@ -282,7 +282,7 @@ def referral():
     uid = session['user_id']
     REFERRAL_BONUS = current_app.config['REFERRAL_BONUS']
     referred_users = db.execute(
-        'SELECT * FROM users WHERE referred_by=%s ORDER BY created_at DESC', (uid,)
+        'SELECT * FROM users WHERE referred_by=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
     total_earned = len(referred_users) * REFERRAL_BONUS
     return render_template('referral.html',
@@ -296,9 +296,9 @@ def notifications():
     db  = get_db()
     uid = session['user_id']
     notifs = db.execute(
-        'SELECT * FROM notifications WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
-    db.execute('UPDATE notifications SET read=1 WHERE user_id=%s', (uid,))
+    db.execute('UPDATE notifications SET read=1 WHERE user_id=?', (uid,))
     db.commit()
     return render_template('notifications.html', notifications=notifs)
 
@@ -309,10 +309,10 @@ def unread_count():
     db  = get_db()
     uid = session['user_id']
     count = db.execute(
-        'SELECT COUNT(*) FROM notifications WHERE user_id=%s AND read=0', (uid,)
+        'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
     ).fetchone()[0]
     recent = db.execute(
-        'SELECT * FROM notifications WHERE user_id=%s ORDER BY created_at DESC LIMIT 5',
+        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 5',
         (uid,)
     ).fetchall()
     return jsonify({
@@ -326,8 +326,8 @@ def unread_count():
 def toggle_theme():
     db  = get_db()
     uid = session['user_id']
-    user = db.execute('SELECT theme FROM users WHERE id=%s', (uid,)).fetchone()
+    user = db.execute('SELECT theme FROM users WHERE id=?', (uid,)).fetchone()
     new_theme = 'light' if user['theme'] == 'dark' else 'dark'
-    db.execute('UPDATE users SET theme=%s WHERE id=%s', (new_theme, uid))
+    db.execute('UPDATE users SET theme=? WHERE id=?', (new_theme, uid))
     db.commit()
     return jsonify({'theme': new_theme})

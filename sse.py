@@ -24,7 +24,7 @@ SSE vs WebSocket for this use case:
 
 Threading note:
   Each SSE connection runs a generator in a background thread (via
-  Flask's streaming response). This is safe with psycopg2 because each
+  Flask's streaming response). This is safe with sqlite3 because each
   generator opens its own short-lived DB connection, separate from the
   per-request g.db connection.
 
@@ -41,8 +41,6 @@ import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, session, request, stream_with_context
-import psycopg2
-import psycopg2.extras
 import os
 
 logger = logging.getLogger(__name__)
@@ -56,17 +54,23 @@ _GROUP_INTERVAL    = 1.5  # group chat stream
 _KEEPALIVE_EVERY   = 25   # send a comment ping to prevent proxy timeout
 
 
-def _get_db_conn():
-    """Open a short-lived psycopg2 connection for use inside a generator."""
-    dsn = (
-        os.environ.get('DATABASE_URL') or
-        os.environ.get('POSTGRES_URL', '')
-    )
-    if not dsn:
-        raise RuntimeError('DATABASE_URL is not set.')
-    if dsn.startswith('postgres://'):
-        dsn = 'postgresql://' + dsn[len('postgres://'):]
-    return psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+def _get_db_conn(user_id: int = None):
+    """
+    Open a short-lived SQLite connection for use inside an SSE generator.
+    For SSE generators we can't use Flask's g-based connection because generators
+    run outside the normal request context. We download the user DB directly.
+    """
+    if user_id:
+        from db import open_user_db
+        conn, _ = open_user_db(user_id)
+        return conn
+    # Fall back to global.db for non-user-specific queries
+    import sqlite3 as _sqlite
+    db_path = os.path.join(os.path.dirname(__file__), 'global.db')
+    conn = _sqlite.connect(db_path, check_same_thread=False)
+    conn.row_factory = _sqlite.Row
+    conn.execute('PRAGMA journal_mode = WAL')
+    return conn
 
 
 def _sse_event(event: str, data: dict) -> str:
@@ -87,7 +91,7 @@ def _global_generator(uid: int):
     Runs in a streaming thread — uses its own DB connection.
     """
     try:
-        conn = _get_db_conn()
+        conn = _get_db_conn(uid)
     except Exception as e:
         logger.error('SSE global: DB connect failed for uid=%s: %s', uid, e)
         return
@@ -192,10 +196,10 @@ def _global_generator(uid: int):
                 conn.commit()
                 cur.close()
 
-            except psycopg2.OperationalError as e:
+            except Exception as e:
                 logger.warning('SSE global DB error uid=%s: %s', uid, e)
                 try:
-                    conn = _get_db_conn()
+                    conn = _get_db_conn(uid)
                 except Exception:
                     break
 
@@ -205,6 +209,7 @@ def _global_generator(uid: int):
         pass  # client disconnected cleanly
     finally:
         try:
+            conn.commit()
             conn.close()
         except Exception:
             pass
@@ -240,9 +245,9 @@ def _dm_generator(uid: int, other_username: str, after: int):
     Also marks messages as read and updates the unread badge.
     """
     try:
-        conn = _get_db_conn()
+        conn = _get_db_conn(uid)
     except Exception as e:
-        logger.error('SSE DM: DB connect failed: %s', e)
+        logger.error('SSE DM: DB connect failed: ?', e)
         return
 
     last_id    = after
@@ -250,7 +255,7 @@ def _dm_generator(uid: int, other_username: str, after: int):
 
     try:
         cur = conn.cursor()
-        cur.execute('SELECT id FROM users WHERE username=%s', (other_username,))
+        cur.execute('SELECT id FROM users WHERE username=?', (other_username,))
         other = cur.fetchone()
         if not other:
             yield _sse_event('error', {'message': 'User not found'})
@@ -258,7 +263,7 @@ def _dm_generator(uid: int, other_username: str, after: int):
 
         a, b = min(uid, other['id']), max(uid, other['id'])
         cur.execute(
-            'SELECT id FROM conversations WHERE user_a=%s AND user_b=%s', (a, b)
+            'SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)
         )
         conv = cur.fetchone()
         if not conv:
@@ -294,7 +299,7 @@ def _dm_generator(uid: int, other_username: str, after: int):
                     # Mark received messages as read
                     cur.execute(
                         'UPDATE messages SET is_read=1 '
-                        'WHERE conversation_id=%s AND sender_id!=%s AND id <= %s',
+                        'WHERE conversation_id=? AND sender_id!=? AND id <= ?',
                         (conv_id, uid, last_id)
                     )
                     # Recalculate total unread
@@ -307,7 +312,7 @@ def _dm_generator(uid: int, other_username: str, after: int):
                     """, (uid, uid, uid))
                     total_unread = cur.fetchone()['cnt']
                     cur.execute(
-                        'UPDATE users SET unread_dm_count=%s WHERE id=%s',
+                        'UPDATE users SET unread_dm_count=? WHERE id=?',
                         (total_unread, uid)
                     )
                     conn.commit()
@@ -319,10 +324,10 @@ def _dm_generator(uid: int, other_username: str, after: int):
                 else:
                     cur.close()
 
-            except psycopg2.OperationalError as e:
-                logger.warning('SSE DM DB error: %s', e)
+            except Exception as e:
+                logger.warning('SSE DM DB error: ?', e)
                 try:
-                    conn = _get_db_conn()
+                    conn = _get_db_conn(uid)
                 except Exception:
                     break
 
@@ -366,9 +371,9 @@ def dm_stream(username):
 def _group_generator(uid: int, slug: str, after: int):
     """Yields new messages in a group chat."""
     try:
-        conn = _get_db_conn()
+        conn = _get_db_conn(uid)
     except Exception as e:
-        logger.error('SSE group: DB connect failed: %s', e)
+        logger.error('SSE group: DB connect failed: ?', e)
         return
 
     last_id   = after
@@ -376,7 +381,7 @@ def _group_generator(uid: int, slug: str, after: int):
 
     try:
         cur = conn.cursor()
-        cur.execute('SELECT id FROM groups WHERE slug=%s', (slug,))
+        cur.execute('SELECT id FROM groups WHERE slug=?', (slug,))
         grp = cur.fetchone()
         if not grp:
             yield _sse_event('error', {'message': 'Group not found'})
@@ -386,7 +391,7 @@ def _group_generator(uid: int, slug: str, after: int):
 
         # Verify membership
         cur.execute(
-            'SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s',
+            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
             (group_id, uid)
         )
         if not cur.fetchone():
@@ -425,8 +430,8 @@ def _group_generator(uid: int, slug: str, after: int):
                     # Update last_read_at
                     ts = datetime.now(timezone.utc).isoformat()
                     cur.execute(
-                        'UPDATE group_members SET last_read_at=%s '
-                        'WHERE group_id=%s AND user_id=%s',
+                        'UPDATE group_members SET last_read_at=? '
+                        'WHERE group_id=? AND user_id=?',
                         (ts, group_id, uid)
                     )
                     conn.commit()
@@ -437,10 +442,10 @@ def _group_generator(uid: int, slug: str, after: int):
                 else:
                     cur.close()
 
-            except psycopg2.OperationalError as e:
-                logger.warning('SSE group DB error: %s', e)
+            except Exception as e:
+                logger.warning('SSE group DB error: ?', e)
                 try:
-                    conn = _get_db_conn()
+                    conn = _get_db_conn(uid)
                 except Exception:
                     break
 

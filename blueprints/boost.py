@@ -31,25 +31,25 @@ def dashboard():
     LISTER_COST_PER_TASK   = current_app.config['LISTER_COST_PER_TASK']
 
     ads = [dict(a) for a in db.execute(
-        'SELECT * FROM ads WHERE user_id=%s ORDER BY created_at DESC LIMIT 5', (uid,)
+        'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC LIMIT 5', (uid,)
     ).fetchall()]
     recent_tasks = db.execute(
         'SELECT tc.*, a.title as ad_title FROM task_completions tc '
-        'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=%s '
+        'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=? '
         'ORDER BY tc.submitted_at DESC LIMIT 5', (uid,)
     ).fetchall()
     total_earned = db.execute(
-        'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=%s AND type="earn"', (uid,)
+        'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type="earn"', (uid,)
     ).fetchone()[0]
     total_spent = db.execute(
-        'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=%s AND type="spend"', (uid,)
+        'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type="spend"', (uid,)
     ).fetchone()[0]
     unread = db.execute(
-        'SELECT COUNT(*) FROM notifications WHERE user_id=%s AND read=0', (uid,)
+        'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
     ).fetchone()[0]
     available_ads = [dict(a) for a in db.execute(
-        'SELECT * FROM ads WHERE status="active" AND user_id!=%s '
-        'AND id NOT IN (SELECT ad_id FROM task_completions WHERE worker_id=%s) '
+        'SELECT * FROM ads WHERE status="active" AND user_id!=? '
+        'AND id NOT IN (SELECT ad_id FROM task_completions WHERE worker_id=?) '
         'AND budget_spent < budget ORDER BY created_at DESC LIMIT 10', (uid, uid)
     ).fetchall()]
 
@@ -70,7 +70,7 @@ def ads():
     WORKER_REWARD_PER_TASK = current_app.config['WORKER_REWARD_PER_TASK']
     LISTER_COST_PER_TASK   = current_app.config['LISTER_COST_PER_TASK']
     user_ads = db.execute(
-        'SELECT * FROM ads WHERE user_id=%s ORDER BY created_at DESC',
+        'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC',
         (session['user_id'],)
     ).fetchall()
     return render_template('ads.html', ads=user_ads,
@@ -86,7 +86,7 @@ def create_ad():
     uid = session['user_id']
     WORKER_REWARD_PER_TASK = current_app.config['WORKER_REWARD_PER_TASK']
     LISTER_COST_PER_TASK   = current_app.config['LISTER_COST_PER_TASK']
-    user = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
+    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
 
     title            = request.form.get('title', '').strip()
     platform         = request.form.get('platform', '').strip()
@@ -110,17 +110,17 @@ def create_ad():
 
     ad_id = db.execute(
         'INSERT INTO ads (user_id,title,platform,target_url,task_type,'
-        'reward_per_task,budget,followers_target) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
+        'reward_per_task,budget,followers_target) VALUES (?,?,?,?,?,?,?,?)',
         (uid, title, platform, target_url, task_type,
          WORKER_REWARD_PER_TASK, budget, followers_target)
     ).fetchone()['id']
-    db.execute('UPDATE users SET balance=balance-%s WHERE id=%s', (budget, uid))
-    ad = db.execute('SELECT * FROM ads WHERE id=%s', (ad_id,)).fetchone()
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (budget, uid))
+    ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
     add_transaction(db, uid, 'spend', budget, f'Budget for ad: {ad["title"]}')
     check_and_award_referral_bonus(db, uid)
     add_notification(db, uid, f'📢 Ad "{ad["title"]}" is now live!')
 
-    users = db.execute('SELECT id FROM users WHERE id != %s', (uid,)).fetchall()
+    users = db.execute('SELECT id FROM users WHERE id != ?', (uid,)).fetchall()
     for u in users:
         add_notification(db, u['id'],
                          f'📢 New task available: "{ad["title"]}" on {ad["platform"]}')
@@ -132,13 +132,13 @@ def create_ad():
 @login_required
 def toggle_ad(ad_id):
     db = get_db()
-    ad = db.execute('SELECT * FROM ads WHERE id=%s', (ad_id,)).fetchone()
+    ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
     if not ad or ad['user_id'] != session['user_id']:
         return jsonify({'success': False, 'error': 'Not found'}), 404
     if ad['status'] == 'completed':
         return jsonify({'success': False, 'error': 'Campaign already completed.'})
     new_status = 'paused' if ad['status'] == 'active' else 'active'
-    db.execute('UPDATE ads SET status=%s WHERE id=%s', (new_status, ad_id))
+    db.execute('UPDATE ads SET status=? WHERE id=?', (new_status, ad_id))
     db.commit()
     return jsonify({'success': True, 'status': new_status})
 
@@ -151,14 +151,14 @@ def tasks():
     db  = get_db()
     uid = session['user_id']
     available = db.execute(
-        'SELECT * FROM ads WHERE status="active" AND user_id!=%s '
-        'AND id NOT IN (SELECT ad_id FROM task_completions WHERE worker_id=%s) '
+        'SELECT * FROM ads WHERE status="active" AND user_id!=? '
+        'AND id NOT IN (SELECT ad_id FROM task_completions WHERE worker_id=?) '
         'AND budget_spent < budget ORDER BY created_at DESC',
         (uid, uid)
     ).fetchall()
     my_tasks = db.execute(
         'SELECT tc.*, a.title as ad_title FROM task_completions tc '
-        'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=%s '
+        'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=? '
         'ORDER BY tc.submitted_at DESC',
         (uid,)
     ).fetchall()
@@ -178,14 +178,14 @@ def submit_task():
     ad_id      = safe_int(request.form.get('ad_id'), 0)
     proof_link = request.form.get('proof_link', '').strip()
 
-    ad = db.execute('SELECT * FROM ads WHERE id=%s', (ad_id,)).fetchone()
+    ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
     if not ad:
         return jsonify({'success': False, 'error': 'Ad not found.'})
     if ad['status'] != 'active':
         return jsonify({'success': False, 'error': 'This campaign is not active.'})
     if ad['user_id'] == uid:
         return jsonify({'success': False, 'error': 'Cannot complete your own ad.'})
-    if db.execute('SELECT id FROM task_completions WHERE ad_id=%s AND worker_id=%s',
+    if db.execute('SELECT id FROM task_completions WHERE ad_id=? AND worker_id=?',
                   (ad_id, uid)).fetchone():
         return jsonify({'success': False, 'error': 'Already submitted for this ad.'})
     if not proof_link.startswith(('http://', 'https://')):
@@ -202,14 +202,14 @@ def submit_task():
 
     db.execute(
         'INSERT INTO task_completions (ad_id,worker_id,proof_link,status,reward,reviewed_at) '
-        'VALUES (%s,%s,%s,%s,%s,%s)',
+        'VALUES (?,?,?,?,?,?)',
         (ad_id, uid, proof_link, 'completed', reward, now)
     )
     db.execute(
-        'UPDATE ads SET budget_spent=budget_spent+%s, followers_gained=followers_gained+1 WHERE id=%s',
+        'UPDATE ads SET budget_spent=budget_spent+?, followers_gained=followers_gained+1 WHERE id=?',
         (LISTER_COST_PER_TASK, ad_id)
     )
-    db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (reward, uid))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
     add_transaction(db, uid, 'earn', reward, f'Task completed: {ad["title"]}')
     add_notification(db, uid,
                      f'✅ Task completed! +{CURRENCY_SYMBOL}{reward:.2f} added to your wallet for "{ad["title"]}"')
@@ -230,7 +230,7 @@ def boost_post(post_id):
     WORKER_REWARD_PER_TASK = current_app.config['WORKER_REWARD_PER_TASK']
     LISTER_COST_PER_TASK   = current_app.config['LISTER_COST_PER_TASK']
 
-    post = db.execute('SELECT * FROM posts WHERE id=%s AND user_id=%s', (post_id, uid)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=? AND user_id=?', (post_id, uid)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Post not found or not yours.'}), 404
 
@@ -246,18 +246,18 @@ def boost_post(post_id):
         return jsonify({'success': False, 'error': 'Reward must be at least $0.01.'}), 400
 
     budget = round(target_count * LISTER_COST_PER_TASK, 2)
-    user   = db.execute('SELECT balance FROM users WHERE id=%s', (uid,)).fetchone()
+    user   = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
     if budget > user['balance']:
         return jsonify({'success': False,
                         'error': f'Insufficient balance. Need ${budget:.2f}, have ${user["balance"]:.2f}.'}), 400
 
-    db.execute('UPDATE users SET balance=balance-%s WHERE id=%s', (budget, uid))
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (budget, uid))
     boost_id = db.execute(
         "INSERT INTO post_boosts (post_id, user_id, budget, reward_per_engage, "
-        "engage_type, target_count, status) VALUES (%s,%s,%s,%s,%s,%s,'active') RETURNING id",
+        "engage_type, target_count, status) VALUES (?,?,?,?,?,?,'active')",
         (post_id, uid, budget, WORKER_REWARD_PER_TASK, engage_type, target_count)
     ).fetchone()['id']
-    db.execute('UPDATE posts SET is_boosted=1 WHERE id=%s', (post_id,))
+    db.execute('UPDATE posts SET is_boosted=1 WHERE id=?', (post_id,))
     add_transaction(db, uid, 'spend', budget,
                     f'Boost post #{post_id} — {target_count}x {engage_type}')
     add_notification(db, uid,
@@ -272,25 +272,25 @@ def cancel_boost(post_id):
     db  = get_db()
     uid = session['user_id']
     boost = db.execute(
-        "SELECT * FROM post_boosts WHERE post_id=%s AND user_id=%s AND status='active'",
+        "SELECT * FROM post_boosts WHERE post_id=? AND user_id=? AND status='active'",
         (post_id, uid)
     ).fetchone()
     if not boost:
         return jsonify({'success': False, 'error': 'No active boost found.'}), 404
 
     refund = round(float(boost['budget']) - float(boost['budget_spent']), 6)
-    db.execute("UPDATE post_boosts SET status='cancelled' WHERE id=%s", (boost['id'],))
+    db.execute("UPDATE post_boosts SET status='cancelled' WHERE id=?", (boost['id'],))
     if refund > 0:
-        db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (refund, uid))
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (refund, uid))
         add_transaction(db, uid, 'deposit', refund, f'Boost refund for post #{post_id}')
         add_notification(db, uid, f'↩️ Boost cancelled. ${refund:.2f} refunded to your wallet.')
 
     other = db.execute(
-        "SELECT id FROM post_boosts WHERE post_id=%s AND status='active' AND id!=%s",
+        "SELECT id FROM post_boosts WHERE post_id=? AND status='active' AND id!=?",
         (post_id, boost['id'])
     ).fetchone()
     if not other:
-        db.execute('UPDATE posts SET is_boosted=0 WHERE id=%s', (post_id,))
+        db.execute('UPDATE posts SET is_boosted=0 WHERE id=?', (post_id,))
     db.commit()
     return jsonify({'success': True, 'refund': refund})
 
@@ -305,12 +305,12 @@ def earn_engagement(post_id):
 
     boost = db.execute("""
         SELECT pb.* FROM post_boosts pb
-        WHERE pb.post_id=%s AND pb.status='active'
+        WHERE pb.post_id=? AND pb.status='active'
           AND pb.budget_spent < pb.budget
-          AND pb.user_id != %s
+          AND pb.user_id != ?
           AND NOT EXISTS (
             SELECT 1 FROM boost_engagements be
-            WHERE be.boost_id=pb.id AND be.worker_id=%s
+            WHERE be.boost_id=pb.id AND be.worker_id=?
           )
         ORDER BY pb.created_at DESC LIMIT 1
     """, (post_id, uid, uid)).fetchone()
@@ -321,28 +321,28 @@ def earn_engagement(post_id):
     reward = float(boost['reward_per_engage'])
     db.execute(
         "INSERT INTO boost_engagements (boost_id, post_id, worker_id, reward, earned_at) "
-        "VALUES (%s,%s,%s,%s,NOW())",
+        "VALUES (?,?,?,?,datetime('now'))",
         (boost['id'], post_id, uid, reward)
     )
     db.execute("""
         UPDATE post_boosts
-        SET budget_spent  = budget_spent + %s,
+        SET budget_spent  = budget_spent + ?,
             engaged_count = engaged_count + 1,
             status = CASE
-              WHEN budget_spent + %s >= budget THEN 'completed'
+              WHEN budget_spent + ? >= budget THEN 'completed'
               WHEN engaged_count + 1 >= target_count THEN 'completed'
               ELSE status
             END
-        WHERE id=%s
+        WHERE id=?
     """, (reward, reward, boost['id']))
 
-    db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (reward, uid))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (reward, uid))
     add_transaction(db, uid, 'earn', reward,
                     f'Earned from boosted post #{post_id} ({boost["engage_type"]})')
 
-    updated_boost = db.execute('SELECT * FROM post_boosts WHERE id=%s', (boost['id'],)).fetchone()
+    updated_boost = db.execute('SELECT * FROM post_boosts WHERE id=?', (boost['id'],)).fetchone()
     if updated_boost and updated_boost['status'] == 'completed':
-        db.execute('UPDATE posts SET is_boosted=0 WHERE id=%s', (post_id,))
+        db.execute('UPDATE posts SET is_boosted=0 WHERE id=?', (post_id,))
         add_notification(db, boost['user_id'],
             f'🎉 Your boost on post #{post_id} completed! '
             f'{updated_boost["engaged_count"]} engagements reached.')
@@ -350,7 +350,7 @@ def earn_engagement(post_id):
     check_and_award_referral_bonus(db, uid)
     db.commit()
 
-    new_balance = db.execute('SELECT balance FROM users WHERE id=%s', (uid,)).fetchone()['balance']
+    new_balance = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
     return jsonify({
         'success': True, 'reward': reward, 'balance': new_balance,
         'message': f'+${reward:.2f} earned!'
@@ -365,14 +365,14 @@ def my_boosts():
     boosts = db.execute("""
         SELECT pb.*, p.body, p.like_count, p.reply_count
         FROM post_boosts pb JOIN posts p ON p.id=pb.post_id
-        WHERE pb.user_id=%s ORDER BY pb.created_at DESC LIMIT 50
+        WHERE pb.user_id=? ORDER BY pb.created_at DESC LIMIT 50
     """, (uid,)).fetchall()
 
     total_spent   = sum(float(b['budget_spent']) for b in boosts)
     total_budget  = sum(float(b['budget']) for b in boosts)
     total_engaged = sum(int(b['engaged_count']) for b in boosts)
     earned = db.execute(
-        'SELECT COALESCE(SUM(be.reward),0) as total FROM boost_engagements be WHERE be.worker_id=%s',
+        'SELECT COALESCE(SUM(be.reward),0) as total FROM boost_engagements be WHERE be.worker_id=?',
         (uid,)
     ).fetchone()['total']
 
@@ -397,12 +397,12 @@ def api_earn_posts():
         JOIN post_boosts pb ON pb.post_id = p.id
         WHERE pb.status='active'
           AND pb.budget_spent < pb.budget
-          AND pb.user_id != %s
+          AND pb.user_id != ?
           AND NOT EXISTS (
             SELECT 1 FROM boost_engagements be
-            WHERE be.boost_id=pb.id AND be.worker_id=%s
+            WHERE be.boost_id=pb.id AND be.worker_id=?
           )
-        ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT %s OFFSET %s
+        ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT ? OFFSET ?
     """, (uid, uid, per, off)).fetchall()
 
     posts    = [format_post(r, uid, db) for r in rows]
@@ -421,7 +421,7 @@ def analytics():
     CURRENCY_SYMBOL      = current_app.config['CURRENCY_SYMBOL']
 
     ads_rows = db.execute(
-        'SELECT * FROM ads WHERE user_id=%s ORDER BY created_at DESC', (uid,)
+        'SELECT * FROM ads WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
     ads = [dict(a) for a in ads_rows]
 
@@ -434,7 +434,7 @@ def analytics():
     active_campaigns = sum(1 for ad in ads if ad['status'] == 'active')
     total_completions = db.execute(
         'SELECT COUNT(*) FROM task_completions WHERE ad_id IN '
-        '(SELECT id FROM ads WHERE user_id=%s) AND status="completed"', (uid,)
+        '(SELECT id FROM ads WHERE user_id=?) AND status="completed"', (uid,)
     ).fetchone()[0]
 
     roi = round((total_followers * LISTER_COST_PER_TASK - total_spent) / total_spent * 100, 2) \
@@ -458,12 +458,12 @@ def api_analytics(ad_id):
     uid = session['user_id']
     LISTER_COST_PER_TASK = current_app.config['LISTER_COST_PER_TASK']
 
-    ad = db.execute('SELECT * FROM ads WHERE id=%s AND user_id=%s', (ad_id, uid)).fetchone()
+    ad = db.execute('SELECT * FROM ads WHERE id=? AND user_id=?', (ad_id, uid)).fetchone()
     if not ad:
         return jsonify({'success': False, 'error': 'Ad not found'}), 404
 
     completions      = db.execute(
-        'SELECT * FROM task_completions WHERE ad_id=%s ORDER BY submitted_at DESC', (ad_id,)
+        'SELECT * FROM task_completions WHERE ad_id=? ORDER BY submitted_at DESC', (ad_id,)
     ).fetchall()
     total_tasks      = len(completions)
     completed_tasks  = sum(1 for c in completions if c['status'] == 'completed')
@@ -515,7 +515,7 @@ def api_analytics_performance():
 
     ads_rows = db.execute(
         'SELECT id, title, platform, task_type, followers_target, followers_gained, '
-        'budget, budget_spent, status FROM ads WHERE user_id=%s '
+        'budget, budget_spent, status FROM ads WHERE user_id=? '
         'ORDER BY followers_gained DESC LIMIT 10', (uid,)
     ).fetchall()
 
@@ -562,7 +562,7 @@ def activity_feed():
 def tip_post(post_id):
     db  = get_db()
     uid = session['user_id']
-    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Post not found.'}), 404
     if post['user_id'] == uid:
@@ -573,19 +573,19 @@ def tip_post(post_id):
     if amount < 0.01:
         return jsonify({'success': False, 'error': 'Minimum tip is $0.01.'}), 400
 
-    sender = db.execute('SELECT balance, username FROM users WHERE id=%s', (uid,)).fetchone()
+    sender = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
     if amount > sender['balance']:
         return jsonify({'success': False, 'error': 'Insufficient balance.'}), 400
 
-    db.execute('UPDATE users SET balance=balance-%s, total_tips_sent=total_tips_sent+%s WHERE id=%s',
+    db.execute('UPDATE users SET balance=balance-?, total_tips_sent=total_tips_sent+? WHERE id=?',
                (amount, amount, uid))
-    db.execute('UPDATE users SET balance=balance+%s, total_tips_received=total_tips_received+%s WHERE id=%s',
+    db.execute('UPDATE users SET balance=balance+?, total_tips_received=total_tips_received+? WHERE id=?',
                (amount, amount, post['user_id']))
     db.execute(
-        'INSERT INTO tips (from_user_id, to_user_id, post_id, amount, message) VALUES (%s,%s,%s,%s,%s)',
+        'INSERT INTO tips (from_user_id, to_user_id, post_id, amount, message) VALUES (?,?,?,?,?)',
         (uid, post['user_id'], post_id, amount, message or None)
     )
-    recipient = db.execute('SELECT username FROM users WHERE id=%s', (post['user_id'],)).fetchone()
+    recipient = db.execute('SELECT username FROM users WHERE id=?', (post['user_id'],)).fetchone()
     add_transaction(db, uid, 'tip_sent', amount,
                     f'Tip to @{recipient["username"]} on post #{post_id}')
     add_transaction(db, post['user_id'], 'tip_received', amount,
@@ -596,7 +596,7 @@ def tip_post(post_id):
     add_notification(db, post['user_id'], tip_msg)
     db.commit()
 
-    new_bal = db.execute('SELECT balance FROM users WHERE id=%s', (uid,)).fetchone()['balance']
+    new_bal = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
     return jsonify({'success': True, 'amount': amount, 'balance': new_bal,
                     'message': f'${amount:.2f} tip sent!'})
 
@@ -607,7 +607,7 @@ def tip_post(post_id):
 def tip_user(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+    target = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not target:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
     if target['id'] == uid:
@@ -618,15 +618,15 @@ def tip_user(username):
     if amount < 0.01:
         return jsonify({'success': False, 'error': 'Minimum tip is $0.01.'}), 400
 
-    sender = db.execute('SELECT balance, username FROM users WHERE id=%s', (uid,)).fetchone()
+    sender = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
     if amount > sender['balance']:
         return jsonify({'success': False, 'error': 'Insufficient balance.'}), 400
 
-    db.execute('UPDATE users SET balance=balance-%s, total_tips_sent=total_tips_sent+%s WHERE id=%s',
+    db.execute('UPDATE users SET balance=balance-?, total_tips_sent=total_tips_sent+? WHERE id=?',
                (amount, amount, uid))
-    db.execute('UPDATE users SET balance=balance+%s, total_tips_received=total_tips_received+%s WHERE id=%s',
+    db.execute('UPDATE users SET balance=balance+?, total_tips_received=total_tips_received+? WHERE id=?',
                (amount, amount, target['id']))
-    db.execute('INSERT INTO tips (from_user_id, to_user_id, amount, message) VALUES (%s,%s,%s,%s)',
+    db.execute('INSERT INTO tips (from_user_id, to_user_id, amount, message) VALUES (?,?,?,?)',
                (uid, target['id'], amount, message or None))
     add_transaction(db, uid, 'tip_sent', amount, f'Tip to @{username}')
     add_transaction(db, target['id'], 'tip_received', amount, f'Tip from @{sender["username"]}')
@@ -636,7 +636,7 @@ def tip_user(username):
     add_notification(db, target['id'], notif)
     db.commit()
 
-    new_bal = db.execute('SELECT balance FROM users WHERE id=%s', (uid,)).fetchone()['balance']
+    new_bal = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()['balance']
     return jsonify({'success': True, 'amount': amount, 'balance': new_bal,
                     'message': f'${amount:.2f} sent to @{username}!'})
 
@@ -660,26 +660,26 @@ def creator_setup():
             return jsonify({'success': False, 'error': 'Tier title is required.'}), 400
 
         existing = db.execute(
-            'SELECT id FROM subscription_tiers WHERE creator_id=%s', (uid,)
+            'SELECT id FROM subscription_tiers WHERE creator_id=?', (uid,)
         ).fetchone()
         if existing:
             db.execute(
-                'UPDATE subscription_tiers SET price_usd=%s,title=%s,description=%s,perks=%s,is_active=%s '
-                'WHERE creator_id=%s',
+                'UPDATE subscription_tiers SET price_usd=?,title=?,description=?,perks=?,is_active=? '
+                'WHERE creator_id=?',
                 (price, title, description, perks, is_active, uid)
             )
         else:
             db.execute(
                 'INSERT INTO subscription_tiers (creator_id,price_usd,title,description,perks,is_active) '
-                'VALUES (%s,%s,%s,%s,%s,%s)',
+                'VALUES (?,?,?,?,?,?)',
                 (uid, price, title, description, perks, is_active)
             )
         db.commit()
-        me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
+        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
         return jsonify({'success': True,
                         'redirect': url_for('social.profile', username=me['username'])})
 
-    tier = db.execute('SELECT * FROM subscription_tiers WHERE creator_id=%s', (uid,)).fetchone()
+    tier = db.execute('SELECT * FROM subscription_tiers WHERE creator_id=?', (uid,)).fetchone()
     return render_template('creator_setup.html', tier=dict(tier) if tier else None)
 
 
@@ -689,27 +689,27 @@ def creator_setup():
 def subscribe(username):
     db  = get_db()
     uid = session['user_id']
-    creator = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not creator:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
     if creator['id'] == uid:
         return jsonify({'success': False, 'error': 'Cannot subscribe to yourself.'}), 400
 
     tier = db.execute(
-        "SELECT * FROM subscription_tiers WHERE creator_id=%s AND is_active=1", (creator['id'],)
+        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1", (creator['id'],)
     ).fetchone()
     if not tier:
         return jsonify({'success': False,
                         'error': 'This creator has no active subscription tier.'}), 400
 
     existing = db.execute(
-        "SELECT * FROM subscriptions WHERE subscriber_id=%s AND creator_id=%s",
+        "SELECT * FROM subscriptions WHERE subscriber_id=? AND creator_id=?",
         (uid, creator['id'])
     ).fetchone()
     if existing and existing['status'] == 'active':
         return jsonify({'success': False, 'error': 'Already subscribed.'}), 400
 
-    subscriber = db.execute('SELECT balance, username FROM users WHERE id=%s', (uid,)).fetchone()
+    subscriber = db.execute('SELECT balance, username FROM users WHERE id=?', (uid,)).fetchone()
     price = float(tier['price_usd'])
     if price > subscriber['balance']:
         return jsonify({'success': False,
@@ -718,24 +718,24 @@ def subscribe(username):
     now     = datetime.now(timezone.utc)
     expires = (now + timedelta(days=30)).isoformat()
 
-    db.execute('UPDATE users SET balance=balance-%s WHERE id=%s', (price, uid))
-    db.execute('UPDATE users SET balance=balance+%s WHERE id=%s', (price, creator['id']))
+    db.execute('UPDATE users SET balance=balance-? WHERE id=?', (price, uid))
+    db.execute('UPDATE users SET balance=balance+? WHERE id=?', (price, creator['id']))
 
     if existing:
         db.execute(
-            "UPDATE subscriptions SET status='active',started_at=%s,expires_at=%s,tier_id=%s "
-            "WHERE subscriber_id=%s AND creator_id=%s",
+            "UPDATE subscriptions SET status='active',started_at=?,expires_at=?,tier_id=? "
+            "WHERE subscriber_id=? AND creator_id=?",
             (now.isoformat(), expires, tier['id'], uid, creator['id'])
         )
     else:
         db.execute(
             'INSERT INTO subscriptions (subscriber_id,creator_id,tier_id,started_at,expires_at) '
-            'VALUES (%s,%s,%s,%s,%s)',
+            'VALUES (?,?,?,?,?)',
             (uid, creator['id'], tier['id'], now.isoformat(), expires)
         )
         db.execute(
             'UPDATE users SET subscriber_count=('
-            'SELECT COUNT(*) FROM subscriptions WHERE creator_id=%s AND status=\'active\') WHERE id=%s',
+            'SELECT COUNT(*) FROM subscriptions WHERE creator_id=? AND status=\'active\') WHERE id=?',
             (creator['id'], creator['id'])
         )
 
@@ -756,24 +756,24 @@ def subscribe(username):
 def unsubscribe(username):
     db  = get_db()
     uid = session['user_id']
-    creator = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
+    creator = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
     if not creator:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
 
     sub = db.execute(
-        "SELECT * FROM subscriptions WHERE subscriber_id=%s AND creator_id=%s AND status='active'",
+        "SELECT * FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
         (uid, creator['id'])
     ).fetchone()
     if not sub:
         return jsonify({'success': False, 'error': 'No active subscription found.'}), 404
 
     db.execute(
-        "UPDATE subscriptions SET status='cancelled' WHERE subscriber_id=%s AND creator_id=%s",
+        "UPDATE subscriptions SET status='cancelled' WHERE subscriber_id=? AND creator_id=?",
         (uid, creator['id'])
     )
     db.execute(
         'UPDATE users SET subscriber_count=('
-        'SELECT COUNT(*) FROM subscriptions WHERE creator_id=%s AND status=\'active\') WHERE id=%s',
+        'SELECT COUNT(*) FROM subscriptions WHERE creator_id=? AND status=\'active\') WHERE id=?',
         (creator['id'], creator['id'])
     )
     add_notification(db, uid,
@@ -788,11 +788,11 @@ def unsubscribe(username):
 def subscriber_list(username):
     db  = get_db()
     uid = session['user_id']
-    creator = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not creator:
         return render_template('error.html', code=404, message='User not found.'), 404
 
-    viewer = db.execute('SELECT is_admin FROM users WHERE id=%s', (uid,)).fetchone()
+    viewer = db.execute('SELECT is_admin FROM users WHERE id=?', (uid,)).fetchone()
     if creator['id'] != uid and not viewer['is_admin']:
         return render_template('error.html', code=403, message='Access denied.'), 403
 
@@ -802,7 +802,7 @@ def subscriber_list(username):
         FROM subscriptions s
         JOIN users u ON u.id=s.subscriber_id
         JOIN subscription_tiers t ON t.id=s.tier_id
-        WHERE s.creator_id=%s ORDER BY s.started_at DESC
+        WHERE s.creator_id=? ORDER BY s.started_at DESC
     """, (creator['id'],)).fetchall()
 
     active_count    = sum(1 for s in subs if s['status'] == 'active')
@@ -817,32 +817,32 @@ def subscriber_list(username):
 def creator_earnings():
     db  = get_db()
     uid = session['user_id']
-    tier = db.execute('SELECT * FROM subscription_tiers WHERE creator_id=%s', (uid,)).fetchone()
+    tier = db.execute('SELECT * FROM subscription_tiers WHERE creator_id=?', (uid,)).fetchone()
 
     tips_received = db.execute("""
         SELECT t.*, u.username as sender_name, u.avatar_url as sender_avatar, p.body as post_body
         FROM tips t JOIN users u ON u.id=t.from_user_id LEFT JOIN posts p ON p.id=t.post_id
-        WHERE t.to_user_id=%s ORDER BY t.created_at DESC LIMIT 50
+        WHERE t.to_user_id=? ORDER BY t.created_at DESC LIMIT 50
     """, (uid,)).fetchall()
     tips_sent = db.execute("""
         SELECT t.*, u.username as recipient_name FROM tips t
-        JOIN users u ON u.id=t.to_user_id WHERE t.from_user_id=%s ORDER BY t.created_at DESC LIMIT 20
+        JOIN users u ON u.id=t.to_user_id WHERE t.from_user_id=? ORDER BY t.created_at DESC LIMIT 20
     """, (uid,)).fetchall()
     subscribers = db.execute("""
         SELECT s.*, u.username, u.display_name, u.avatar_url, t.title as tier_title, t.price_usd
         FROM subscriptions s JOIN users u ON u.id=s.subscriber_id
         JOIN subscription_tiers t ON t.id=s.tier_id
-        WHERE s.creator_id=%s AND s.status='active' ORDER BY s.started_at DESC
+        WHERE s.creator_id=? AND s.status='active' ORDER BY s.started_at DESC
     """, (uid,)).fetchall()
 
     sub_revenue = db.execute(
         "SELECT COALESCE(SUM(amount),0) FROM transactions "
-        "WHERE user_id=%s AND type='earn' AND description LIKE 'Subscription from %'", (uid,)
+        "WHERE user_id=? AND type='earn' AND description LIKE 'Subscription from %'", (uid,)
     ).fetchone()[0]
     boost_earned = db.execute(
-        'SELECT COALESCE(SUM(reward),0) FROM boost_engagements WHERE worker_id=%s', (uid,)
+        'SELECT COALESCE(SUM(reward),0) FROM boost_engagements WHERE worker_id=?', (uid,)
     ).fetchone()[0]
-    me = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
+    me = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
 
     return render_template('creator_earnings.html',
                            tier=dict(tier) if tier else None,
@@ -861,21 +861,21 @@ def creator_earnings():
 def api_creator_stats(username):
     db  = get_db()
     uid = session['user_id']
-    creator = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+    creator = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not creator:
         return jsonify({'success': False}), 404
 
     tier = db.execute(
-        "SELECT * FROM subscription_tiers WHERE creator_id=%s AND is_active=1", (creator['id'],)
+        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1", (creator['id'],)
     ).fetchone()
     is_subscribed = bool(db.execute(
-        "SELECT 1 FROM subscriptions WHERE subscriber_id=%s AND creator_id=%s AND status='active'",
+        "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
         (uid, creator['id'])
     ).fetchone()) if uid != creator['id'] else False
     top_tips = db.execute("""
         SELECT t.amount, t.message, u.username, u.avatar_url
         FROM tips t JOIN users u ON u.id=t.from_user_id
-        WHERE t.to_user_id=%s ORDER BY t.amount DESC LIMIT 3
+        WHERE t.to_user_id=? ORDER BY t.amount DESC LIMIT 3
     """, (creator['id'],)).fetchall()
 
     return jsonify({
