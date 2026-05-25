@@ -93,7 +93,7 @@ def _global_generator(uid: int):
     try:
         conn = _get_db_conn(uid)
     except Exception as e:
-        logger.error('SSE global: DB connect failed for uid=%s: %s', uid, e)
+        logger.error('SSE global: DB connect failed for uid=?: ?', uid, e)
         return
 
     last_ping   = time.time()
@@ -117,19 +117,19 @@ def _global_generator(uid: int):
 
                 # ── Update online presence ───────────────────────────────────
                 ts = datetime.now(timezone.utc).isoformat()
-                cur.execute('UPDATE users SET online_at=%s WHERE id=%s', (ts, uid))
+                cur.execute('UPDATE users SET online_at=? WHERE id=?', (ts, uid))
 
                 # ── Notification count + latest unseen ───────────────────────
                 cur.execute(
                     'SELECT COUNT(*) as cnt FROM notifications '
-                    'WHERE user_id=%s AND read=0',
+                    'WHERE user_id=? AND read=0',
                     (uid,)
                 )
                 notif_count = cur.fetchone()['cnt']
 
                 cur.execute(
                     'SELECT id, message, created_at FROM notifications '
-                    'WHERE user_id=%s AND id > %s '
+                    'WHERE user_id=? AND id > ? '
                     'ORDER BY id DESC LIMIT 3',
                     (uid, last_notif)
                 )
@@ -149,7 +149,7 @@ def _global_generator(uid: int):
 
                 # ── DM unread count ──────────────────────────────────────────
                 cur.execute(
-                    'SELECT unread_dm_count FROM users WHERE id=%s', (uid,)
+                    'SELECT unread_dm_count FROM users WHERE id=?', (uid,)
                 )
                 dm_row = cur.fetchone()
                 dm_count = int(dm_row['unread_dm_count'] or 0) if dm_row else 0
@@ -160,8 +160,8 @@ def _global_generator(uid: int):
                     SELECT COUNT(DISTINCT gm.group_id) AS cnt
                     FROM group_messages gm
                     JOIN group_members gmp
-                      ON gmp.group_id = gm.group_id AND gmp.user_id = %s
-                    WHERE gm.sender_id != %s
+                      ON gmp.group_id = gm.group_id AND gmp.user_id = ?
+                    WHERE gm.sender_id != ?
                       AND gm.created_at > COALESCE(gmp.last_read_at, '1970-01-01')
                 """, (uid, uid))
                 grp_row = cur.fetchone()
@@ -175,7 +175,7 @@ def _global_generator(uid: int):
                     FROM task_completions tc
                     JOIN users u ON u.id = tc.worker_id
                     JOIN ads   a ON a.id = tc.ad_id
-                    WHERE tc.id > %s
+                    WHERE tc.id > ?
                     ORDER BY tc.submitted_at DESC LIMIT 5
                 """, (last_active,))
                 new_activity = cur.fetchall()
@@ -197,7 +197,7 @@ def _global_generator(uid: int):
                 cur.close()
 
             except Exception as e:
-                logger.warning('SSE global DB error uid=%s: %s', uid, e)
+                logger.warning('SSE global DB error uid=?: ?', uid, e)
                 try:
                     conn = _get_db_conn(uid)
                 except Exception:
@@ -289,7 +289,7 @@ def _dm_generator(uid: int, other_username: str, after: int):
                            u.avatar_url AS sender_avatar
                     FROM messages m
                     JOIN users u ON u.id = m.sender_id
-                    WHERE m.conversation_id = %s AND m.id > %s
+                    WHERE m.conversation_id = ? AND m.id > ?
                     ORDER BY m.created_at ASC LIMIT 50
                 """, (conv_id, last_id))
                 rows = cur.fetchall()
@@ -307,8 +307,8 @@ def _dm_generator(uid: int, other_username: str, after: int):
                         SELECT COUNT(*) AS cnt
                         FROM messages m
                         JOIN conversations c ON c.id = m.conversation_id
-                        WHERE (c.user_a=%s OR c.user_b=%s)
-                          AND m.sender_id != %s AND m.is_read = 0
+                        WHERE (c.user_a=? OR c.user_b=?)
+                          AND m.sender_id != ? AND m.is_read = 0
                     """, (uid, uid, uid))
                     total_unread = cur.fetchone()['cnt']
                     cur.execute(
@@ -418,8 +418,8 @@ def _group_generator(uid: int, slug: str, after: int):
                            u.avatar_url   AS sender_avatar
                     FROM group_messages gm
                     JOIN users u ON u.id = gm.sender_id
-                    WHERE gm.group_id = %s
-                      AND gm.id > %s
+                    WHERE gm.group_id = ?
+                      AND gm.id > ?
                       AND gm.deleted_at IS NULL
                     ORDER BY gm.created_at ASC LIMIT 50
                 """, (group_id, last_id))

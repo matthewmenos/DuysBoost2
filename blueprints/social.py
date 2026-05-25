@@ -1056,7 +1056,7 @@ def messages_inbox():
 
     # ── Chats (1-to-1 DMs) ───────────────────────────────────────────────────
     chat_rows = db.execute(
-        'SELECT * FROM conversations WHERE user_a=%s OR user_b=%s '
+        'SELECT * FROM conversations WHERE user_a=? OR user_b=? '
         'ORDER BY last_msg_at DESC',
         (uid, uid)
     ).fetchall()
@@ -1066,12 +1066,12 @@ def messages_inbox():
     group_rows = db.execute("""
         SELECT g.* FROM groups g
         JOIN group_members gm ON gm.group_id = g.id
-        WHERE gm.user_id = %s
+        WHERE gm.user_id = ?
         ORDER BY g.created_at DESC
     """, (uid,)).fetchall()
     groups = [_format_group(r, uid, db) for r in group_rows]
 
-    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=%s', (uid,))
+    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=?', (uid,))
     db.commit()
 
     return render_template('messages.html',
@@ -1086,7 +1086,7 @@ def messages_inbox():
 def message_thread(username):
     db    = get_db()
     uid   = session['user_id']
-    other = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
+    other = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not other:
         return render_template('error.html', code=404, message='User not found.'), 404
     if other['id'] == uid:
@@ -1096,7 +1096,7 @@ def message_thread(username):
     msgs = [dict(m) for m in db.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
         FROM messages m JOIN users u ON u.id=m.sender_id
-        WHERE m.conversation_id=%s ORDER BY m.created_at ASC LIMIT 100
+        WHERE m.conversation_id=? ORDER BY m.created_at ASC LIMIT 100
     """, (conv['id'],)).fetchall()]
     for m in msgs:
         m.setdefault('edited_at', None)
@@ -1105,13 +1105,13 @@ def message_thread(username):
         m.setdefault('reply_to_id', None)
         m.setdefault('deleted_at', None)
 
-    db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=%s AND sender_id!=%s',
+    db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
                (conv['id'], uid))
     total_unread = db.execute("""
         SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
-        WHERE (c.user_a=%s OR c.user_b=%s) AND m.sender_id!=%s AND m.is_read=0
+        WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
     """, (uid, uid, uid)).fetchone()[0]
-    db.execute('UPDATE users SET unread_dm_count=%s WHERE id=%s', (total_unread, uid))
+    db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
     db.commit()
 
     return render_template('message_thread.html', other=dict(other), messages=msgs,
@@ -1125,7 +1125,7 @@ def message_thread(username):
 def send_message(username):
     db  = get_db()
     uid = session['user_id']
-    other = db.execute('SELECT id, username FROM users WHERE username=%s', (username,)).fetchone()
+    other = db.execute('SELECT id, username FROM users WHERE username=?', (username,)).fetchone()
     if not other or other['id'] == uid:
         return jsonify({'success': False, 'error': 'Invalid recipient.'}), 400
 
@@ -1164,18 +1164,19 @@ def send_message(username):
         except (ValueError, RuntimeError) as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
-    msg_id = db.execute(
+    db.execute(
         'INSERT INTO messages '
         '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,created_at) '
-        'VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
+        'VALUES (?,?,?,?,?,?,?,?)',
         (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, now)
-    ).fetchone()['id']
-    db.execute('UPDATE conversations SET last_msg_at=%s WHERE id=%s', (now, conv['id']))
-    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=%s', (other['id'],))
-    db.execute('UPDATE users SET online_at=%s WHERE id=%s', (now, uid))
+    )
+    msg_id = db.lastrowid
+    db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
+    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
     db.commit()
 
-    me = db.execute('SELECT username, avatar_url FROM users WHERE id=%s', (uid,)).fetchone()
+    me = db.execute('SELECT username, avatar_url FROM users WHERE id=?', (uid,)).fetchone()
     return jsonify({'success': True, 'message': {
         'id': msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
@@ -1190,29 +1191,29 @@ def poll_messages(username):
     db    = get_db()
     uid   = session['user_id']
     after = request.args.get('after', 0, type=int)
-    other = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
+    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
     if not other:
         return jsonify({'messages': []}), 404
 
     a, b = min(uid, other['id']), max(uid, other['id'])
-    conv = db.execute('SELECT id FROM conversations WHERE user_a=%s AND user_b=%s', (a, b)).fetchone()
+    conv = db.execute('SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     if not conv:
         return jsonify({'messages': []})
 
     rows = db.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
         FROM messages m JOIN users u ON u.id=m.sender_id
-        WHERE m.conversation_id=%s AND m.id > %s ORDER BY m.created_at ASC LIMIT 50
+        WHERE m.conversation_id=? AND m.id > ? ORDER BY m.created_at ASC LIMIT 50
     """, (conv['id'], after)).fetchall()
 
     if rows:
-        db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=%s AND sender_id!=%s AND id > %s',
+        db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
                    (conv['id'], uid, after))
         total_unread = db.execute("""
             SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
-            WHERE (c.user_a=%s OR c.user_b=%s) AND m.sender_id!=%s AND m.is_read=0
+            WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
         """, (uid, uid, uid)).fetchone()[0]
-        db.execute('UPDATE users SET unread_dm_count=%s WHERE id=%s', (total_unread, uid))
+        db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
         db.commit()
 
     return jsonify({'messages': [dict(r) for r in rows]})
@@ -1223,7 +1224,7 @@ def poll_messages(username):
 def api_unread_dms():
     db  = get_db()
     uid = session['user_id']
-    count = db.execute('SELECT unread_dm_count FROM users WHERE id=%s', (uid,)).fetchone()
+    count = db.execute('SELECT unread_dm_count FROM users WHERE id=?', (uid,)).fetchone()
     return jsonify({'count': int((count['unread_dm_count'] or 0)) if count else 0})
 
 
@@ -1242,10 +1243,10 @@ def set_typing(username):
 def is_typing(username):
     db  = get_db()
     uid = session['user_id']
-    other = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
+    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
     if not other:
         return jsonify({'typing': False})
-    me_row = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
+    me_row = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
     key    = (other['id'], me_row['username'] if me_row else '')
     ts     = _typing_state.get(key, 0)
     return jsonify({'typing': (datetime.now(timezone.utc).timestamp() - ts) < 3})
@@ -1256,7 +1257,7 @@ def is_typing(username):
 def edit_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
     if msg['sender_id'] != uid:
@@ -1270,7 +1271,7 @@ def edit_message(msg_id):
         return jsonify({'success': False, 'error': 'Invalid message body.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    db.execute('UPDATE messages SET body=%s, edited_at=%s WHERE id=%s', (body, now, msg_id))
+    db.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
     db.commit()
     return jsonify({'success': True, 'body': body, 'edited_at': now})
 
@@ -1280,12 +1281,12 @@ def edit_message(msg_id):
 def delete_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg or msg['sender_id'] != uid:
         return jsonify({'success': False, 'error': 'Not found or not authorized.'}), 404
     now = datetime.now(timezone.utc).isoformat()
     db.execute("UPDATE messages SET body='(deleted)',msg_type='text',file_url=NULL,"
-               "file_name=NULL,file_mime=NULL,deleted_at=%s WHERE id=%s", (now, msg_id))
+               "file_name=NULL,file_mime=NULL,deleted_at=? WHERE id=?", (now, msg_id))
     db.commit()
     return jsonify({'success': True})
 
@@ -1300,11 +1301,11 @@ def react_message(msg_id):
     if not emoji or len(emoji) > 8:
         return jsonify({'success': False, 'error': 'Invalid emoji.'}), 400
 
-    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
 
-    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1323,7 +1324,7 @@ def react_message(msg_id):
     else:
         reactions.pop(emoji, None)
 
-    db.execute('UPDATE messages SET reactions=%s WHERE id=%s', (json.dumps(reactions), msg_id))
+    db.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
     db.commit()
     return jsonify({'success': True, 'reactions': reactions})
 
@@ -1333,15 +1334,15 @@ def react_message(msg_id):
 def pin_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
-    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
     new_state = 0 if (msg['is_pinned'] if 'is_pinned' in msg.keys() else 0) else 1
-    db.execute('UPDATE messages SET is_pinned=%s WHERE id=%s', (new_state, msg_id))
+    db.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
     db.commit()
     return jsonify({'success': True, 'pinned': bool(new_state)})
 
@@ -1352,10 +1353,10 @@ def message_info(msg_id):
     db  = get_db()
     uid = session['user_id']
     msg = db.execute('SELECT m.*,u.username as sender_username,u.display_name as sender_display '
-                     'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=%s', (msg_id,)).fetchone()
+                     'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False}), 404
-    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False}), 403
     keys = msg.keys()
@@ -1377,10 +1378,10 @@ def forward_message():
     if not msg_id or not recipients:
         return jsonify({'success': False, 'error': 'Missing data.'}), 400
 
-    src      = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
+    src      = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not src:
         return jsonify({'success': False, 'error': 'Source message not found.'}), 404
-    src_conv = db.execute('SELECT * FROM conversations WHERE id=%s', (src['conversation_id'],)).fetchone()
+    src_conv = db.execute('SELECT * FROM conversations WHERE id=?', (src['conversation_id'],)).fetchone()
     if not src_conv or (src_conv['user_a'] != uid and src_conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1394,15 +1395,15 @@ def forward_message():
     sent = 0
     now  = datetime.now(timezone.utc).isoformat()
     for username in recipients[:10]:
-        u = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
+        u = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
         if not u or u['id'] == uid:
             continue
         conv = _get_or_create_conversation(db, uid, u['id'])
         db.execute('INSERT INTO messages (conversation_id,sender_id,body,msg_type,'
-                   'file_url,file_name,file_mime,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
+                   'file_url,file_name,file_mime,created_at) VALUES (?,?,?,?,?,?,?,?)',
                    (conv['id'], uid, body, msg_type, file_data, file_name, file_mime, now))
-        db.execute('UPDATE conversations SET last_msg_at=%s WHERE id=%s', (now, conv['id']))
-        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=%s', (u['id'],))
+        db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (u['id'],))
         sent += 1
     db.commit()
     return jsonify({'success': True, 'sent': sent})
@@ -1419,7 +1420,7 @@ def search_users_for_dm():
     like = f'%{q}%'
     rows = db.execute(
         'SELECT username,display_name,avatar_url,is_verified,follower_count '
-        'FROM users WHERE (username LIKE %s OR display_name LIKE %s) AND id != %s '
+        'FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? '
         'ORDER BY follower_count DESC LIMIT 10', (like, like, uid)
     ).fetchall()
     return jsonify({'users': [dict(u) for u in rows]})
