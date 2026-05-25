@@ -329,7 +329,7 @@ body.landing-body { background: var(--bg); }
 
   <!-- Header -->
   <header class="l-header">
-    <a href="{{ url_for('index') }}" class="l-logo">
+    <a href="{{ url_for('auth.index') }}" class="l-logo">
       <div class="logo-mark" aria-hidden="true">D</div>
       <div class="logo-text">DUYS Boost</div>
     </a>
@@ -338,8 +338,8 @@ body.landing-body { background: var(--bg); }
       <a href="#features" class="l-nav-link">Features</a>
     </nav>
     <div class="l-header-ctas">
-      <a href="{{ url_for('login') }}" class="btn btn-ghost btn-sm hide-mobile">Sign In</a>
-      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-sm">Get Started</a>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-sm hide-mobile">Sign In</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-sm">Get Started</a>
     </div>
   </header>
 
@@ -357,8 +357,8 @@ body.landing-body { background: var(--bg); }
       all verified on-chain with automatic crypto payments.
     </p>
     <div class="hero-ctas">
-      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-xl">Start for free →</a>
-      <a href="{{ url_for('login') }}" class="btn btn-ghost btn-xl">Sign in</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-xl">Start for free →</a>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-xl">Sign in</a>
     </div>
     <div class="hero-proof" role="list" aria-label="Platform stats">
       <div class="proof-stat" role="listitem">
@@ -474,7 +474,7 @@ body.landing-body { background: var(--bg); }
     <div class="cta-banner">
       <h2>Ready to grow?</h2>
       <p>Join thousands of creators and earners already on DUYS Boost. It takes less than a minute to start.</p>
-      <a href="{{ url_for('signup') }}" class="btn btn-primary btn-xl">Create free account →</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-xl">Create free account →</a>
     </div>
   </div>
 

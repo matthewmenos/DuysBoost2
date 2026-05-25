@@ -29,77 +29,77 @@
 
     <nav class="sidebar-nav">
       <div class="nav-section">Social</div>
-      <a href="{{ url_for('feed') }}" class="nav-item {% if request.endpoint=='feed' %}active{% endif %}">
+      <a href="{{ url_for('social.feed') }}" class="nav-item {% if request.endpoint=='feed' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🏠</span> Home
       </a>
-      <a href="{{ url_for('explore') }}" class="nav-item {% if request.endpoint=='explore' %}active{% endif %}">
+      <a href="{{ url_for('social.explore') }}" class="nav-item {% if request.endpoint=='explore' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔍</span> Explore
       </a>
-      <a href="{{ url_for('trending') }}" class="nav-item {% if request.endpoint=='trending' %}active{% endif %}">
+      <a href="{{ url_for('social.trending') }}" class="nav-item {% if request.endpoint=='trending' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔥</span> Trending
       </a>
-      <a href="{{ url_for('channels_browse') }}" class="nav-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
+      <a href="{{ url_for('social.channels_browse') }}" class="nav-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
         <span class="icon" aria-hidden="true">📡</span> Channels
       </a>
-      <a href="{{ url_for('groups_list') }}" class="nav-item {% if request.endpoint in ['groups_list','group_detail','group_create'] %}active{% endif %}"
+      <a href="{{ url_for('social.groups_list') }}" class="nav-item {% if request.endpoint in ['groups_list','group_detail','group_create'] %}active{% endif %}"
          style="position:relative">
         <span class="icon" aria-hidden="true">💬</span> Groups
         <span class="nav-badge" id="sidebar-grp-badge" style="display:none"></span>
       </a>
-      <a href="{{ url_for('notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
+      <a href="{{ url_for('wallet.notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔔</span> Notifications
         <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
       </a>
-      <a href="{{ url_for('messages_inbox') }}" class="nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
+      <a href="{{ url_for('social.messages_inbox') }}" class="nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
          style="position:relative">
         <span class="icon" aria-hidden="true">💬</span> Messages
         <span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
       </a>
-      <a href="{{ url_for('bookmarks') }}" class="nav-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
+      <a href="{{ url_for('social.bookmarks') }}" class="nav-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🔖</span> Bookmarks
       </a>
       {% if current_user %}
-      <a href="{{ url_for('profile', username=current_user.username) }}" class="nav-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
+      <a href="{{ url_for('social.profile', username=current_user.username) }}" class="nav-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
         <span class="icon" aria-hidden="true">👤</span> Profile
       </a>
       {% endif %}
 
       <div class="nav-section">Boost</div>
-      <a href="{{ url_for('dashboard') }}" class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+      <a href="{{ url_for('boost.dashboard') }}" class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
         <span class="icon" aria-hidden="true">📋</span> Campaign
       </a>
-      <a href="{{ url_for('feed', tab='earn') }}" class="nav-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
+      <a href="{{ url_for('social.feed', tab='earn') }}" class="nav-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
         <span class="icon" aria-hidden="true">⚡</span> Earn
       </a>
-      <a href="{{ url_for('my_boosts') }}" class="nav-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
+      <a href="{{ url_for('boost.my_boosts') }}" class="nav-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
         <span class="icon" aria-hidden="true">📣</span> My Boosts
       </a>
-      <a href="{{ url_for('tasks') }}" class="nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
+      <a href="{{ url_for('boost.tasks') }}" class="nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
         <span class="icon" aria-hidden="true">✅</span> Earn Tasks
       </a>
-      <a href="{{ url_for('analytics') }}" class="nav-item {% if request.endpoint=='analytics' %}active{% endif %}">
+      <a href="{{ url_for('boost.analytics') }}" class="nav-item {% if request.endpoint=='analytics' %}active{% endif %}">
         <span class="icon" aria-hidden="true">📊</span> Analytics
       </a>
 
       <div class="nav-section">Creator</div>
-      <a href="{{ url_for('creator_earnings') }}" class="nav-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
+      <a href="{{ url_for('boost.creator_earnings') }}" class="nav-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
         <span class="icon" aria-hidden="true">💎</span> Earnings
       </a>
-      <a href="{{ url_for('creator_setup') }}" class="nav-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
+      <a href="{{ url_for('boost.creator_setup') }}" class="nav-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
         <span class="icon" aria-hidden="true">⭐</span> My Tier
       </a>
 
       <div class="nav-section">Money</div>
-      <a href="{{ url_for('wallet') }}" class="nav-item {% if request.endpoint=='wallet' %}active{% endif %}">
+      <a href="{{ url_for('wallet.wallet') }}" class="nav-item {% if request.endpoint=='wallet' %}active{% endif %}">
         <span class="icon" aria-hidden="true">💳</span> Wallet
       </a>
-      <a href="{{ url_for('referral') }}" class="nav-item {% if request.endpoint=='referral' %}active{% endif %}">
+      <a href="{{ url_for('wallet.referral') }}" class="nav-item {% if request.endpoint=='referral' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🎁</span> Referrals
       </a>
 
       {% if current_user.is_admin %}
       <div class="nav-section">Admin</div>
-      <a href="{{ url_for('admin') }}" class="nav-item {% if request.endpoint=='admin' %}active{% endif %}">
+      <a href="{{ url_for('admin.admin') }}" class="nav-item {% if request.endpoint=='admin' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🛡</span> Admin Panel
       </a>
       {% endif %}
@@ -113,7 +113,7 @@
           <div class="user-balance">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
         </div>
       </div>
-      <a href="{{ url_for('logout') }}" class="btn btn-ghost btn-sm btn-block">Sign Out</a>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm btn-block">Sign Out</a>
     </div>
   </aside>
   {% endif %}
@@ -234,8 +234,8 @@
       </a>
 
       {# ── Profile ─────────────────────────────────────────────────────── #}
-      <a href="{% if current_user %}{{ url_for('profile', username=current_user.username) }}{% else %}{{ url_for('login') }}{% endif %}"
-         class="bottom-nav-item {% if request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
+      <a href="{% if current_user %}{{ url_for('social.profile', username=current_user.username) }}{% else %}{{ url_for('auth.login') }}{% endif %}"
+         class="bottom-nav-item {% if request.endpoint=='social.profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
          aria-label="Profile"
          style="position:relative">
         <div class="bn-icon">

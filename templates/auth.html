@@ -155,7 +155,7 @@ body.auth-body { background: var(--bg); }
 {% block layout %}
 <div class="auth-page">
   <div class="auth-card">
-    <a href="{{ url_for('index') }}" class="auth-back">← Back to home</a>
+    <a href="{{ url_for('auth.index') }}" class="auth-back">← Back to home</a>
     <div class="auth-logo">
       <div class="logo-mark" aria-hidden="true">D</div>
       <div class="logo-text">DUYS Boost</div>
@@ -165,8 +165,8 @@ body.auth-body { background: var(--bg); }
     <div class="auth-sub">{{ 'Start growing your social presence in minutes.' if mode == 'signup' else 'Sign in to continue to your dashboard.' }}</div>
 
     <div class="auth-tabs" role="tablist">
-      <a class="auth-tab {% if mode=='login' %}active{% endif %}" href="{{ url_for('login') }}" role="tab">Sign In</a>
-      <a class="auth-tab {% if mode=='signup' %}active{% endif %}" href="{{ url_for('signup') }}" role="tab">Sign Up</a>
+      <a class="auth-tab {% if mode=='login' %}active{% endif %}" href="{{ url_for('auth.login') }}" role="tab">Sign In</a>
+      <a class="auth-tab {% if mode=='signup' %}active{% endif %}" href="{{ url_for('auth.signup') }}" role="tab">Sign Up</a>
     </div>
 
     <div id="error-box" class="error-list" style="display:none" role="alert"></div>
@@ -280,7 +280,7 @@ document.getElementById('auth-form').addEventListener('submit', async e => {
   btn.disabled = true;
   try {
     const fd = new FormData(form);
-    const action = '{{ url_for("login") if mode=="login" else url_for("signup") }}';
+    const action = '{{ url_for("auth.login") if mode=="login" else url_for("auth.signup") }}';
     const r = await fetch(action, { method: 'POST', body: fd });
     const d = await r.json();
     if (d.success) {
