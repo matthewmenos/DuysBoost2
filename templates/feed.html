@@ -10,7 +10,7 @@
   <div class="feed-col">
     <!-- Mobile search bar (hidden on desktop via CSS) -->
     <div class="mobile-search-bar">
-      <a href="{{ url_for('social.explore') }}" class="mobile-search-link" aria-label="Search">
+      <button type="button" class="mobile-search-link" onclick="openFeedSearch()" aria-label="Search" style="background:none;border:none;cursor:pointer">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <span>Search posts, people, tags…</span>
       </a>
@@ -106,13 +106,13 @@
 
   <!-- Right sidebar -->
   <aside class="feed-sidebar">
-    <!-- Search shortcut -->
-    <a href="{{ url_for('social.explore') }}" class="search-bar-link">
+    <!-- Search shortcut — opens in-feed search panel -->
+    <div class="search-bar-link" onclick="openFeedSearch()" style="cursor:pointer">
       <div class="search-bar-fake">
         <span class="search-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-        <span class="text-muted">Search people &amp; posts…</span>
+        <span class="text-muted" id="feed-search-placeholder">Search people, posts, #tags…</span>
       </div>
-    </a>
+    </div>
 
     <!-- Who to follow -->
     <!-- Who to follow: loaded dynamically for personalisation -->
@@ -232,6 +232,25 @@
                 placeholder="Any additional context…"></textarea>
     </div>
     <button class="btn btn-primary btn-block" onclick="submitReport()">Submit report</button>
+  </div>
+</div>
+
+<!-- ── In-feed search overlay ──────────────────────────────────────── -->
+<div class="feed-search-overlay" id="feed-search-overlay" onclick="closeFeedSearch()"></div>
+<div class="feed-search-panel" id="feed-search-panel" style="display:none">
+  <div class="feed-search-input-wrap">
+    <svg class="i-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input class="feed-search-input" id="feed-search-input"
+           type="search" placeholder="Search people, posts, #tags…"
+           autocomplete="off" spellcheck="false"
+           oninput="onFeedSearch(this.value)"
+           onkeydown="onFeedSearchKey(event)">
+    <button onclick="closeFeedSearch()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px">
+      <svg class="i-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="feed-search-results" id="feed-search-results">
+    <!-- Populated by JS -->
   </div>
 </div>
 
@@ -888,5 +907,136 @@ window.feedFollowUser = feedFollowUser;
 
   document.querySelectorAll('.post-card[data-post-id]').forEach(card => observer.observe(card));
 })();
+
+/* ── In-feed search ──────────────────────────────────────────────────────── */
+let _searchTimer = null;
+
+function openFeedSearch() {
+  document.getElementById('feed-search-overlay').classList.add('open');
+  const panel = document.getElementById('feed-search-panel');
+  panel.style.display = '';
+  requestAnimationFrame(() => {
+    const inp = document.getElementById('feed-search-input');
+    if (inp) inp.focus();
+  });
+  _renderSearchDefault();
+}
+
+function closeFeedSearch() {
+  document.getElementById('feed-search-overlay').classList.remove('open');
+  document.getElementById('feed-search-panel').style.display = 'none';
+  const inp = document.getElementById('feed-search-input');
+  if (inp) inp.value = '';
+  document.getElementById('feed-search-results').innerHTML = '';
+}
+window.openFeedSearch  = openFeedSearch;
+window.closeFeedSearch = closeFeedSearch;
+
+function onFeedSearchKey(e) {
+  if (e.key === 'Escape') closeFeedSearch();
+  if (e.key === 'Enter') {
+    const q = document.getElementById('feed-search-input').value.trim();
+    if (q) { location.href = '/explore?q=' + encodeURIComponent(q); }
+  }
+}
+window.onFeedSearchKey = onFeedSearchKey;
+
+async function onFeedSearch(q) {
+  clearTimeout(_searchTimer);
+  if (!q.trim()) { _renderSearchDefault(); return; }
+  _searchTimer = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/search/autocomplete?q=' + encodeURIComponent(q));
+      const d = await r.json();
+      _renderSearchResults(d, q);
+    } catch (_) {}
+  }, 160);
+}
+window.onFeedSearch = onFeedSearch;
+
+async function _renderSearchDefault() {
+  const el = document.getElementById('feed-search-results');
+  try {
+    const [tr, th] = await Promise.all([
+      fetch('/api/trending/posts').then(r => r.json()).catch(() => []),
+      fetch('/api/trending/tags').then(r => r.json()).catch(() => ({tags:[]})),
+    ]);
+    let html = '';
+    if (th.tags && th.tags.length) {
+      html += '<div class="feed-search-section">Trending tags</div>';
+      html += th.tags.slice(0,6).map(t =>
+        `<a class="feed-search-item" href="/explore?q=${encodeURIComponent('#'+t.name)}">
+          <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+          <span>#${escapeHtml(t.name)}</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--muted)">${t.cnt} posts</span>
+        </a>`
+      ).join('');
+    }
+    el.innerHTML = html || '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Start typing to search…</div>';
+  } catch (_) {}
+}
+
+function _renderSearchResults(data, q) {
+  const el = document.getElementById('feed-search-results');
+  let html = '';
+  if (data.users && data.users.length) {
+    html += '<div class="feed-search-section">People</div>';
+    html += data.users.map(u => {
+      const av = u.avatar_url
+        ? `<img src="${u.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
+        : `<div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff">${(u.display_name||u.username||'?')[0].toUpperCase()}</div>`;
+      return `<a class="feed-search-item" href="/user/${encodeURIComponent(u.username)}">
+        ${av}
+        <div>
+          <div style="font-weight:700;font-size:13.5px">${escapeHtml(u.display_name||u.username)}${u.is_verified?' ✓':''}</div>
+          <div style="font-size:12px;color:var(--muted)">@${escapeHtml(u.username)} · ${u.follower_count||0} followers</div>
+        </div>
+      </a>`;
+    }).join('');
+  }
+  if (data.tags && data.tags.length) {
+    html += '<div class="feed-search-section">Hashtags</div>';
+    html += data.tags.map(t =>
+      `<a class="feed-search-item" href="/explore?q=${encodeURIComponent('#'+t.name)}">
+        <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+        <span>#${escapeHtml(t.name)}</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--muted)">${t.cnt} posts</span>
+      </a>`
+    ).join('');
+  }
+  if (!html) {
+    html = `<a class="feed-search-item" href="/explore?q=${encodeURIComponent(q)}">
+      <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Search for "${escapeHtml(q)}"
+    </a>`;
+  }
+  el.innerHTML = html;
+}
+
+/* ── Post tap → open detail (X-style) ───────────────────────────────────── */
+document.addEventListener('click', function(e) {
+  // Don't intercept button/link/input clicks
+  if (e.target.closest('button,a,input,textarea,select,.compose-area,[onclick]')) return;
+  const card = e.target.closest('[data-post-id]');
+  if (card) {
+    const pid = card.getAttribute('data-post-id');
+    if (pid) location.href = '/post/' + pid;
+  }
+}, true);
+
+/* ── Link preview / open ─────────────────────────────────────────────────── */
+document.addEventListener('click', function(e) {
+  const link = e.target.closest('a[href]');
+  if (!link) return;
+  const href = link.getAttribute('href');
+  if (!href) return;
+  // External links → open in new tab
+  if (href.startsWith('http') && !href.includes(location.hostname)) {
+    e.preventDefault();
+    window.open(href, '_blank', 'noopener,noreferrer');
+  }
+});
+
+
 </script>
 {% endblock %}

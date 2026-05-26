@@ -46,10 +46,10 @@
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 12L12 3l9 9v7a2 2 0 01-2 2H5a2 2 0 01-2-2V12z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             <span class="nav-label">Home</span>
           </a>
-          <a href="{{ url_for('social.explore') }}" class="nav-sub-item {% if request.endpoint=='explore' %}active{% endif %}">
-            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span class="nav-label">Explore</span>
-          </a>
+          <button type="button" class="nav-sub-item" onclick="openFeedSearch();closeSidebar()" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit">
+            <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="nav-label">Search</span>
+          </button>
           <a href="{{ url_for('social.trending') }}" class="nav-sub-item {% if request.endpoint=='trending' %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             <span class="nav-label">Trending</span>
@@ -58,10 +58,7 @@
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
             <span class="nav-label">Channels</span>
           </a>
-          <a href="{{ url_for('social.groups_list') }}" class="nav-sub-item {% if request.endpoint in ['groups_list','group_detail','group_create'] %}active{% endif %}">
-            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-            <span class="nav-label">Groups</span>
-          </a>
+          
           <a href="{{ url_for('wallet.notifications') }}" class="nav-sub-item {% if request.endpoint=='notifications' %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span class="nav-label">Notifications</span><span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>

@@ -544,6 +544,7 @@ def delete_account():
     import storage as _st
     from helpers import verify_password
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
 
     data     = request.get_json(silent=True) or {}
@@ -1063,6 +1064,7 @@ def toggle_online_status():
 @login_required
 def check_online(username):
     db  = get_db()
+    udb   = get_user_db()
     row = db.execute('SELECT online_at, show_online FROM users WHERE username=?', (username,)).fetchone()
     if not row or not row['show_online'] or not row['online_at']:
         return jsonify({'online': False})
@@ -1079,15 +1081,22 @@ def check_online(username):
 # ── Direct Messages ───────────────────────────────────────────────────────────
 
 def _get_or_create_conversation(db, uid, other_id):
+    """
+    Get or create a conversation. Uses db for global fallback;
+    uses the per-user DB (get_user_db) for the actual conversation record.
+    """
+    from helpers import get_user_db as _udb_fn
+    udb = _udb_fn()
     a, b = min(uid, other_id), max(uid, other_id)
     conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     if not conv:
         from datetime import datetime as _dt, timezone as _tz
         now = _dt.now(_tz.utc).strftime('%Y-%m-%d %H:%M:%S')
-        db.execute(
+        udb.execute(
             'INSERT OR IGNORE INTO conversations (user_a, user_b, last_msg_at) VALUES (?,?,?)',
             (a, b, now)
         )
+        udb.commit()
         conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     return conv
 
@@ -1135,6 +1144,7 @@ def messages_inbox():
 @login_required
 def message_thread(username):
     db    = get_db()
+    udb   = get_user_db()
     uid   = session['user_id']
     other = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
     if not other:
@@ -1143,25 +1153,35 @@ def message_thread(username):
         return redirect(url_for('social.messages_inbox'))
 
     conv = _get_or_create_conversation(db, uid, other['id'])
-    msgs = [dict(m) for m in db.execute("""
+    msgs = [dict(m) for m in udb.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
-        FROM messages m JOIN users u ON u.id=m.sender_id
+        FROM messages m JOIN users u ON (
+            SELECT username FROM users WHERE id=m.sender_id LIMIT 1
+        )=u.username
         WHERE m.conversation_id=? ORDER BY m.created_at ASC LIMIT 100
-    """, (conv['id'],)).fetchall()]
-    for m in msgs:
-        m.setdefault('edited_at', None)
-        m.setdefault('reactions', None)
-        m.setdefault('is_pinned', 0)
-        m.setdefault('reply_to_id', None)
-        m.setdefault('deleted_at', None)
+    """, (conv['id'],)).fetchall() if False] or []
+    # Simpler join using global db for usernames:
+    raw_msgs = udb.execute(
+        'SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC LIMIT 100',
+        (conv['id'],)
+    ).fetchall()
+    msgs = []
+    for m in raw_msgs:
+        md = dict(m)
+        sender = db.execute('SELECT username, avatar_url FROM users WHERE id=?',
+                             (md['sender_id'],)).fetchone()
+        md['sender_username'] = sender['username'] if sender else ''
+        md['sender_avatar']   = sender['avatar_url'] if sender else None
+        md.setdefault('edited_at', None)
+        md.setdefault('reactions', None)
+        md.setdefault('is_pinned', 0)
+        md.setdefault('reply_to_id', None)
+        md.setdefault('deleted_at', None)
+        msgs.append(md)
 
     udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
                (conv['id'], uid))
-    total_unread = db.execute("""
-        SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
-        WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
-    """, (uid, uid, uid)).fetchone()[0]
-    db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
+    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=?', (uid,))
     db.commit()
 
     return render_template('message_thread.html', other=dict(other), messages=msgs,
@@ -1174,6 +1194,7 @@ def message_thread(username):
 @csrf_exempt   # JSON POST
 def send_message(username):
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
     other = db.execute('SELECT id, username FROM users WHERE username=?', (username,)).fetchone()
     if not other or other['id'] == uid:
@@ -1239,6 +1260,7 @@ def send_message(username):
 @login_required
 def poll_messages(username):
     db    = get_db()
+    udb   = get_user_db()
     uid   = session['user_id']
     after = request.args.get('after', 0, type=int)
     other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
@@ -1306,6 +1328,7 @@ def is_typing(username):
 @login_required
 def edit_message(msg_id):
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
     msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
@@ -1330,6 +1353,7 @@ def edit_message(msg_id):
 @login_required
 def delete_message(msg_id):
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
     msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg or msg['sender_id'] != uid:
@@ -1345,6 +1369,7 @@ def delete_message(msg_id):
 @login_required
 def react_message(msg_id):
     db    = get_db()
+    udb   = get_user_db()
     uid   = session['user_id']
     data  = request.get_json(silent=True) or {}
     emoji = (data.get('emoji') or '').strip()
@@ -1383,6 +1408,7 @@ def react_message(msg_id):
 @login_required
 def pin_message(msg_id):
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
     msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
@@ -1401,6 +1427,7 @@ def pin_message(msg_id):
 @login_required
 def message_info(msg_id):
     db  = get_db()
+    udb   = get_user_db()
     uid = session['user_id']
     msg = db.execute('SELECT m.*,u.username as sender_username,u.display_name as sender_display '
                      'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?', (msg_id,)).fetchone()
@@ -1421,6 +1448,7 @@ def message_info(msg_id):
 @login_required
 def forward_message():
     db         = get_db()
+    udb   = get_user_db()
     uid        = session['user_id']
     data       = request.get_json(silent=True) or {}
     msg_id     = data.get('msg_id')
@@ -1763,7 +1791,7 @@ def group_create():
             slug = f'{base}-{i}'
         try:
             gid = db.execute(
-                'INSERT OR IGNORE INTO groups (name,slug,description,owner_id,is_public,member_count) '
+                'INSERT INTO groups (name,slug,description,owner_id,is_public,member_count) '
                 'VALUES (?,?,?,?,?,1)',
                 (name, slug, description or None, uid, is_public)
             ).fetchone()['id']

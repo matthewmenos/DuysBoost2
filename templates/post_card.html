@@ -189,7 +189,11 @@
         <button class="post-action-btn bookmark-btn {% if p.bookmarked %}bookmarked{% endif %}"
                 onclick="toggleBookmark({{ p.id }}, this)" aria-label="Bookmark"
                 aria-pressed="{{ 'true' if p.bookmarked else 'false' }}">
-          <span class="action-icon">{{ '🔖' if p.bookmarked else '🏷' }}</span>
+          {%- if p.bookmarked -%}
+          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          {%- else -%}
+          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          {%- endif -%}
         </button>
         {% if current_user and current_user.id == p.user_id %}
         <button class="post-action-btn" onclick="openBoostModal({{ p.id }})" aria-label="Boost">

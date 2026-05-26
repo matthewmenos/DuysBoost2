@@ -180,14 +180,33 @@
         <div class="story-time" id="sv-time"></div>
       </div>
     </div>
+    <button class="story-viewers-btn" id="sv-viewers-btn" style="display:none"
+            onclick="openViewers()" title="See viewers" aria-label="Story viewers"
+            style="background:none;border:none;color:rgba(255,255,255,.8);cursor:pointer;
+                   display:flex;align-items:center;gap:5px;font-size:13px;padding:4px 8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span id="sv-view-count-badge">0</span>
+    </button>
     <button class="story-delete-btn" id="sv-delete" style="display:none"
-            onclick="deleteCurrentStory()" title="Delete story">🗑</button>
+            onclick="deleteCurrentStory()" title="Delete story">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+    </button>
     <button class="story-close-btn" onclick="closeStoryViewer()"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div class="story-media" id="sv-media"></div>
   <div class="story-caption" id="sv-caption" style="display:none"></div>
   <button class="story-nav-btn story-nav-prev" onclick="prevStory()"></button>
   <button class="story-nav-btn story-nav-next" onclick="nextStory()"></button>
+
+  <!-- Viewers bottom sheet (owner only) -->
+  <div class="story-viewers-sheet" id="sv-viewers-sheet">
+    <div class="story-viewers-handle" onclick="closeViewers()"></div>
+    <div style="padding:0 16px 8px;display:flex;align-items:center;justify-content:space-between">
+      <span style="color:#fff;font-weight:700;font-size:15px">Viewers</span>
+      <span id="sv-viewer-count" style="color:rgba(255,255,255,.6);font-size:13px"></span>
+    </div>
+    <div id="sv-viewers-list"></div>
+  </div>
 </div>
 
 <!-- Story upload caption modal -->
@@ -285,6 +304,15 @@ function _showCurrentStory() {
   document.getElementById('sv-time').textContent = story.hours_left + 'h left';
   document.getElementById('sv-delete').style.display = story.is_own ? '' : 'none';
   document.getElementById('sv-delete').dataset.storyId = story.id;
+  const vBtn = document.getElementById('sv-viewers-btn');
+  if (vBtn) {
+    vBtn.style.display = story.is_own ? 'flex' : 'none';
+    const badge = document.getElementById('sv-view-count-badge');
+    if (badge) badge.textContent = story.view_count || 0;
+  }
+  // Close viewers sheet if open
+  const sheet = document.getElementById('sv-viewers-sheet');
+  if (sheet) sheet.classList.remove('open');
 
   // Media — infer type from mime or URL extension
   const mediaEl = document.getElementById('sv-media');
@@ -471,5 +499,67 @@ window.submitStory = submitStory;
 document.getElementById('story-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeStoryViewer();
 });
+
+/* ── Story viewers ───────────────────────────────────────────────────────── */
+async function openViewers() {
+  const grp   = _storyGroups[_svGroupIdx];
+  const story = grp && grp.stories[_svStoryIdx];
+  if (!story || !story.is_own) return;
+
+  clearTimeout(_svTimer); // Pause auto-advance while viewing
+
+  const sheet = document.getElementById('sv-viewers-sheet');
+  sheet.classList.add('open');
+
+  try {
+    const r = await fetch('/api/story/' + story.id + '/viewers');
+    const d = await r.json();
+    if (d.success) {
+      document.getElementById('sv-viewer-count').textContent =
+        d.view_count + (d.view_count === 1 ? ' viewer' : ' viewers');
+      const list = document.getElementById('sv-viewers-list');
+      if (!d.viewers.length) {
+        list.innerHTML = '<div style="padding:24px;text-align:center;color:rgba(255,255,255,.4);font-size:13px">No views yet</div>';
+      } else {
+        list.innerHTML = d.viewers.map(v => {
+          const av = v.avatar_url
+            ? `<img src="${v.avatar_url}" style="width:38px;height:38px;border-radius:50%;object-fit:cover">`
+            : `<div style="width:38px;height:38px;border-radius:50%;background:rgba(127,90,240,.6);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff">${(v.display_name||v.username||'?')[0].toUpperCase()}</div>`;
+          return `<div class="story-viewer-item">
+            ${av}
+            <div>
+              <div style="font-weight:700;font-size:13.5px">${escapeHtml(v.display_name||v.username)}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.5)">@${escapeHtml(v.username)}</div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch (_) {}
+}
+window.openViewers = openViewers;
+
+function closeViewers() {
+  document.getElementById('sv-viewers-sheet').classList.remove('open');
+  // Resume auto-advance
+  _showCurrentStory();
+}
+window.closeViewers = closeViewers;
+
+// Swipe up gesture to open viewers on own stories
+(function() {
+  let startY = 0;
+  const overlay = document.getElementById('story-overlay');
+  overlay.addEventListener('touchstart', function(e) {
+    startY = e.touches[0].clientY;
+  }, {passive: true});
+  overlay.addEventListener('touchend', function(e) {
+    const grp   = _storyGroups[_svGroupIdx];
+    const story = grp && grp.stories[_svStoryIdx];
+    if (!story || !story.is_own) return;
+    const dy = startY - e.changedTouches[0].clientY;
+    if (dy > 60) openViewers();  // Swipe up > 60px
+  }, {passive: true});
+})();
 </script>
 {% endif %}

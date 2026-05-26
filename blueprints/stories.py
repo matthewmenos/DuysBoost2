@@ -297,6 +297,53 @@ def view_story(story_id):
     return jsonify({'success': True, 'view_count': len(viewed)})
 
 
+
+@bp.route('/api/story/<int:story_id>/viewers')
+@login_required
+@csrf_exempt
+def story_viewers(story_id):
+    """
+    Return the list of users who viewed this story.
+    Only accessible by the story owner.
+    Also returns reaction counts.
+    """
+    db  = get_db()
+    uid = session['user_id']
+    row = db.execute(
+        'SELECT id, user_id, viewed_by FROM stories WHERE id = ?', (story_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Story not found.'}), 404
+    if row['user_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    try:
+        viewed_list = json.loads(row['viewed_by'] or '[]')
+    except Exception:
+        viewed_list = []
+
+    # Fetch user details for each viewer
+    viewers = []
+    for viewer_uid in viewed_list:
+        u = db.execute(
+            'SELECT id, username, display_name, avatar_url FROM users WHERE id=?',
+            (viewer_uid,)
+        ).fetchone()
+        if u:
+            viewers.append({
+                'id':           u['id'],
+                'username':     u['username'],
+                'display_name': u['display_name'],
+                'avatar_url':   u['avatar_url'],
+            })
+
+    return jsonify({
+        'success':     True,
+        'view_count':  len(viewed_list),
+        'viewers':     viewers,
+    })
+
+
 @bp.route('/api/story/<int:story_id>', methods=['DELETE'])
 @login_required
 @csrf_exempt
