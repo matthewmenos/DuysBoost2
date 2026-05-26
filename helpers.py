@@ -166,12 +166,35 @@ def safe_int(value, default=0):
 
 
 def get_current_user():
+    """
+    Return the logged-in user row, or None.
+    Tries the per-request DB first; falls back to global.db if the user
+    record isn't found (e.g., first request after signup before the
+    personal R2 DB contains the user row).
+    """
     if 'user_id' not in session:
         return None
+    uid = session['user_id']
     try:
-        return get_db().execute(
-            'SELECT * FROM users WHERE id=?', (session['user_id'],)
+        user = get_db().execute(
+            'SELECT * FROM users WHERE id=?', (uid,)
         ).fetchone()
+        if user:
+            return user
+    except Exception:
+        pass
+    # Fallback: look up in global.db (catches brand-new users)
+    try:
+        import sqlite3 as _sq, os as _os
+        from flask import current_app as _app
+        gdb = _sq.connect(
+            _os.path.join(_app.root_path, 'global.db'),
+            check_same_thread=False
+        )
+        gdb.row_factory = _sq.Row
+        user = gdb.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        gdb.close()
+        return user
     except Exception:
         return None
 

@@ -93,7 +93,7 @@
         <span class="icon" aria-hidden="true">🎁</span> Referrals
       </a>
 
-      {% if current_user.is_admin %}
+      {% if current_user and current_user.is_admin %}
       <div class="nav-section">Admin</div>
       <a href="{{ url_for('admin.admin') }}" class="nav-item {% if request.endpoint=='admin' %}active{% endif %}">
         <span class="icon" aria-hidden="true">🛡</span> Admin Panel
@@ -102,14 +102,16 @@
     </nav>
 
     <div class="sidebar-footer">
+      {% if current_user %}
       <div class="user-card">
         <div class="user-avatar" aria-hidden="true">{{ current_user.username[0].upper() }}</div>
         <div class="user-info">
           <div class="user-name">{{ current_user.username }}</div>
-          <div class="user-balance">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance) }}</div>
+          <div class="user-balance">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance or 0) }}</div>
         </div>
       </div>
       <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm btn-block">Sign Out</a>
+      {% endif %}
     </div>
   </aside>
   {% endif %}
@@ -241,7 +243,7 @@
                alt="">
           {% else %}
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            {% set is_profile = request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}
+            {% set is_profile = current_user and request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}
             {% if is_profile %}
             <circle cx="12" cy="8" r="4"
                     fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
@@ -296,7 +298,7 @@
     <div style="display:flex;gap:12px;align-items:flex-start">
       <div class="avatar avatar-sm flex-shrink-0">
         {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
-        {% else %}{{ current_user.username[0].upper() }}{% endif %}
+        {% else %}{{ (current_user.username or 'U')[0].upper() }}{% endif %}
       </div>
       <div style="flex:1;min-width:0">
         <textarea id="gc-body" class="compose-input form-input"
@@ -332,7 +334,7 @@
       Pay from your wallet to surface this post in feeds. Others earn by engaging with it.
     </p>
     <div class="info-box mb-16">
-      💳 Wallet balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance) }}</strong>
+      💳 Wallet balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance or 0) }}</strong>
     </div>
     <form id="boost-form" novalidate>
       <input type="hidden" id="boost-post-id" name="post_id" value="">
@@ -372,7 +374,7 @@
     </div>
     <p class="text-sm text-muted mb-16">
       Tip <strong id="post-tip-username-display"></strong> for this post.
-      <br>Balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance) }}</strong>
+      <br>Balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance or 0) }}</strong>
     </p>
     <form id="post-tip-form" novalidate>
       <input type="hidden" id="post-tip-post-id" name="post_id" value="">

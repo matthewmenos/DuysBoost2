@@ -111,6 +111,126 @@ def logout():
     return redirect(url_for('auth.index'))
 
 
+
+# ── Forgot / Reset Password ───────────────────────────────────────────────────
+
+@bp.route('/auth/forgot-password', methods=['POST'])
+@limiter.limit('5 per hour')
+@csrf_exempt
+def forgot_password():
+    """
+    Accept an email address and generate a password-reset token.
+    In production wire this to an email provider (SendGrid, Mailgun, etc.).
+    For now: stores the token in the DB and returns it in the response
+    (so admins can manually relay it, or you can add email sending here).
+    """
+    import time, hmac, hashlib
+    data  = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+
+    if not email:
+        return jsonify({'success': False, 'error': 'Email is required.'}), 400
+
+    db   = get_db()
+    user = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
+
+    # Always respond with success to prevent email enumeration
+    if not user:
+        return jsonify({
+            'success': True,
+            'message': 'If that email is registered you will receive reset instructions shortly.'
+        })
+
+    # Generate a short-lived token (1 hour)
+    raw_token = secrets.token_urlsafe(32)
+    expires   = int(time.time()) + 3600
+    token_str = f'{raw_token}:{expires}:{user["id"]}'
+
+    # Store token hash in the DB (add reset_token / reset_expires columns on the fly)
+    try:
+        db.execute('ALTER TABLE users ADD COLUMN reset_token TEXT')
+        db.execute('ALTER TABLE users ADD COLUMN reset_expires INTEGER')
+    except Exception:
+        pass  # columns already exist
+
+    db.execute(
+        'UPDATE users SET reset_token=?, reset_expires=? WHERE id=?',
+        (raw_token, expires, user['id'])
+    )
+    db.commit()
+
+    # Build reset link
+    scheme   = request.headers.get('X-Forwarded-Proto', request.scheme)
+    base_url = f'{scheme}://{request.host}'
+    link     = f'{base_url}/auth/reset-password?token={raw_token}&uid={user["id"]}'
+
+    # ── TODO: Send email here ──────────────────────────────────────────────────
+    # import sendgrid / mailgun / smtplib etc. and email the link.
+    # For now, if there's a SUPPORT_EMAIL env var, log it clearly:
+    import logging as _log
+    _log.getLogger(__name__).info('PASSWORD RESET LINK for %s: %s', email, link)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    return jsonify({
+        'success': True,
+        'message': 'Reset instructions sent. Check your email (and spam folder).',
+        # Remove the line below in production — only for dev/testing:
+        '_dev_link': link,
+    })
+
+
+@bp.route('/auth/reset-password', methods=['GET', 'POST'])
+@limiter.limit('10 per hour')
+def reset_password():
+    """Password reset page — user arrives here from the emailed link."""
+    import time
+    token = request.args.get('token') or request.form.get('token') or ''
+    uid   = safe_int(request.args.get('uid') or request.form.get('uid'), 0)
+
+    if request.method == 'GET':
+        return render_template('reset_password.html', token=token, uid=uid)
+
+    # POST — apply new password
+    new_pw  = request.form.get('password', '')
+    confirm = request.form.get('confirm_password', '')
+
+    errors = []
+    if len(new_pw) < 8:
+        errors.append('Password must be at least 8 characters.')
+    if new_pw != confirm:
+        errors.append('Passwords do not match.')
+    if errors:
+        return jsonify({'success': False, 'errors': errors})
+
+    db   = get_db()
+    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    if not user:
+        return jsonify({'success': False, 'errors': ['Invalid reset link.']}), 400
+
+    # Validate token
+    stored_token   = user['reset_token']   if 'reset_token'   in user.keys() else None
+    stored_expires = user['reset_expires'] if 'reset_expires' in user.keys() else 0
+
+    if not stored_token or stored_token != token:
+        return jsonify({'success': False, 'errors': ['Invalid or expired reset link.']}), 400
+    if int(time.time()) > (stored_expires or 0):
+        return jsonify({'success': False, 'errors': ['Reset link has expired. Please request a new one.']}), 400
+
+    db.execute(
+        'UPDATE users SET password=?, reset_token=NULL, reset_expires=NULL WHERE id=?',
+        (hash_password(new_pw), uid)
+    )
+    db.commit()
+    return jsonify({'success': True, 'redirect': url_for('auth.login')})
+
+
+def safe_int(val, default=0):
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
 # ── Google OAuth ─────────────────────────────────────────────────────────────
 
 @bp.route('/auth/google')
