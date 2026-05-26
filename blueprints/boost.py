@@ -6,7 +6,7 @@ from flask import (
     request, session, url_for, current_app
 )
 from helpers import (
-    get_db, login_required, safe_float, safe_int,
+    get_db, get_user_db, login_required, safe_float, safe_int,
     add_notification, add_transaction,
     check_and_award_referral_bonus, verify_task_completion,
     format_post, format_post_with_poll, recalc_post_score

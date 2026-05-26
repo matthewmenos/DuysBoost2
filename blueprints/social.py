@@ -7,7 +7,7 @@ from flask import (
     request, session, url_for
 )
 from helpers import (
-    get_db, login_required, safe_float, safe_int,
+    get_db, get_user_db, login_required, safe_float, safe_int,
     add_notification, update_counts, recalc_post_score,
     format_post, format_post_with_poll,
     get_personalized_post_ids,
@@ -592,8 +592,8 @@ def delete_account():
         'SELECT id FROM conversations WHERE user_a=? OR user_b=?', (uid, uid)
     ).fetchall()]
     for cid in conv_ids:
-        db.execute('DELETE FROM messages     WHERE conversation_id=?', (cid,))
-        db.execute('DELETE FROM conversations WHERE id=?', (cid,))
+        udb.execute('DELETE FROM messages     WHERE conversation_id=?', (cid,))
+        udb.execute('DELETE FROM conversations WHERE id=?', (cid,))
     # Delete user
     db.execute('DELETE FROM users WHERE id=?', (uid,))
     db.commit()
@@ -1068,7 +1068,7 @@ def check_online(username):
 
 def _get_or_create_conversation(db, uid, other_id):
     a, b = min(uid, other_id), max(uid, other_id)
-    conv = db.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+    conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     if not conv:
         from datetime import datetime as _dt, timezone as _tz
         now = _dt.now(_tz.utc).strftime('%Y-%m-%d %H:%M:%S')
@@ -1076,7 +1076,7 @@ def _get_or_create_conversation(db, uid, other_id):
             'INSERT OR IGNORE INTO conversations (user_a, user_b, last_msg_at) VALUES (?,?,?)',
             (a, b, now)
         )
-        conv = db.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+        conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     return conv
 
 
@@ -1085,7 +1085,8 @@ def _get_or_create_conversation(db, uid, other_id):
 @bp.route('/messages')
 @login_required
 def messages_inbox():
-    db  = get_db()
+    db  = get_db()      # global
+    udb = get_user_db() # personal (conversations, messages)
     uid = session['user_id']
     tab = request.args.get('tab', 'all').lower()
     if tab not in ('all', 'chats', 'groups'):
@@ -1142,7 +1143,7 @@ def message_thread(username):
         m.setdefault('reply_to_id', None)
         m.setdefault('deleted_at', None)
 
-    db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
+    udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
                (conv['id'], uid))
     total_unread = db.execute("""
         SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
@@ -1208,7 +1209,7 @@ def send_message(username):
         (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, now)
     )
     msg_id = db.lastrowid
-    db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+    udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
     db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
     db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
     db.commit()
@@ -1233,7 +1234,7 @@ def poll_messages(username):
         return jsonify({'messages': []}), 404
 
     a, b = min(uid, other['id']), max(uid, other['id'])
-    conv = db.execute('SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+    conv = udb.execute('SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
     if not conv:
         return jsonify({'messages': []})
 
@@ -1244,7 +1245,7 @@ def poll_messages(username):
     """, (conv['id'], after)).fetchall()
 
     if rows:
-        db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
+        udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
                    (conv['id'], uid, after))
         total_unread = db.execute("""
             SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
@@ -1294,7 +1295,7 @@ def is_typing(username):
 def edit_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
     if msg['sender_id'] != uid:
@@ -1308,7 +1309,7 @@ def edit_message(msg_id):
         return jsonify({'success': False, 'error': 'Invalid message body.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    db.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
+    udb.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
     db.commit()
     return jsonify({'success': True, 'body': body, 'edited_at': now})
 
@@ -1318,7 +1319,7 @@ def edit_message(msg_id):
 def delete_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg or msg['sender_id'] != uid:
         return jsonify({'success': False, 'error': 'Not found or not authorized.'}), 404
     now = datetime.now(timezone.utc).isoformat()
@@ -1338,11 +1339,11 @@ def react_message(msg_id):
     if not emoji or len(emoji) > 8:
         return jsonify({'success': False, 'error': 'Invalid emoji.'}), 400
 
-    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
 
-    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1361,7 +1362,7 @@ def react_message(msg_id):
     else:
         reactions.pop(emoji, None)
 
-    db.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
+    udb.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
     db.commit()
     return jsonify({'success': True, 'reactions': reactions})
 
@@ -1371,15 +1372,15 @@ def react_message(msg_id):
 def pin_message(msg_id):
     db  = get_db()
     uid = session['user_id']
-    msg = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
-    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
     new_state = 0 if (msg['is_pinned'] if 'is_pinned' in msg.keys() else 0) else 1
-    db.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
+    udb.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
     db.commit()
     return jsonify({'success': True, 'pinned': bool(new_state)})
 
@@ -1393,7 +1394,7 @@ def message_info(msg_id):
                      'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False}), 404
-    conv = db.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False}), 403
     keys = msg.keys()
@@ -1415,10 +1416,10 @@ def forward_message():
     if not msg_id or not recipients:
         return jsonify({'success': False, 'error': 'Missing data.'}), 400
 
-    src      = db.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    src      = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not src:
         return jsonify({'success': False, 'error': 'Source message not found.'}), 404
-    src_conv = db.execute('SELECT * FROM conversations WHERE id=?', (src['conversation_id'],)).fetchone()
+    src_conv = udb.execute('SELECT * FROM conversations WHERE id=?', (src['conversation_id'],)).fetchone()
     if not src_conv or (src_conv['user_a'] != uid and src_conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1436,10 +1437,10 @@ def forward_message():
         if not u or u['id'] == uid:
             continue
         conv = _get_or_create_conversation(db, uid, u['id'])
-        db.execute('INSERT INTO messages (conversation_id,sender_id,body,msg_type,'
+        udb.execute('INSERT INTO messages (conversation_id,sender_id,body,msg_type,'
                    'file_url,file_name,file_mime,created_at) VALUES (?,?,?,?,?,?,?,?)',
                    (conv['id'], uid, body, msg_type, file_data, file_name, file_mime, now))
-        db.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+        udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
         db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (u['id'],))
         sent += 1
     db.commit()

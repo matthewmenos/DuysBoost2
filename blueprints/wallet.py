@@ -5,7 +5,7 @@ from flask import (
     request, session, url_for, current_app
 )
 from helpers import (
-    get_db, login_required, safe_float, safe_int,
+    get_db, get_user_db, login_required, safe_float, safe_int,
     add_notification, add_transaction, check_and_award_referral_bonus
 )
 from security import limiter, csrf_exempt, LIMIT_WITHDRAW, LIMIT_DEPOSIT
@@ -16,12 +16,13 @@ bp = Blueprint('wallet', __name__)
 @bp.route('/wallet')
 @login_required
 def wallet():
-    db  = get_db()
+    db  = get_db()     # global (user balance)
+    udb = get_user_db()  # personal (transactions, withdrawals)
     uid = session['user_id']
-    txs = db.execute(
+    txs = udb.execute(
         'SELECT * FROM transactions WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
-    wdrs = db.execute(
+    wdrs = udb.execute(
         'SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
     pending_deposits = db.execute(
@@ -73,7 +74,7 @@ def deposit():
     now = datetime.now(timezone.utc).isoformat()
 
     if dep_id:
-        db.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('verifying', dep_id))
+        udb.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('verifying', dep_id))
     else:
         dep_id = db.execute(
             'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status, created_at) '
@@ -90,7 +91,8 @@ def deposit():
     )
 
     if not result['ok']:
-        wdr_id = db.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('failed', dep_id))
+        udb.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('failed', dep_id))
+        dep_id = udb.lastrowid if dep_id is None else dep_id
         db.commit()
         return jsonify({'success': False, 'error': result['error']}), 400
 
@@ -207,7 +209,7 @@ def withdraw():
                                   'unavailable. Please contact support.')}), 503
 
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (amount, uid))
-    wdr_id = db.execute(
+    wdr_id = udb.execute(
         'INSERT INTO withdrawals (user_id,amount,method,account,network,status) '
         'VALUES (?,?,?,?,?,?)',
         (uid, amount, f'USDT ({network_label})', to_address, network, 'processing')

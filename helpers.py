@@ -19,10 +19,16 @@ from flask import g, session, redirect, url_for, jsonify, request
 # DB helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_db():
-    """Return the per-request SQLite connection (downloaded from R2 per-user)."""
+def get_db() -> 'sqlite3.Connection':
+    """Return the global DB (social data — feeds, profiles, posts, channels)."""
     from db import get_db as _db_get
     return _db_get()
+
+
+def get_user_db() -> 'sqlite3.Connection':
+    """Return the personal DB (wallet, DMs, notifications) for the logged-in user."""
+    from db import get_user_db as _udb_get
+    return _udb_get()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -166,35 +172,13 @@ def safe_int(value, default=0):
 
 
 def get_current_user():
-    """
-    Return the logged-in user row, or None.
-    Tries the per-request DB first; falls back to global.db if the user
-    record isn't found (e.g., first request after signup before the
-    personal R2 DB contains the user row).
-    """
+    """Return the logged-in user row from global.db, or None."""
     if 'user_id' not in session:
         return None
-    uid = session['user_id']
     try:
-        user = get_db().execute(
-            'SELECT * FROM users WHERE id=?', (uid,)
+        return get_db().execute(
+            'SELECT * FROM users WHERE id=?', (session['user_id'],)
         ).fetchone()
-        if user:
-            return user
-    except Exception:
-        pass
-    # Fallback: look up in global.db (catches brand-new users)
-    try:
-        import sqlite3 as _sq, os as _os
-        from flask import current_app as _app
-        gdb = _sq.connect(
-            _os.path.join(_app.root_path, 'global.db'),
-            check_same_thread=False
-        )
-        gdb.row_factory = _sq.Row
-        user = gdb.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
-        gdb.close()
-        return user
     except Exception:
         return None
 

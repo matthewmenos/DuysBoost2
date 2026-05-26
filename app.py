@@ -229,9 +229,8 @@ def create_app() -> Flask:
 
 def init_db():
     """
-    Initialize the global SQLite database (global.db).
-    This holds shared/public data: user directory, ads, trending indexes.
-    Individual per-user .db files are created on first login via db.open_user_db().
+    Initialize global.db with the shared social schema.
+    Personal DBs are created on-demand when each user first logs in.
     Called automatically by create_app() on startup.
     """
     import sqlite3 as _sqlite
@@ -241,13 +240,9 @@ def init_db():
     db_path = os.path.join(_base_dir, 'global.db')
     conn = _sqlite.connect(db_path)
     conn.row_factory = _sqlite.Row
-    conn.execute('PRAGMA foreign_keys = ON')
-    conn.execute('PRAGMA journal_mode = WAL')
-    conn.execute('PRAGMA synchronous  = NORMAL')
-
-    # Initialize full schema in global.db (same schema as user DBs)
-    from db import init_user_tables
-    init_user_tables(conn)
+    from db import GLOBAL_SCHEMA
+    conn.executescript(GLOBAL_SCHEMA)
+    conn.commit()
 
     # Seed default admin if not present
     admin = conn.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()

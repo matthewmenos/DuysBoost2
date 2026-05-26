@@ -37,7 +37,7 @@ from flask import (
 )
 
 from helpers import (
-    get_db, login_required, admin_required,
+    get_db, get_user_db, login_required, admin_required,
     safe_float, safe_int, add_notification, add_transaction, hash_password
 )
 
@@ -181,18 +181,26 @@ def admin_users():
 @bp.route('/admin/users/<int:user_id>')
 @admin_required
 def admin_user_detail(user_id):
+    from db import _open_personal_db, _upload_personal_db
     db   = get_db()
     user = db.execute('SELECT * FROM users WHERE id=?', (user_id,)).fetchone()
     if not user:
         return render_template('error.html', code=404, message='User not found'), 404
 
+    # Open that user's personal DB for wallet/inbox data
+    try:
+        pudb, pudb_path = _open_personal_db(user_id)
+    except Exception:
+        pudb = db  # fallback to global if personal unavailable
+        pudb_path = None
+
     posts = db.execute(
         'SELECT * FROM posts WHERE user_id=? ORDER BY created_at DESC LIMIT 20', (user_id,)
     ).fetchall()
-    transactions = db.execute(
+    transactions = pudb.execute(
         'SELECT * FROM transactions WHERE user_id=? ORDER BY created_at DESC LIMIT 20', (user_id,)
     ).fetchall()
-    withdrawals = db.execute(
+    withdrawals = pudb.execute(
         'SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC LIMIT 10', (user_id,)
     ).fetchall()
     reports_against = db.execute(
@@ -221,6 +229,14 @@ def admin_user_detail(user_id):
             (user_id,)
         ).fetchone()[0],
     }
+
+    # Upload personal DB if we opened it
+    if pudb_path:
+        try:
+            pudb.close()
+        except Exception:
+            pass
+        _upload_personal_db(user_id, pudb_path)
 
     return render_template('admin/user_detail.html',
         user=dict(user), posts=posts, transactions=transactions,
