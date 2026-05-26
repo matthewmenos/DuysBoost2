@@ -711,6 +711,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         # stories
         ('stories', 'media_mime',          "TEXT NOT NULL DEFAULT 'image/jpeg'"),
         ('stories', 'caption',             'TEXT'),
+        ('stories', 'reactions_data',     'TEXT DEFAULT "{}"'),
         ('stories', 'viewed_by',           "TEXT DEFAULT '[]'"),
         # ads
         ('ads', 'followers_target',        'INTEGER DEFAULT 0'),

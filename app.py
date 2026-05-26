@@ -108,6 +108,22 @@ def create_app() -> Flask:
     # ── Jinja2 filters ────────────────────────────────────────────────────────
     import re as _re
 
+    @app.template_filter('linkify')
+    def linkify_filter(value):
+        """Convert URLs in text to clickable links."""
+        import re
+        from markupsafe import Markup, escape as _esc
+        if not value:
+            return ''
+        safe = str(_esc(value))
+        url_pat = re.compile(r'(https?://[^\s<>"]+)')
+        linked  = url_pat.sub(
+            r'<a href="\1" target="_blank" rel="noopener noreferrer" '
+            r'style="color:var(--accent);text-decoration:underline;word-break:break-all">\1</a>',
+            safe
+        )
+        return Markup(linked)
+
     @app.template_filter('nl2br')
     def nl2br_filter(value):
         if value is None:

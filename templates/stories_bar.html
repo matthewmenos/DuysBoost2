@@ -198,6 +198,17 @@
   <button class="story-nav-btn story-nav-prev" onclick="prevStory()"></button>
   <button class="story-nav-btn story-nav-next" onclick="nextStory()"></button>
 
+  <!-- Reaction bar (non-owners only) -->
+  <div id="sv-reaction-bar" style="display:none;
+    position:absolute;bottom:80px;left:50%;transform:translateX(-50%);
+    display:none;gap:6px;background:rgba(0,0,0,.55);
+    backdrop-filter:blur(12px);border-radius:99px;padding:6px 10px;
+    border:1px solid rgba(255,255,255,.15)">
+    <div id="sv-reaction-bar-inner" style="display:flex;gap:6px">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
   <!-- Viewers bottom sheet (owner only) -->
   <div class="story-viewers-sheet" id="sv-viewers-sheet">
     <div class="story-viewers-handle" onclick="closeViewers()"></div>
@@ -313,6 +324,13 @@ function _showCurrentStory() {
   // Close viewers sheet if open
   const sheet = document.getElementById('sv-viewers-sheet');
   if (sheet) sheet.classList.remove('open');
+  // Show reaction bar for non-owners
+  const rbar = document.getElementById('sv-reaction-bar');
+  if (rbar) {
+    const isOwn = story && story.is_own;
+    rbar.style.display = isOwn ? 'none' : 'flex';
+    if (!isOwn && story) _buildReactionBar(story.id);
+  }
 
   // Media — infer type from mime or URL extension
   const mediaEl = document.getElementById('sv-media');
@@ -545,6 +563,79 @@ function closeViewers() {
   _showCurrentStory();
 }
 window.closeViewers = closeViewers;
+
+/* ── Story reactions ─────────────────────────────────────────────────────── */
+const STORY_REACTIONS = ['❤️','😂','😮','😢','🔥','👏','💯','🎉'];
+
+function _buildReactionBar(storyId) {
+  const inner = document.getElementById('sv-reaction-bar-inner');
+  if (!inner) return;
+  inner.innerHTML = STORY_REACTIONS.map(e =>
+    `<button onclick="sendStoryReaction(${storyId},'${e}')"
+       style="font-size:22px;background:none;border:none;cursor:pointer;
+              padding:2px;border-radius:50%;transition:transform .15s"
+       onmouseenter="this.style.transform='scale(1.3)'"
+       onmouseleave="this.style.transform='scale(1)'">${e}</button>`
+  ).join('') +
+  `<button onclick="openStoryEmojiPicker(${storyId},this)"
+     style="font-size:14px;font-weight:700;background:rgba(255,255,255,.15);
+            border:1px solid rgba(255,255,255,.25);border-radius:50%;
+            width:32px;height:32px;cursor:pointer;color:#fff">+</button>`;
+}
+
+async function sendStoryReaction(storyId, emoji) {
+  const rbar = document.getElementById('sv-reaction-bar');
+  if (rbar) { rbar.style.display = 'none'; }
+  try {
+    const r = await fetch('/api/story/' + storyId + '/react', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({emoji})
+    });
+    const d = await r.json();
+    if (d.success) {
+      // Float the emoji up as an animation
+      const overlay = document.getElementById('story-overlay');
+      const floater = document.createElement('div');
+      floater.textContent = emoji;
+      floater.style.cssText = 'position:absolute;bottom:100px;left:50%;font-size:36px;' +
+        'transform:translateX(-50%);animation:floatUp 1.2s ease forwards;pointer-events:none;z-index:9999';
+      overlay.appendChild(floater);
+      setTimeout(() => floater.remove(), 1300);
+      // Advance to next story after reaction
+      setTimeout(nextStory, 800);
+    }
+  } catch(_) {}
+}
+window.sendStoryReaction = sendStoryReaction;
+
+const FULL_STORY_EMOJI = ['❤️','😂','😮','😢','🔥','👏','💯','🎉','😍','🥹','🫶','💪','😭','🤩','😅','🤬'];
+function openStoryEmojiPicker(storyId, anchor) {
+  let picker = document.getElementById('story-emoji-picker');
+  if (!picker) {
+    picker = document.createElement('div');
+    picker.id = 'story-emoji-picker';
+    picker.style.cssText = 'position:fixed;z-index:9999;background:rgba(18,18,28,.95);' +
+      'border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:10px;' +
+      'display:flex;flex-wrap:wrap;gap:4px;width:240px;backdrop-filter:blur(16px)';
+    FULL_STORY_EMOJI.forEach(e => {
+      const b = document.createElement('button');
+      b.textContent = e;
+      b.style.cssText = 'font-size:22px;border:none;background:none;cursor:pointer;padding:4px;border-radius:8px';
+      b.onclick = () => { sendStoryReaction(storyId, e); picker.remove(); };
+      picker.appendChild(b);
+    });
+    document.body.addEventListener('click', function cp(ev) {
+      if (!picker.contains(ev.target) && ev.target !== anchor) { picker.remove(); document.body.removeEventListener('click',cp); }
+    });
+  }
+  const rect = anchor.getBoundingClientRect();
+  picker.style.top  = (rect.top - 200) + 'px';
+  picker.style.left = Math.max(10, rect.left - 100) + 'px';
+  document.body.appendChild(picker);
+}
+window.openStoryEmojiPicker = openStoryEmojiPicker;
+
 
 // Swipe up gesture to open viewers on own stories
 (function() {

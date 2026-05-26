@@ -129,6 +129,7 @@ def _format_story(row, viewer_uid):
 
 @bp.route('/api/story/create', methods=['POST'])
 @login_required
+@csrf_exempt
 @limiter.limit('20 per hour')
 def create_story():
     """
@@ -322,6 +323,10 @@ def story_viewers(story_id):
     except Exception:
         viewed_list = []
 
+    # Exclude story owner from viewer list/count
+    story_owner = row['user_id']
+    viewed_list = [v for v in viewed_list if v != story_owner]
+
     # Fetch user details for each viewer
     viewers = []
     for viewer_uid in viewed_list:
@@ -342,6 +347,46 @@ def story_viewers(story_id):
         'view_count':  len(viewed_list),
         'viewers':     viewers,
     })
+
+
+
+@bp.route('/api/story/<int:story_id>/react', methods=['POST'])
+@login_required
+@csrf_exempt
+def story_react(story_id):
+    """Add or update a reaction to a story."""
+    db  = get_db()
+    uid = session['user_id']
+    row = db.execute(
+        "SELECT id, user_id, viewed_by FROM stories WHERE id=? AND expires_at > datetime('now')",
+        (story_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({'success': False, 'error': 'Story not found.'}), 404
+    if row['user_id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot react to your own story.'}), 400
+
+    data  = request.get_json(silent=True) or {}
+    emoji = (data.get('emoji') or '').strip()
+    ALLOWED = {'❤️','😂','😮','😢','😡','🔥','👏','💯','🎉','😍'}
+    if emoji not in ALLOWED:
+        return jsonify({'success': False, 'error': 'Invalid reaction.'}), 400
+
+    # Store reactions as dict {user_id: emoji} in a separate column
+    # We add reactions_data column via migration
+    try:
+        react_row = db.execute(
+            'SELECT reactions_data FROM stories WHERE id=?', (story_id,)
+        ).fetchone()
+        reactions = json.loads(react_row['reactions_data'] or '{}') if react_row else {}
+    except Exception:
+        reactions = {}
+
+    reactions[str(uid)] = emoji
+    db.execute('UPDATE stories SET reactions_data=? WHERE id=?',
+               (json.dumps(reactions), story_id))
+    db.commit()
+    return jsonify({'success': True, 'emoji': emoji})
 
 
 @bp.route('/api/story/<int:story_id>', methods=['DELETE'])

@@ -2293,3 +2293,17 @@ body { background: var(--bg) !important; }
   background: rgba(255,255,255,0.85) !important;
   border-color: rgba(29,155,240,.16) !important;
 }
+
+.toast-container {
+  position: fixed !important;
+  bottom: calc(var(--bottomnav-height, 68px) + 20px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 99999 !important;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none; max-width: 90vw; min-width: 200px;
+}
+/* On chat page — bottom nav hidden, toasts sit at true bottom */
+body:has(.bottom-nav.force-hidden) .toast-container {
+  bottom: 20px !important;
+}

@@ -547,19 +547,16 @@ def delete_account():
     udb   = get_user_db()
     uid = session['user_id']
 
-    data     = request.get_json(silent=True) or {}
-    password = data.get('password', '')
-    user     = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    data   = request.get_json(silent=True) or {}
+    phrase = (data.get('phrase') or '').strip().lower()
+    user   = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
     if not user:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
 
-    # Require password confirmation (skip if Google-only account with no password)
-    if user['password']:
-        if not password:
-            return jsonify({'success': False, 'error': 'Please enter your password to confirm.'}), 400
-        from helpers import verify_password as _vp
-        if not _vp(password, user['password']):
-            return jsonify({'success': False, 'error': 'Incorrect password.'}), 403
+    # Require typed phrase confirmation — works for all auth methods
+    if phrase != 'delete':
+        return jsonify({'success': False,
+                        'error': 'Please type "delete" to confirm.'}), 400
 
     # Delete R2 media files
     for row in db.execute('SELECT media_url FROM stories WHERE user_id=?', (uid,)).fetchall():
@@ -1238,11 +1235,12 @@ def send_message(username):
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
     # Messages and conversations are personal data → udb
+    view_once = int(bool(data.get('view_once', 0)))
     udb.execute(
         'INSERT INTO messages '
-        '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,created_at) '
-        'VALUES (?,?,?,?,?,?,?,?)',
-        (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, now)
+        '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,view_once,created_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?)',
+        (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, view_once, now)
     )
     msg_id = udb.lastrowid
     udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
@@ -2036,3 +2034,28 @@ def api_group_unread():
     uid = session['user_id']
     row = db.execute('SELECT unread_group_count FROM users WHERE id=?', (uid,)).fetchone()
     return jsonify({'count': int(row['unread_group_count'] or 0) if row else 0})
+
+
+@bp.route('/messages/<int:msg_id>/view-once-open', methods=['POST'])
+@login_required
+@csrf_exempt
+def view_once_open(msg_id):
+    """Mark view-once message as opened, wipe file from R2 and DB."""
+    import storage as _st
+    udb = get_user_db()
+    uid = session['user_id']
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg: return jsonify({'success': False, 'error': 'Not found.'}), 404
+    if msg['sender_id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot open your own view-once.'}), 400
+    if msg.get('view_once_opened'):
+        return jsonify({'success': True, 'already_opened': True})
+    if msg.get('file_url'):
+        try: _st.delete_object(msg['file_url'])
+        except Exception: pass
+    udb.execute(
+        'UPDATE messages SET view_once_opened=1, file_url=NULL WHERE id=?', (msg_id,)
+    )
+    udb.commit()
+    return jsonify({'success': True})
+
