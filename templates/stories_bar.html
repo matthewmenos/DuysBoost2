@@ -286,15 +286,26 @@ function _showCurrentStory() {
   document.getElementById('sv-delete').style.display = story.is_own ? '' : 'none';
   document.getElementById('sv-delete').dataset.storyId = story.id;
 
-  // Media
+  // Media — infer type from mime or URL extension
   const mediaEl = document.getElementById('sv-media');
-  if (story.media_mime && story.media_mime.startsWith('video/')) {
-    mediaEl.innerHTML = `<video src="${story.media_url}" autoplay muted playsinline
+  const mime = story.media_mime || '';
+  const url  = story.media_url  || '';
+  const isVideo = mime.startsWith('video/') ||
+    /\.(mp4|webm|ogv|mov)(\?|$)/i.test(url);
+  if (isVideo) {
+    mediaEl.innerHTML = `<video src="${url}" autoplay muted playsinline controls
       style="max-width:100%;max-height:100vh;object-fit:contain"></video>`;
     const vid = mediaEl.querySelector('video');
+    vid.onerror = () => {
+      mediaEl.innerHTML = `<div style="color:#fff;text-align:center;padding:32px">
+        ⚠️ Could not load video.<br><a href="${url}" target="_blank"
+        style="color:#a78bfa">Open directly</a></div>`;
+    };
     vid.onloadedmetadata = function() { _svDuration = Math.min(vid.duration * 1000, 30000); };
   } else {
-    mediaEl.innerHTML = `<img src="${story.media_url}" alt="">`;
+    mediaEl.innerHTML = `<img src="${url}" alt=""
+      style="max-width:100%;max-height:100vh;object-fit:contain"
+      onerror="this.alt='Image failed to load'; this.style.padding='32px';">`;
     _svDuration = 5000;
   }
 
@@ -426,22 +437,33 @@ window.uploadStory = uploadStory;
 async function submitStory() {
   if (!_svPendingData) return;
   const caption = document.getElementById('story-caption-input').value.trim();
+  const postBtn = document.querySelector('#story-caption-modal .btn-primary');
+  if (postBtn) { postBtn.disabled = true; postBtn.textContent = 'Posting…'; }
+
   const fd = new FormData();
   fd.append('media_data', _svPendingData);
-  fd.append('media_mime', _svPendingMime);
+  fd.append('media_mime', _svPendingMime || 'image/jpeg');
   if (caption) fd.append('caption', caption);
+
   try {
     const r = await fetch('/api/story/create', { method: 'POST', body: fd });
-    const d = await r.json();
+    let d;
+    try { d = await r.json(); } catch (_) { d = { success: false, error: 'Server error (not JSON).' }; }
+
     if (d.success) {
       closeModal('story-caption-modal');
       showToast('Story posted! 🎉');
       _svPendingData = null;
-      loadStories();  // Refresh the bar
+      _svPendingMime = null;
+      loadStories();
     } else {
+      if (postBtn) { postBtn.disabled = false; postBtn.textContent = 'Post story'; }
       showToast(d.error || 'Could not post story.', 'error');
     }
-  } catch (_) { showToast('Network error.', 'error'); }
+  } catch (err) {
+    if (postBtn) { postBtn.disabled = false; postBtn.textContent = 'Post story'; }
+    showToast('Network error: ' + err.message, 'error');
+  }
 }
 window.submitStory = submitStory;
 

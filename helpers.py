@@ -238,6 +238,14 @@ def format_post(row, current_uid, db):
 
     if 'media_url' not in p:
         p['media_url'] = None
+    if 'media_mime' not in p:
+        p['media_mime'] = None
+    if p.get('media_url') and not p.get('media_mime'):
+        url_lower = p['media_url'].lower()
+        if any(url_lower.endswith(e) for e in ('.mp4', '.webm', '.ogv', '.mov')):
+            p['media_mime'] = 'video/mp4'
+        else:
+            p['media_mime'] = 'image/jpeg'
 
     if p.get('is_subscriber_only') and p['user_id'] != current_uid:
         is_subscribed = bool(db.execute(

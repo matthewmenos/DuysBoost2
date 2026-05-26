@@ -1943,3 +1943,14 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   text-decoration: none;
 }
 .post-mention:hover { text-decoration: underline; }
+
+/* Broken media fallback */
+.post-media-err {
+  padding: 20px;
+  text-align: center;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 13px;
+}
+.post-media-err a { color: var(--accent); }

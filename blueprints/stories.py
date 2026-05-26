@@ -162,15 +162,15 @@ def create_story():
     story_id = db.lastrowid
     db.commit()
     row = db.execute(
-        'SELECT id, expires_at, created_at FROM stories WHERE id=?', (story_id,)
+        'SELECT id, media_url, media_mime, expires_at, created_at FROM stories WHERE id=?', (story_id,)
     ).fetchone()
     db.commit()
 
     return jsonify({
         'success':    True,
-        'story_id':   row['id'],
+        'story_id':   story_id,
         'media_url':  media_url,
-        'expires_at': row['expires_at'].isoformat() if hasattr(row['expires_at'], 'isoformat') else str(row['expires_at']),
+        'media_mime': mime,
     })
 
 
@@ -306,7 +306,7 @@ def delete_story(story_id):
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        'SELECT id, user_id, media_url FROM stories WHERE id = ?', (story_id,)
+        'SELECT id, user_id, media_url, media_mime FROM stories WHERE id = ?', (story_id,)
     ).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found.'}), 404

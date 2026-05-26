@@ -118,12 +118,23 @@ def create_post():
     _raw_media_data = (request.form.get('media_data') or '').strip() or None
     media_mime      = (request.form.get('media_mime') or '').strip() or None
     # Upload media to Cloudflare R2 if present; store URL instead of blob
-    media_url = None
+    media_url  = None
     if _raw_media_data:
         try:
             media_url = storage.upload_post_media(uid, _raw_media_data)
-        except (ValueError, RuntimeError) as _e:
-            return jsonify({'success': False, 'error': f'Media upload failed: {_e}'}), 400
+        except ValueError as _e:
+            return jsonify({'success': False, 'error': str(_e)}), 400
+        except RuntimeError as _e:
+            logger.error('Media upload RuntimeError: %s', _e)
+            return jsonify({'success': False,
+                            'error': 'Media storage is not configured. '
+                                     'Check R2_PUBLIC_URL in your environment.'}), 503
+        except Exception as _e:
+            logger.error('Media upload unexpected error: %s', _e)
+            return jsonify({'success': False, 'error': 'Media upload failed.'}), 500
+        # Infer mime from data URI if not supplied by client
+        if not media_mime and _raw_media_data.startswith('data:'):
+            media_mime = _raw_media_data.split(';')[0][5:] or None
     post_type       = (request.form.get('post_type') or 'post').strip().lower()
     channel_id      = safe_int(request.form.get('channel_id'), 0) or None
 
@@ -145,11 +156,12 @@ def create_post():
     now = datetime.now(timezone.utc).isoformat()
     db.execute("""
         INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
-                           is_subscriber_only, media_url,
+                           is_subscriber_only, media_url, media_mime,
                            post_type, poll_expires_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
     """, (uid, body or None, reply_to, repost_of, quote_body,
-          subscriber_only, media_url, post_type, poll_expires_at, now))
+          subscriber_only, media_url, media_mime if media_url else None,
+          post_type, poll_expires_at, now))
     post_id = db.lastrowid
 
     for opt_label in poll_options:

@@ -124,25 +124,37 @@ def _bucket() -> str:
 
 def _public_url_base() -> str:
     """
-    Return the base URL used to serve files publicly.
+    Return the base CDN URL used to serve uploaded files publicly.
 
-    Cloudflare R2 can serve files two ways:
-      1. r2.dev subdomain  — enable "Public Access" on the bucket:
-            https://pub-<hash>.r2.dev
-      2. Custom domain     — add a domain via Cloudflare dashboard:
-            https://media.yourdomain.com
+    Priority order:
+      1. R2_PUBLIC_URL env var (recommended — set to your r2.dev or custom domain)
+      2. Constructed from R2_ACCOUNT_ID + R2_BUCKET_NAME as a fallback
+         (only works if public access is enabled on the bucket)
 
-    Set R2_PUBLIC_URL to either of the above. Files are served as:
-        {R2_PUBLIC_URL}/{object_key}
+    Never raises — returns a best-effort URL so media always has a URL stored.
     """
-    url = os.environ.get('R2_PUBLIC_URL', '').rstrip('/')
-    if not url:
-        raise RuntimeError(
-            'R2_PUBLIC_URL is not set. Enable public access on your R2 bucket '
-            'and set R2_PUBLIC_URL to the public URL shown in the dashboard '
-            '(e.g. https://pub-xxxx.r2.dev or https://media.yourdomain.com).'
+    url = os.environ.get('R2_PUBLIC_URL', '').strip().rstrip('/')
+    if url:
+        return url
+
+    # Fallback: construct from account id
+    account_id  = os.environ.get('R2_ACCOUNT_ID', '').strip()
+    bucket_name = os.environ.get('R2_BUCKET_NAME', '').strip()
+    if account_id and bucket_name:
+        constructed = f'https://{account_id}.r2.cloudflarestorage.com/{bucket_name}'
+        logger.warning(
+            'R2_PUBLIC_URL not set — using private endpoint %s. '
+            'Files will not be publicly accessible. '
+            'Set R2_PUBLIC_URL to your r2.dev subdomain or custom domain.',
+            constructed
         )
-    return url
+        return constructed
+
+    raise RuntimeError(
+        'Cannot construct a media URL: set R2_PUBLIC_URL '
+        '(e.g. https://pub-xxxx.r2.dev) in your environment variables. '
+        'Enable "Public Access" on your R2 media bucket first.'
+    )
 
 
 def _max_bytes() -> int:

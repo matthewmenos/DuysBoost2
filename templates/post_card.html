@@ -80,18 +80,26 @@
         <div class="post-body" id="post-body-{{ p.id }}">{{ p.body | linkify_tags | safe }}{% if p.get('edited_at') %}&nbsp;<span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>{% endif %}</div>
         {% endif %}
         {% if p.get("media_url") %}
-          {% if p.get("media_mime","").startswith("video/") %}
+          {% set _url = p.media_url or '' %}
+          {% set _mime = p.media_mime or '' %}
+          {% set _is_video = _mime.startswith('video/') or
+                             _url.endswith('.mp4') or _url.endswith('.webm') or
+                             _url.endswith('.ogv') or _url.endswith('.mov') %}
+          {% if _is_video %}
           <div class="post-media-wrap">
-            <video class="post-media-video" src="{{ p.media_url }}"
+            <video class="post-media-video" src="{{ _url }}"
                    controls preload="metadata" playsinline
-                   style="max-width:100%;border-radius:var(--radius);max-height:480px"></video>
+                   style="max-width:100%;border-radius:var(--radius);max-height:480px"
+                   onerror="this.outerHTML='<div class=post-media-err>⚠️ Video failed to load. <a href='{{ _url }}' target='_blank'>Open directly</a></div>'">
+            </video>
           </div>
           {% else %}
           <div class="post-media-wrap" style="position:relative">
-            <img class="post-media-img" src="{{ p.media_url }}" alt="Post image"
-                 loading="lazy" onclick="openPostLightbox({{ p.id }})">
+            <img class="post-media-img" src="{{ _url }}" alt="Post image"
+                 loading="lazy" onclick="openPostLightbox({{ p.id }})"
+                 onerror="this.src='/static/img/broken.svg';this.style.opacity='.4'">
             {% if a.get('allow_post_saves', 1) != 0 %}
-            <a href="{{ p.media_url }}" download="post-{{ p.id }}"
+            <a href="{{ _url }}" download="post-{{ p.id }}"
                target="_blank"
                class="post-save-btn" title="Save to gallery" aria-label="Save image">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
