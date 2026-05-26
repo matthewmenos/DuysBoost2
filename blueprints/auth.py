@@ -95,8 +95,8 @@ def login():
         ).fetchone()
         if not user or not verify_password(password, user['password']):
             return jsonify({'success': False, 'errors': ['Invalid credentials.']}), 401
-        if user['is_banned']:
-            reason = user.get('ban_reason') or 'Community guidelines violation'
+        if user and dict(user).get('is_banned', 0):
+            reason = dict(user).get('ban_reason', '') or 'Community guidelines violation'
             return jsonify({'success': False, 'errors': [f'Account suspended: {reason}']}), 403
         maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
@@ -208,8 +208,9 @@ def reset_password():
         return jsonify({'success': False, 'errors': ['Invalid reset link.']}), 400
 
     # Validate token
-    stored_token   = user['reset_token']   if 'reset_token'   in user.keys() else None
-    stored_expires = user['reset_expires'] if 'reset_expires' in user.keys() else 0
+    user_d = dict(user)
+    stored_token   = user_d.get('reset_token')
+    stored_expires = user_d.get('reset_expires', 0)
 
     if not stored_token or stored_token != token:
         return jsonify({'success': False, 'errors': ['Invalid or expired reset link.']}), 400
@@ -306,7 +307,7 @@ def _finalize_oauth_login(userinfo, provider):
     if user:
         # Returning user — sign in directly
         session.clear()
-        if user['is_banned']:
+        if user and dict(user).get('is_banned', 0):
             return redirect(url_for('auth.login') + '?banned=1')
         session['user_id'] = user['id']
         return redirect(url_for('social.feed'))

@@ -626,64 +626,118 @@ def close_and_sync(conn: sqlite3.Connection, user_id: int, path: str) -> None:
 
 # ── Flask g integration ───────────────────────────────────────────────────────
 
+# ── Module-level R2 sync state ────────────────────────────────────────────────
+
+_global_db_synced    = False   # True after first download this process lifetime
+_global_db_sync_lock = threading.Lock()
+
+
+def _global_db_ready() -> bool:
+    return _global_db_synced
+
+
+def _sync_global_db_from_r2(local_path: str) -> None:
+    """Download global.db from R2 if it exists. Safe to call at startup."""
+    global _global_db_synced
+    with _global_db_sync_lock:
+        if _global_db_synced:
+            return
+        bucket = _db_bucket()
+        if not bucket:
+            _global_db_synced = True
+            return
+        try:
+            r2 = _get_r2()
+            r2.download_file(bucket, 'global.db', local_path)
+            logger.info('global.db downloaded from R2 (%d KB)',
+                        os.path.getsize(local_path) // 1024)
+        except ClientError as e:
+            code = e.response.get('Error', {}).get('Code', '')
+            if code in ('404', 'NoSuchKey'):
+                logger.info('global.db not found in R2 — will create fresh')
+            else:
+                logger.error('R2 download error for global.db: %s', e)
+        except Exception as e:
+            logger.warning('Could not sync global.db from R2: %s', e)
+        finally:
+            _global_db_synced = True
+
+
+def _sync_global_db_to_r2(local_path: str) -> None:
+    """Upload global.db to R2. Called after each request teardown."""
+    bucket = _db_bucket()
+    if not bucket:
+        return
+    try:
+        r2 = _get_r2()
+        r2.upload_file(
+            local_path, bucket, 'global.db',
+            ExtraArgs={'ContentType': 'application/octet-stream'},
+        )
+        logger.debug('global.db synced to R2')
+    except Exception as e:
+        logger.warning('global.db R2 upload failed (data still on disk): %s', e)
+
+
+
 def get_db() -> sqlite3.Connection:
     """
-    Return the per-request SQLite connection for the current user.
-    Downloads from R2 on first call; uploaded back on teardown.
+    Return the per-request SQLite connection.
 
-    Falls back to a shared in-memory DB if no user is logged in
-    (e.g., for anonymous GET requests like the index page).
+    Architecture: ONE shared global.db on disk holds all social data
+    (users, posts, follows, messages, etc.).  This database is synced
+    to the R2_DB_BUCKET_NAME bucket as "global.db" on every teardown,
+    so data persists across Render restarts.
+
+    On request open  → download global.db from R2 (if newer than local)
+    On request close → upload updated global.db back to R2
     """
     if 'db' in g:
         return g.db
 
-    from flask import session as _session
-    uid = _session.get('user_id')
+    from flask import current_app
+    global_path = os.path.join(current_app.root_path, 'global.db')
 
-    if uid:
-        conn, path = open_user_db(uid)
-        g.db       = conn
-        g.db_uid   = uid
-        g.db_path  = path
-    else:
-        # Anonymous request — use a shared global DB (read-only public data)
-        from flask import current_app
-        global_path = os.path.join(current_app.root_path, 'global.db')
-        conn = sqlite3.connect(global_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute('PRAGMA foreign_keys = ON')
-        conn.execute('PRAGMA journal_mode = WAL')
-        conn.execute('PRAGMA synchronous  = NORMAL')
-        init_user_tables(conn)
-        g.db      = conn
-        g.db_uid  = None
-        g.db_path = None
+    # Download from R2 on first request of each worker boot
+    # (use a module-level flag to avoid downloading on every request)
+    if not _global_db_ready():
+        _sync_global_db_from_r2(global_path)
+
+    conn = sqlite3.connect(global_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys = ON')
+    conn.execute('PRAGMA journal_mode = WAL')
+    conn.execute('PRAGMA synchronous  = NORMAL')
+    conn.execute('PRAGMA cache_size   = -8000')   # 8 MB cache
+    init_user_tables(conn)
+
+    g.db       = conn
+    g.db_path  = global_path
+    g.db_uid   = None   # not per-user; kept for API compat
 
     return g.db
 
 
 def close_db(_e=None) -> None:
     """
-    Flask teardown hook.
-    Commit → close → upload to R2 → delete /tmp file.
+    Flask teardown hook — commit, close, then async-upload global.db to R2.
+    The upload is best-effort (won't block the response).
     """
     conn = g.pop('db', None)
-    uid  = g.pop('db_uid', None)
     path = g.pop('db_path', None)
+    g.pop('db_uid', None)
 
     if conn is None:
         return
 
-    if uid and path:
-        # Authenticated user — sync back to R2
-        close_and_sync(conn, uid, path)
-    else:
-        # Anonymous or global DB — just close
-        try:
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+    try:
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning('close_db commit/close: %s', e)
+
+    if path and os.path.exists(path):
+        _sync_global_db_to_r2(path)
 
 
 def init_app(app) -> None:

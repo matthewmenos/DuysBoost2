@@ -160,6 +160,7 @@ def create_story():
         (uid, media_url, mime, caption or None)
     )
     story_id = db.lastrowid
+    db.commit()
     row = db.execute(
         'SELECT id, expires_at, created_at FROM stories WHERE id=?', (story_id,)
     ).fetchone()

@@ -465,7 +465,7 @@ def adjust_balance(user_id):
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
 
-    new_balance = max(0, (user['balance'] or 0) + amount)
+    new_balance = max(0, (float(user['balance'] or 0)) + amount)
     db.execute('UPDATE users SET balance=? WHERE id=?', (new_balance, user_id))
 
     tx_type = 'deposit' if amount > 0 else 'deduction'

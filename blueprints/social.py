@@ -143,13 +143,14 @@ def create_post():
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    post_id = db.execute("""
-        INSERT OR IGNORE INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
+    db.execute("""
+        INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
                            is_subscriber_only, media_url,
                            post_type, poll_expires_at, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?)
-       """, (uid, body or None, reply_to, repost_of, quote_body,
-          subscriber_only, media_url, post_type, poll_expires_at, now)).fetchone()['id']
+    """, (uid, body or None, reply_to, repost_of, quote_body,
+          subscriber_only, media_url, post_type, poll_expires_at, now))
+    post_id = db.lastrowid
 
     for opt_label in poll_options:
         db.execute('INSERT INTO poll_options (post_id, label) VALUES (?,?)', (post_id, opt_label))
