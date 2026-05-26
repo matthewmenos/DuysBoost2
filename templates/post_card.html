@@ -8,7 +8,7 @@
   {# Repost label #}
   {% if p.repost_of_id and not p.body %}
   <div class="post-repost-label">
-    <span class="icon-sm">🔁</span>
+    <span class="icon-sm"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span>
     <a href="{{ url_for('social.profile', username=a.username) }}" class="text-muted hover-accent">
       {{ a.display_name or a.username }} reposted
     </a>
@@ -34,7 +34,7 @@
         <div class="post-author-info">
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-display-name">
             {{ a.display_name or a.username }}
-            {% if a.is_verified %}<span class="verified-badge" title="Verified">✓</span>{% endif %}
+            {% if a.is_verified %}<span class="verified-badge" title="Verified"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
           </a>
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
           <span class="post-dot" aria-hidden="true">·</span>
@@ -47,15 +47,17 @@
                   onclick="togglePostMenu({{ p.id }}, event)">⋯</button>
           <div class="post-menu-dropdown" id="post-menu-{{ p.id }}" style="display:none">
             {% if current_user and current_user.id == p.user_id %}
-            <button class="post-menu-item" onclick="openEditPost({{ p.id }}, {{ p.body | tojson }})">✏️ Edit post</button>
-            <button class="post-menu-item" onclick="openBoostModal({{ p.id }})">📣 Boost this post</button>
+            <button class="post-menu-item" onclick="openEditPost({{ p.id }}, {{ p.body | tojson }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit post</button>
+            <button class="post-menu-item" onclick="openBoostModal({{ p.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg> Boost this post</button>
             {% endif %}
             {% if current_user and (current_user.id == p.user_id or current_user.is_admin) %}
             <button class="post-menu-item danger" onclick="deletePost({{ p.id }})">🗑 Delete post</button>
             {% endif %}
-            <a class="post-menu-item" href="{{ url_for('social.post_detail', post_id=p.id) }}">🔗 View post</a>
-            <button class="post-menu-item" onclick="sharePost({{ p.id }}, {{ (p.body or '') | tojson }})">📤 Share post</button>
-            <button class="post-menu-item" onclick="copyPostLink({{ p.id }})">📋 Copy link</button>
+            <a class="post-menu-item" href="{{ url_for('social.post_detail', post_id=p.id) }}"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> View post</a>
+            <button class="post-menu-item" onclick="sharePost({{ p.id }}, {{ (p.body or '') | tojson }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Share post</button>
+            <button class="post-menu-item" onclick="copyPostLink({{ p.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Copy link</button>
+            <button class="post-menu-item" style="color:var(--red,#e53e3e)"
+                    onclick="reportPost({{ p.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report post</button>
           </div>
         </div>
       </div>
@@ -78,18 +80,26 @@
         <div class="post-body" id="post-body-{{ p.id }}">{{ p.body | linkify_tags | safe }}{% if p.get('edited_at') %}&nbsp;<span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>{% endif %}</div>
         {% endif %}
         {% if p.get("media_url") %}
-          {% if p.get("media_mime","").startswith("video/") %}
+          {% set _url = p.media_url or '' %}
+          {% set _mime = p.media_mime or '' %}
+          {% set _is_video = _mime.startswith('video/') or
+                             _url.endswith('.mp4') or _url.endswith('.webm') or
+                             _url.endswith('.ogv') or _url.endswith('.mov') %}
+          {% if _is_video %}
           <div class="post-media-wrap">
-            <video class="post-media-video" src="{{ p.media_url }}"
+            <video class="post-media-video" src="{{ _url }}"
                    controls preload="metadata" playsinline
-                   style="max-width:100%;border-radius:var(--radius);max-height:480px"></video>
+                   style="max-width:100%;border-radius:var(--radius);max-height:480px"
+                   onerror="this.outerHTML='<div class=post-media-err>⚠️ Video failed to load. <a href='{{ _url }}' target='_blank'>Open directly</a></div>'">
+            </video>
           </div>
           {% else %}
           <div class="post-media-wrap" style="position:relative">
-            <img class="post-media-img" src="{{ p.media_url }}" alt="Post image"
-                 loading="lazy" onclick="openPostLightbox({{ p.id }})">
+            <img class="post-media-img" src="{{ _url }}" alt="Post image"
+                 loading="lazy" onclick="openPostLightbox({{ p.id }})"
+                 onerror="this.src='/static/img/broken.svg';this.style.opacity='.4'">
             {% if a.get('allow_post_saves', 1) != 0 %}
-            <a href="{{ p.media_url }}" download="post-{{ p.id }}"
+            <a href="{{ _url }}" download="post-{{ p.id }}"
                target="_blank"
                class="post-save-btn" title="Save to gallery" aria-label="Save image">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
@@ -142,7 +152,7 @@
       {% if p.active_boost %}
       <div class="boost-earn-banner" id="boost-banner-{{ p.id }}">
         <div class="boost-earn-info">
-          <span class="boost-earn-badge">📣 Boosted</span>
+          <span class="boost-earn-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg> Boosted</span>
           <span class="boost-earn-action">
             {{ p.active_boost.engage_type | capitalize }} this post
           </span>
@@ -160,14 +170,14 @@
       <div class="post-actions">
         <button class="post-action-btn reply-btn"
                 onclick="openReplyModal({{ p.id }}, '{{ a.username | e }}')" aria-label="Reply">
-          <span class="action-icon">💬</span>
+          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
           <span class="action-count" id="reply-count-{{ p.id }}">{{ p.reply_count or '' }}</span>
         </button>
         <button class="post-action-btn repost-btn {% if p.reposted %}reposted{% endif %}"
                 onclick="openRepostModal({{ p.id }}, {{ 'true' if p.reposted else 'false' }})"
                 aria-label="{{ 'Undo repost' if p.reposted else 'Repost' }}"
                 aria-pressed="{{ 'true' if p.reposted else 'false' }}">
-          <span class="action-icon">🔁</span>
+          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span>
           <span class="action-count" id="repost-count-{{ p.id }}">{{ p.repost_count or '' }}</span>
         </button>
         <button class="post-action-btn like-btn {% if p.liked %}liked{% endif %}"
@@ -179,11 +189,15 @@
         <button class="post-action-btn bookmark-btn {% if p.bookmarked %}bookmarked{% endif %}"
                 onclick="toggleBookmark({{ p.id }}, this)" aria-label="Bookmark"
                 aria-pressed="{{ 'true' if p.bookmarked else 'false' }}">
-          <span class="action-icon">{{ '🔖' if p.bookmarked else '🏷' }}</span>
+          {%- if p.bookmarked -%}
+          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          {%- else -%}
+          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          {%- endif -%}
         </button>
         {% if current_user and current_user.id == p.user_id %}
         <button class="post-action-btn" onclick="openBoostModal({{ p.id }})" aria-label="Boost">
-          <span class="action-icon">📣</span>
+          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></span>
         </button>
         {% endif %}
       </div>

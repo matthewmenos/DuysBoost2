@@ -677,7 +677,6 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('users', 'website',               'TEXT'),
         ('users', 'location',              'TEXT'),
         ('users', 'is_verified',           'INTEGER DEFAULT 0'),
-        ('users', 'verified_tier',         "TEXT DEFAULT 'blue'"),
         ('users', 'follower_count',        'INTEGER DEFAULT 0'),
         ('users', 'following_count',       'INTEGER DEFAULT 0'),
         ('users', 'post_count',            'INTEGER DEFAULT 0'),
@@ -726,8 +725,6 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('platform_reviews', 'admin_reply','TEXT'),
         ('platform_reviews', 'updated_at', 'TEXT'),
         ('platform_reviews', 'is_featured','INTEGER DEFAULT 0'),
-        ('messages', 'view_once',          'INTEGER DEFAULT 0'),
-        ('messages', 'view_once_opened',   'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()

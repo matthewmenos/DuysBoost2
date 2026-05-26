@@ -74,10 +74,10 @@
       <div class="banner-picker" id="banner-picker" onclick="document.getElementById('banner-input').click()">
         {% if user.banner_url %}
           <img src="{{ user.banner_url }}" alt="Banner" id="banner-preview">
-          <div class="banner-overlay">📷 Change banner</div>
+          <div class="banner-overlay"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Change banner</div>
         {% else %}
           <div class="banner-empty" id="banner-empty">
-            <span>📷</span> Upload a banner photo
+            <span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Upload a banner photo
           </div>
           <img src="" alt="" id="banner-preview" style="display:none">
         {% endif %}
@@ -97,7 +97,7 @@
             <span id="avatar-initials">{{ (user.display_name or user.username or '?')[0].upper() }}</span>
           {% endif %}
         </div>
-        <div class="photo-overlay">📷</div>
+        <div class="photo-overlay"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
       </div>
       <div style="text-align:center">
         <div class="fw-700" style="font-size:15px">Profile photo</div>
@@ -301,25 +301,33 @@ window.confirmDeleteAccount = confirmDeleteAccount;
 
 <!-- Delete account modal -->
 <div class="modal-overlay" id="delete-account-modal">
-  <div class="modal" style="max-width:400px">
+  <div class="modal" style="max-width:420px">
     <div class="modal-header">
-      <div class="modal-title" style="color:var(--red,#e53e3e)">⚠️ Delete account</div>
-      <button class="modal-close" onclick="closeModal('delete-account-modal')">✕</button>
+      <div class="modal-title" style="color:var(--red)">Delete account</div>
+      <button class="modal-close" onclick="closeModal('delete-account-modal')">
+        <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <p style="color:var(--text-dim);font-size:14px;margin-bottom:16px">
-      This will permanently delete your account, all your posts, messages, and data.
-      <strong style="color:var(--red,#e53e3e)">This cannot be undone.</strong>
-    </p>
-    <div class="form-group">
-      <label class="form-label">Confirm with your password</label>
-      <input class="form-input" id="delete-confirm-pw" type="password"
-             placeholder="Your password" autocomplete="current-password">
+    <div style="padding:0 0 16px">
+      <div style="background:rgba(244,33,46,.08);border:1px solid rgba(244,33,46,.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13.5px;line-height:1.6;color:var(--text)">
+        <strong style="color:var(--red)">This cannot be undone.</strong>
+        Your profile, posts, messages, wallet history and all data will be permanently deleted.
+      </div>
+      <label class="form-label" style="display:block;margin-bottom:6px">
+        To confirm, type <strong style="color:var(--red)">delete</strong> below
+      </label>
+      <input class="form-input" id="delete-phrase-input" type="text"
+             placeholder='Type "delete"' autocomplete="off" autocorrect="off"
+             spellcheck="false" style="font-size:15px"
+             oninput="document.getElementById('delete-account-btn').disabled=this.value.trim().toLowerCase()!=='delete'">
+      <div id="delete-error" class="error-list" style="display:none;margin-top:8px"></div>
     </div>
-    <button class="btn btn-block" id="delete-account-btn"
-            onclick="confirmDeleteAccount()"
-            style="background:var(--red,#e53e3e);color:#fff;margin-top:4px">
-      Delete my account permanently
+    <button id="delete-account-btn" class="btn btn-block btn-lg"
+            style="background:var(--red);color:#fff;border:none;opacity:.5;cursor:not-allowed"
+            onclick="confirmDeleteAccount(this)" disabled>
+      Permanently delete my account
     </button>
   </div>
 </div>
+
 {% endblock %}

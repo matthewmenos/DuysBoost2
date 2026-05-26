@@ -1,169 +1,178 @@
-{% extends "base.html" %}
-{% block title %}Complete your profile — DUYS Boost{% endblock %}
-{% block page_title %}Complete your profile{% endblock %}
-
-{% block head_extra %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>Complete Profile — DUYS Boost</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 <style>
-.cp-wrap {
-  max-width: 460px;
-  margin: 40px auto;
-  padding: 0 20px;
-}
-.cp-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 32px 28px;
-  box-shadow: var(--shadow-md);
-}
-.cp-icon {
-  width: 56px; height: 56px;
-  background: linear-gradient(135deg, var(--accent), #5a4af0);
-  border-radius: 16px;
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  min-height: 100vh;
+  background: #080a12;
   display: flex; align-items: center; justify-content: center;
-  font-size: 26px;
-  margin: 0 auto 18px;
-  color: #fff;
+  font-family: var(--font-body, system-ui, sans-serif);
+  overflow-x: hidden; position: relative;
 }
-.cp-title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  text-align: center;
-  margin-bottom: 6px;
+.orb {
+  position: fixed; border-radius: 50%; filter: blur(80px);
+  opacity: 0.5; pointer-events: none; z-index: 0;
 }
-.cp-sub {
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 26px;
+.orb-1 { width: 500px; height: 500px; background: radial-gradient(circle,#7f5af0,transparent 70%); top:-120px; left:-80px; }
+.orb-2 { width: 380px; height: 380px; background: radial-gradient(circle,#2cb67d,transparent 70%); bottom:-80px; right:-60px; }
+.glass-wrap { position: relative; z-index: 10; width: 100%; max-width: 460px; padding: 16px; }
+.glass-card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 24px; padding: 36px 32px 32px;
+  box-shadow: 0 32px 80px rgba(0,0,0,.55), 0 8px 24px rgba(127,90,240,.12);
 }
-.cp-email-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--surface-2);
-  border-radius: var(--radius);
-  margin-bottom: 22px;
-  font-size: 13.5px;
-  color: var(--muted);
+.field-label { display: block; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: rgba(255,255,255,.45); margin-bottom: 6px; }
+.field-input {
+  width: 100%; padding: 11px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 11px; color: #fff; font-size: 14px;
+  font-family: inherit; outline: none;
+  transition: border-color .2s, box-shadow .2s;
 }
-.cp-email-row strong { color: var(--text); font-weight: 600; }
-.form-error {
-  background: rgba(229,62,62,.08);
-  border: 1px solid rgba(229,62,62,.3);
-  color: var(--red, #e53e3e);
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  font-size: 13.5px;
-  margin-bottom: 14px;
-  display: none;
+.field-input:focus { border-color: rgba(127,90,240,.7); box-shadow: 0 0 0 3px rgba(127,90,240,.15); }
+.field-input::placeholder { color: rgba(255,255,255,.25); }
+.auth-submit {
+  width: 100%; padding: 13px;
+  background: linear-gradient(135deg,#7f5af0,#5a3fc0);
+  border: none; border-radius: 12px; color: #fff;
+  font-size: 15px; font-weight: 700; font-family: inherit;
+  cursor: pointer; box-shadow: 0 4px 20px rgba(127,90,240,.4);
+  transition: opacity .2s;
 }
-.form-error.show { display: block; }
-.form-error ul { margin: 0; padding-left: 18px; }
-.optional { color: var(--muted); font-weight: 400; font-size: 12px; }
+.auth-submit:hover { opacity: .9; }
+.auth-submit:disabled { opacity: .55; cursor: not-allowed; }
+.error-box {
+  background: rgba(239,69,101,.1); border: 1px solid rgba(239,69,101,.3);
+  border-radius: 10px; padding: 10px 14px; display: none; margin-bottom: 14px;
+}
+.error-box.show { display: block; }
+.error-box li { color: #ff7c9c; font-size: 13px; list-style: none; padding: 2px 0; }
+.email-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 99px; padding: 6px 14px; font-size: 13px;
+  color: rgba(255,255,255,.7); margin-bottom: 22px;
+}
 </style>
-{% endblock %}
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
 
-{% block content %}
-<div class="cp-wrap">
-  <div class="cp-card">
-    <div class="cp-icon">👤</div>
-    <div class="cp-title">One more step</div>
-    <div class="cp-sub">Pick a username and display name to finish setting up your account.</div>
-
-    <div class="cp-email-row">
-      <span>📧</span>
-      <span>Signing in as <strong>{{ email }}</strong> via {{ provider }}</span>
+<div class="glass-wrap">
+  <div class="glass-card">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="width:52px;height:52px;background:linear-gradient(135deg,#7f5af0,#5a3fc0);
+                  border-radius:14px;display:inline-flex;align-items:center;justify-content:center;
+                  font-size:24px;margin-bottom:12px;box-shadow:0 4px 20px rgba(127,90,240,.4)">⚡</div>
+      <div style="font-size:20px;font-weight:800;color:#fff;letter-spacing:-.02em">One last step</div>
+      <div style="font-size:13px;color:rgba(255,255,255,.45);margin-top:4px">
+        Set up your profile to finish signing in with {{ provider }}
+      </div>
     </div>
 
-    <div class="form-error" id="cp-error"><ul></ul></div>
+    <div style="text-align:center">
+      <span class="email-pill">📧 {{ email }}</span>
+    </div>
 
-    <form id="cp-form" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="cp-display">Display name</label>
-        <input class="form-input" id="cp-display" name="display_name"
-               type="text" value="{{ suggested_name }}"
-               autocomplete="name"
+    <div class="error-box" id="cp-error"><ul></ul></div>
+
+    <form id="cp-form" novalidate style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label class="field-label">Display name</label>
+        <input class="field-input" name="display_name" id="cp-display"
+               value="{{ suggested_name }}" autocomplete="name"
                placeholder="How others see you" maxlength="60" required>
       </div>
-
-      <div class="form-group">
-        <label class="form-label" for="cp-username">Username</label>
-        <input class="form-input" id="cp-username" name="username"
-               type="text" autocomplete="username"
-               placeholder="cooluser" minlength="3" maxlength="30" required>
-        <div class="text-xs text-muted" style="margin-top:4px">Letters, numbers, _ and - only</div>
+      <div>
+        <label class="field-label">Username</label>
+        <input class="field-input" name="username" id="cp-username"
+               autocomplete="username" placeholder="cooluser"
+               minlength="3" maxlength="30" required>
+        <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:5px">
+          Letters, numbers, _ and - only
+        </div>
       </div>
-
-      <div class="form-group">
-        <label class="form-label" for="cp-ref">
-          Referral code <span class="optional">(optional)</span>
+      <div>
+        <label class="field-label">
+          Referral code
+          <span style="font-size:10px;background:rgba(255,255,255,.07);
+                       border:1px solid rgba(255,255,255,.1);padding:1px 7px;
+                       border-radius:99px;color:rgba(255,255,255,.4);margin-left:4px">optional</span>
         </label>
-        <input class="form-input" id="cp-ref" name="referral_code"
-               type="text" placeholder="abc123" maxlength="20">
+        <input class="field-input" name="referral_code" placeholder="abc123" maxlength="20">
       </div>
-
-      <button type="submit" class="btn btn-primary btn-block btn-lg">
+      <button type="submit" class="auth-submit" id="cp-btn">
         Create my account →
       </button>
     </form>
 
-    <div style="margin-top:18px;text-align:center">
-      <a href="{{ url_for('auth.logout') }}" class="text-xs text-muted">
-        Cancel and sign out
+    <div style="text-align:center;margin-top:18px">
+      <a href="{{ url_for('auth.logout') }}"
+         style="font-size:12px;color:rgba(255,255,255,.3);text-decoration:none">
+        Cancel &amp; sign out
       </a>
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-(function () {
-  const form     = document.getElementById('cp-form');
-  const errorBox = document.getElementById('cp-error');
-  const usernameI = document.getElementById('cp-username');
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-  // Pre-fill username from display name as a suggestion
-  const displayI = document.getElementById('cp-display');
-  if (displayI && !usernameI.value) {
-    usernameI.value = (displayI.value || '')
-      .replace(/[^A-Za-z0-9_-]/g, '')
-      .toLowerCase()
-      .slice(0, 20);
-  }
-
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    errorBox.classList.remove('show');
-    errorBox.querySelector('ul').innerHTML = '';
-
-    const fd = new FormData(form);
-    try {
-      const r = await fetch('{{ url_for("auth.complete_profile") }}', {
-        method: 'POST',
-        body: fd,
-      });
-      const d = await r.json();
-      if (d.success) {
-        location.href = d.redirect;
-      } else {
-        const ul = errorBox.querySelector('ul');
-        (d.errors || ['Please check your entries.']).forEach(function (msg) {
-          const li = document.createElement('li');
-          li.textContent = msg;
-          ul.appendChild(li);
-        });
-        errorBox.classList.add('show');
-      }
-    } catch (_) {
-      errorBox.querySelector('ul').innerHTML = '<li>Network error. Please try again.</li>';
-      errorBox.classList.add('show');
-    }
+// Pre-fill username from display name
+const dn = document.getElementById('cp-display');
+const un = document.getElementById('cp-username');
+if (dn && un) {
+  dn.addEventListener('input', () => {
+    if (!un._touched)
+      un.value = dn.value.replace(/[^A-Za-z0-9_-]/g,'').toLowerCase().slice(0,20);
   });
-})();
+  un.addEventListener('input', () => { un._touched = true; });
+}
+
+document.getElementById('cp-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('cp-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  document.getElementById('cp-error').classList.remove('show');
+
+  const fd = new FormData(this);
+  const r  = await fetch('{{ url_for("auth.complete_profile") }}', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': CSRF },
+    body: fd,
+  }).catch(() => null);
+
+  if (!r) {
+    btn.disabled = false; btn.textContent = 'Create my account →';
+    showErr(['Network error.']); return;
+  }
+  const d = await r.json();
+  if (d.success) { location.href = d.redirect; }
+  else {
+    showErr(d.errors || ['Please check your entries.']);
+    btn.disabled = false; btn.textContent = 'Create my account →';
+  }
+});
+
+function showErr(errs) {
+  const box = document.getElementById('cp-error');
+  box.querySelector('ul').innerHTML = errs.map(e => `<li>⚠ ${e}</li>`).join('');
+  box.classList.add('show');
+}
 </script>
-{% endblock %}
+</body>
+</html>

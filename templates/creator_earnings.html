@@ -31,7 +31,7 @@
   <!-- Subscription tier card -->
   <div class="card">
     <div class="section-header">
-      <div class="section-title">💎 Your Tier</div>
+      <div class="section-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.7 10.3l9.3 9.3 9.3-9.3L12 2 2.7 10.3z"/></svg> Your Tier</div>
       <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-outline btn-sm">
         {{ 'Edit' if tier else 'Set up' }}
       </a>
@@ -40,7 +40,7 @@
     {% if tier %}
     <div class="tier-preview-card">
       <div class="tier-preview-header">
-        <div class="tier-preview-badge">⭐ {{ tier.title }}</div>
+        <div class="tier-preview-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> {{ tier.title }}</div>
         <div class="tier-preview-price">
           ${{ '%.2f'|format(tier.price_usd) }}<span class="text-muted text-sm">/mo</span>
         </div>
@@ -51,7 +51,7 @@
       {% if tier.perks %}
       <ul class="tier-perks-list">
         {% for perk in tier.perks.split('\n') if perk.strip() %}
-        <li>✓ {{ perk.strip() }}</li>
+        <li><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> {{ perk.strip() }}</li>
         {% endfor %}
       </ul>
       {% endif %}
@@ -66,7 +66,7 @@
     </div>
     {% else %}
     <div class="empty-state" style="padding:28px 20px">
-      <div class="empty-icon">💎</div>
+      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.7 10.3l9.3 9.3 9.3-9.3L12 2 2.7 10.3z"/></svg></div>
       <div class="empty-title">No tier yet</div>
       <div class="empty-text">Set up a subscription tier to earn recurring income from your followers.</div>
       <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-primary mt-16">Create tier →</a>
@@ -77,7 +77,7 @@
   <!-- Active subscribers -->
   <div class="card">
     <div class="section-header">
-      <div class="section-title">👥 Active Subscribers</div>
+      <div class="section-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Active Subscribers</div>
       {% if me.username %}
       <a href="{{ url_for('boost.subscriber_list', username=me.username) }}" class="btn btn-ghost btn-sm">See all</a>
       {% endif %}
@@ -103,7 +103,7 @@
     </div>
     {% else %}
     <div class="empty-state" style="padding:28px 20px">
-      <div class="empty-icon">👥</div>
+      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
       <div class="empty-title">No subscribers yet</div>
       <div class="empty-text">Share your profile link and set up a tier to get started.</div>
     </div>
@@ -113,7 +113,7 @@
 
 <!-- Tips received -->
 <div class="card mt-16">
-  <div class="section-title mb-16">💰 Tips Received</div>
+  <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Tips Received</div>
   {% if tips_received %}
   <div class="table-wrap">
     <table>
@@ -153,7 +153,7 @@
   </div>
   {% else %}
   <div class="empty-state" style="padding:32px 20px">
-    <div class="empty-icon">💰</div>
+    <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
     <div class="empty-title">No tips yet</div>
     <div class="empty-text">Tips from other users will appear here.</div>
   </div>
