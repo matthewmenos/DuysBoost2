@@ -295,7 +295,24 @@ function openStoryGroup(groupIdx, storyIdx) {
 }
 window.openStoryGroup = openStoryGroup;
 
+let _svPaused = false;
+function toggleStoryPause() {
+  _svPaused = !_svPaused;
+  // Pause/resume progress animation
+  document.querySelectorAll('.sv-seg .fill').forEach(function(f) {
+    f.style.animationPlayState = _svPaused ? 'paused' : 'running';
+  });
+  // Pause/resume video
+  const vid = document.querySelector('#sv-media video');
+  if (vid) { _svPaused ? vid.pause() : vid.play(); }
+  // Toggle pause badge
+  const badge = document.getElementById('sv-pause-badge');
+  if (badge) badge.style.display = _svPaused ? 'flex' : 'none';
+}
+window.toggleStoryPause = toggleStoryPause;
+
 function _showCurrentStory() {
+  _svPaused = false;
   clearTimeout(_svTimer);
   const grp    = _storyGroups[_svGroupIdx];
   const story  = grp && grp.stories[_svStoryIdx];
@@ -349,8 +366,9 @@ function _showCurrentStory() {
     };
     vid.onloadedmetadata = function() { _svDuration = Math.min(vid.duration * 1000, 30000); };
   } else {
-    mediaEl.innerHTML = `<img src="${url}" alt=""
-      style="max-width:100%;max-height:100vh;object-fit:contain"
+    mediaEl.innerHTML = `<img src="${url}" alt="" onclick="toggleStoryPause()"
+      style="max-width:100%;max-height:100vh;object-fit:contain;cursor:pointer"
+      onclick="toggleStoryPause()"
       onerror="this.alt='Image failed to load'; this.style.padding='32px';">`;
     _svDuration = 5000;
   }
@@ -492,9 +510,16 @@ async function submitStory() {
   if (caption) fd.append('caption', caption);
 
   try {
-    const r = await fetch('/api/story/create', { method: 'POST', body: fd });
+    const r = await fetch('/api/story/create', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
+      body: fd
+    });
     let d;
-    try { d = await r.json(); } catch (_) { d = { success: false, error: 'Server error (not JSON).' }; }
+    const rawText = await r.text();
+    try { d = JSON.parse(rawText); } catch (_) {
+      d = { success: false, error: 'Server error (' + r.status + '): ' + rawText.slice(0,100) };
+    }
 
     if (d.success) {
       closeModal('story-caption-modal');

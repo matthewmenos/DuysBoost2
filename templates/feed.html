@@ -371,7 +371,11 @@ if (composeInput) {
         fd.append('post_type', 'poll');
         fd.append('poll_options', JSON.stringify(pollOptions));
       }
-      const r  = await fetch('/post', { method: 'POST', body: fd });
+      const r  = await fetch('/post', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': CSRF },
+        body: fd
+      });
       const d  = await r.json();
       if (d.success) {
         composeInput.value = '';

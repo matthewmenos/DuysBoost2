@@ -111,7 +111,8 @@ def _format_story(row, viewer_uid):
     except Exception:
         viewed_list = []
     d['viewed']      = viewer_uid in viewed_list
-    d['view_count']  = len(viewed_list)
+    # Exclude owner from view count
+    d['view_count']  = len([v for v in viewed_list if v != d.get('user_id')])
     d['is_own']      = d['user_id'] == viewer_uid
     # Time remaining
     try:
