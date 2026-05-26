@@ -196,7 +196,7 @@
           <div class="conv-top">
             <div class="conv-name">
               {{ conv.other.display_name or conv.other.username }}
-              {% if conv.other.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+              {% if conv.other.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
             </div>
             <div class="conv-time">
               {% if conv.last_msg %}
@@ -298,10 +298,10 @@
   <div class="nm-panel">
     <div class="nm-search-wrap">
       <div class="nm-search-row">
-        <span style="font-size:16px;color:var(--muted)">🔍</span>
+        <span style="font-size:16px;color:var(--muted)"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
         <input id="nm-input" class="nm-search-input" type="text"
                placeholder="Search people to message…" autocomplete="off">
-        <button class="nm-close" onclick="closeNewMsg()" aria-label="Close">✕</button>
+        <button class="nm-close" onclick="closeNewMsg()" aria-label="Close"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
     <div class="nm-results" id="nm-results">
@@ -359,7 +359,7 @@ async function runSearch(q) {
         av +
         '<div style="flex:1;min-width:0">' +
           '<div class="nm-name">' + escapeHtml(u.display_name || u.username) +
-            (u.is_verified ? ' <span class="verified-badge">✓</span>' : '') + '</div>' +
+            (u.is_verified ? ' <span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>' : '') + '</div>' +
           '<div class="nm-handle">@' + escapeHtml(u.username) + ' · ' + (u.follower_count || 0) + ' followers</div>' +
         '</div></a>';
     }).join('');

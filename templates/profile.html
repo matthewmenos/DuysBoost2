@@ -87,7 +87,7 @@
 
       <div class="profile-name">
         {{ target.display_name or target.username }}
-        {% if target.is_verified %}<span class="verified-badge" title="Verified">✓</span>{% endif %}
+        {% if target.is_verified %}<span class="verified-badge" title="Verified"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
       </div>
       <div class="profile-handle">@{{ target.username }}</div>
 
@@ -98,7 +98,7 @@
       <div class="profile-meta">
         {% if target.location %}<span>📍 {{ target.location }}</span>{% endif %}
         {% if target.website %}
-          <span>🔗 <a href="{{ target.website }}" target="_blank" rel="noopener" class="text-accent">
+          <span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> <a href="{{ target.website }}" target="_blank" rel="noopener" class="text-accent">
             {{ target.website | replace('https://','') | replace('http://','') | truncate(30, True, '…') }}
           </a></span>
         {% endif %}
@@ -154,7 +154,7 @@
     <!-- Creator subscription widget -->
     {% if tier and not is_own %}
     <div class="sidebar-widget creator-tier-widget">
-      <div class="widget-title">⭐ {{ tier.title }}</div>
+      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> {{ tier.title }}</div>
       <div class="tier-price-line">
         <span class="tier-big-price">${{ '%.2f'|format(tier.price_usd) }}</span>
         <span class="text-muted text-sm">/month</span>
@@ -166,13 +166,13 @@
       <ul class="tier-perks-list">
         {% for perk in tier.perks.split('
 ') if perk.strip() %}
-        <li>✓ {{ perk.strip() }}</li>
+        <li><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> {{ perk.strip() }}</li>
         {% endfor %}
       </ul>
       {% endif %}
       <div style="margin-top:14px">
         {% if is_subscribed %}
-        <div class="badge badge-active mb-8" style="width:100%;justify-content:center;padding:8px">✓ Subscribed</div>
+        <div class="badge badge-active mb-8" style="width:100%;justify-content:center;padding:8px"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Subscribed</div>
         <button class="btn btn-ghost btn-sm btn-block"
                 onclick="doUnsubscribe('{{ target.username }}', this)">Cancel subscription</button>
         {% else %}
@@ -188,12 +188,12 @@
     <!-- Creator setup CTA for own profile -->
     {% if is_own %}
     <div class="sidebar-widget">
-      <div class="widget-title">💎 Creator Tools</div>
+      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.7 10.3l9.3 9.3 9.3-9.3L12 2 2.7 10.3z"/></svg> Creator Tools</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
         <a href="{{ url_for('boost.creator_setup') }}" class="btn btn-outline btn-sm btn-block">
           {{ '✏️ Edit tier' if tier else '+ Create subscription tier' }}
         </a>
-        <a href="{{ url_for('boost.creator_earnings') }}" class="btn btn-ghost btn-sm btn-block">📊 Earnings dashboard</a>
+        <a href="{{ url_for('boost.creator_earnings') }}" class="btn btn-ghost btn-sm btn-block"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Earnings dashboard</a>
         <a href="{{ url_for('boost.subscriber_list', username=target.username) }}" class="btn btn-ghost btn-sm btn-block">
           👥 Subscribers ({{ target.subscriber_count or 0 }})
         </a>
@@ -204,7 +204,7 @@
     <!-- Tip button (not own profile) -->
     {% if not is_own %}
     <div class="sidebar-widget">
-      <div class="widget-title">💰 Send a Tip</div>
+      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Send a Tip</div>
       <p class="text-sm text-muted" style="margin:6px 0 12px">Support @{{ target.username }} directly from your wallet.</p>
       <button class="btn btn-green btn-sm btn-block"
               onclick="openTipModal('{{ target.username }}')">Send tip 💸</button>
@@ -336,8 +336,8 @@ if (tipForm) {
 <div class="modal-overlay" id="tip-modal" role="dialog" aria-modal="true" aria-label="Send tip">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">💰 Send a Tip</div>
-      <button class="modal-close" onclick="closeModal('tip-modal')">✕</button>
+      <div class="modal-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Send a Tip</div>
+      <button class="modal-close" onclick="closeModal('tip-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <p class="text-sm text-muted mb-16">
       Tip <strong id="tip-target-name"></strong> directly from your wallet balance.

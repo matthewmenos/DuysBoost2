@@ -27,7 +27,7 @@
               <a href="{{ url_for('social.profile', username=post.author.username) }}"
                  class="post-display-name" style="font-size:16px">
                 {{ post.author.display_name or post.author.username }}
-                {% if post.author.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+                {% if post.author.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
               </a>
               <div class="post-username text-muted" style="font-size:14px">@{{ post.author.username }}</div>
             </div>
@@ -51,12 +51,12 @@
             <button class="post-action-btn reply-btn"
                     onclick="openReplyModal({{ post.id }}, '{{ post.author.username | e }}')"
                     aria-label="Reply">
-              <span class="action-icon">💬</span>
+              <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
               <span>Reply</span>
             </button>
             <button class="post-action-btn repost-btn"
                     onclick="openRepostModal({{ post.id }})" aria-label="Repost">
-              <span class="action-icon">🔁</span><span>Repost</span>
+              <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span><span>Repost</span>
             </button>
             <button class="post-action-btn like-btn {% if post.liked %}liked{% endif %}"
                     onclick="toggleLike({{ post.id }}, this)" aria-label="Like">
@@ -81,7 +81,7 @@
     </div>
     {% else %}
     <div class="empty-state" style="padding:40px 20px">
-      <div class="empty-icon">💬</div>
+      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
       <div class="empty-title">No replies yet</div>
       <div class="empty-text">Be the first to reply.</div>
     </div>
@@ -114,7 +114,7 @@
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Reply</div>
-      <button class="modal-close" onclick="closeModal('reply-modal')">✕</button>
+      <button class="modal-close" onclick="closeModal('reply-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="reply-context text-muted text-sm mb-12" id="reply-context"></div>
     <textarea class="form-input" id="reply-input" placeholder="Post your reply…" maxlength="500" rows="3"></textarea>
@@ -126,11 +126,11 @@
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Repost</div>
-      <button class="modal-close" onclick="closeModal('repost-modal')">✕</button>
+      <button class="modal-close" onclick="closeModal('repost-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <button class="btn btn-outline btn-block" onclick="quickRepost()">🔁 Repost</button>
-      <button class="btn btn-ghost btn-block" onclick="openQuoteModal()">✏️ Quote</button>
+      <button class="btn btn-outline btn-block" onclick="quickRepost()"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> Repost</button>
+      <button class="btn btn-ghost btn-block" onclick="openQuoteModal()"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Quote</button>
     </div>
   </div>
 </div>
@@ -138,7 +138,7 @@
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Quote Post</div>
-      <button class="modal-close" onclick="closeModal('quote-modal')">✕</button>
+      <button class="modal-close" onclick="closeModal('quote-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <textarea class="form-input" id="quote-input" placeholder="Add a comment…" maxlength="500" rows="3" style="margin-bottom:12px"></textarea>
     <input type="hidden" id="repost-target-id" value="{{ post.id }}">

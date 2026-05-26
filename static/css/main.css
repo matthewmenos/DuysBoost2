@@ -1954,3 +1954,43 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   font-size: 13px;
 }
 .post-media-err a { color: var(--accent); }
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: opacity var(--transition);
+}
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon,
+.nav-group-btn:hover .nav-icon,
+.nav-sub-item:hover .nav-icon,
+.nav-sub-item.active .nav-icon { opacity: 1; }
+.nav-item .icon {  /* legacy compat */
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+/* ── Inline SVG icon base (replaces all emoji icon usage) ───────────────────── */
+.i-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  transition: opacity var(--transition, .15s);
+}
+/* Inside buttons / links — inherit stroke color */
+button .i-icon, a .i-icon { opacity: 0.7; }
+button:hover .i-icon, a:hover .i-icon,
+.active .i-icon { opacity: 1; }
+/* Action buttons in post cards */
+.post-action-btn .i-icon { width: 18px; height: 18px; }
+.post-action-btn.liked   .i-icon { stroke: var(--red, #e53e3e); opacity: 1; }
+.post-action-btn.reposted .i-icon { stroke: var(--green, #2cb67d); opacity: 1; }
+.post-action-btn.bookmarked .i-icon { stroke: var(--accent); opacity: 1; }
+/* Topbar icons */
+.btn-icon .i-icon { width: 20px; height: 20px; opacity: 0.75; }
+.btn-icon:hover .i-icon { opacity: 1; }
+/* Admin tables */
+.adm-btn .i-icon { width: 14px; height: 14px; margin-right: 2px; }

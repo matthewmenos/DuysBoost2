@@ -6,13 +6,13 @@
 <div class="social-layout">
   <div class="feed-col">
     <div class="card mb-16" style="padding:14px 20px">
-      <div class="section-title">🔖 Your Bookmarks</div>
+      <div class="section-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg> Your Bookmarks</div>
     </div>
     {% if posts %}
       {% for post in posts %}{{ render_post(post) }}{% endfor %}
     {% else %}
       <div class="empty-state">
-        <div class="empty-icon">🔖</div>
+        <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></div>
         <div class="empty-title">No bookmarks yet</div>
         <div class="empty-text">Tap 🏷 on any post to save it here.</div>
       </div>

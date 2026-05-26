@@ -43,7 +43,7 @@
                style="font-weight:700;font-size:13.5px;color:var(--text)">
               {{ r.display_name or r.username }}</a>
             <span style="font-size:16px">{{ '⭐' * r.rating }}{{ '☆' * (5 - r.rating) }}</span>
-            {% if r.is_featured %}<span class="badge badge-active">⭐ Featured</span>{% endif %}
+            {% if r.is_featured %}<span class="badge badge-active"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Featured</span>{% endif %}
           </div>
           {% if r.title %}<div style="font-weight:700;margin-bottom:4px">{{ r.title }}</div>{% endif %}
           <div style="font-size:13.5px;color:var(--text-dim);line-height:1.5">{{ r.body or '' }}</div>
@@ -61,19 +61,19 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start">
           {% if not r.is_featured %}
           <button class="adm-btn" style="font-size:11px"
-                  onclick="reviewAction({{ r.id }},'feature')">⭐ Feature</button>
+                  onclick="reviewAction({{ r.id }},'feature')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> Feature</button>
           {% else %}
           <button class="adm-btn" style="font-size:11px"
                   onclick="reviewAction({{ r.id }},'unfeature')">Unfeature</button>
           {% endif %}
           <button class="adm-btn" style="font-size:11px"
-                  onclick="openReplyModal({{ r.id }})">💬 Reply</button>
+                  onclick="openReplyModal({{ r.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Reply</button>
           {% if r.status == 'published' %}
           <button class="adm-btn danger" style="font-size:11px"
-                  onclick="reviewAction({{ r.id }},'hide')">🙈 Hide</button>
+                  onclick="reviewAction({{ r.id }},'hide')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg> Hide</button>
           {% else %}
           <button class="adm-btn success" style="font-size:11px"
-                  onclick="reviewAction({{ r.id }},'restore')">🔄 Restore</button>
+                  onclick="reviewAction({{ r.id }},'restore')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg> Restore</button>
           {% endif %}
         </div>
       </div>
@@ -97,7 +97,7 @@
 <!-- Reply modal -->
 <div class="adm-modal-overlay" id="reply-modal">
   <div class="adm-modal">
-    <div class="adm-modal-title">💬 Reply to Review</div>
+    <div class="adm-modal-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Reply to Review</div>
     <input type="hidden" id="reply-review-id">
     <div class="adm-form-group">
       <label class="adm-form-label">Your reply</label>

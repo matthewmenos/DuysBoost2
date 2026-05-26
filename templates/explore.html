@@ -123,12 +123,12 @@
     <div class="explore-search-wrap" id="search-wrap">
       <form method="get" action="{{ url_for('social.explore') }}" id="explore-form" autocomplete="off">
         <div class="explore-search-bar">
-          <span style="font-size:18px;flex-shrink:0;color:var(--muted)">🔍</span>
+          <span style="font-size:18px;flex-shrink:0;color:var(--muted)"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
           <input class="search-input" name="q" id="search-input"
                  value="{{ q }}" placeholder="Search posts, people, tags…"
                  spellcheck="false" autocomplete="off">
           {% if q %}
-          <a href="{{ url_for('social.explore') }}" style="color:var(--muted);font-size:20px;line-height:1;flex-shrink:0">✕</a>
+          <a href="{{ url_for('social.explore') }}" style="color:var(--muted);font-size:20px;line-height:1;flex-shrink:0"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></a>
           {% endif %}
           <button type="submit" class="btn btn-primary btn-sm" style="flex-shrink:0;border-radius:50px">Search</button>
         </div>
@@ -175,7 +175,7 @@
             <div class="people-card-info">
               <a href="{{ url_for('social.profile', username=u.username) }}" class="people-card-name">
                 {{ u.display_name or u.username }}
-                {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+                {% if u.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
               </a>
               <div class="people-card-handle">@{{ u.username }}</div>
             </div>
@@ -218,7 +218,7 @@
 
     {% if not posts and not users and not tags %}
     <div class="empty-state card" style="border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);padding:52px 20px">
-      <div class="empty-icon">🔍</div>
+      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
       <div class="empty-title">No results for "{{ q }}"</div>
       <div class="empty-text">Try a different search term or browse trending content.</div>
     </div>
@@ -227,11 +227,11 @@
     {% else %}
     <!-- No query: show trending posts -->
     {% if trending_posts %}
-    <div class="section-title mt-4 mb-4" style="padding:12px 4px 0">🔥 Trending right now</div>
+    <div class="section-title mt-4 mb-4" style="padding:12px 4px 0"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2c0 0-4 4-4 8a4 4 0 008 0c0-4-4-8-4-8z"/><path d="M8.5 14c-.5 1-.5 2 .5 3a3.5 3.5 0 004 0c1-1 1-2 .5-3"/></svg> Trending right now</div>
     {% for post in trending_posts %}{{ render_post(post) }}{% endfor %}
     {% else %}
     <div class="empty-state card" style="margin-top:4px;padding:52px 20px">
-      <div class="empty-icon">🔍</div>
+      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
       <div class="empty-title">Explore DUYS Boost</div>
       <div class="empty-text">Search for posts, people or hashtags above.</div>
     </div>
@@ -246,7 +246,7 @@
     <!-- Trending tags -->
     {% if trending_tags %}
     <div class="sidebar-widget">
-      <div class="widget-title">🔥 Trending tags</div>
+      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2c0 0-4 4-4 8a4 4 0 008 0c0-4-4-8-4-8z"/><path d="M8.5 14c-.5 1-.5 2 .5 3a3.5 3.5 0 004 0c1-1 1-2 .5-3"/></svg> Trending tags</div>
       <div style="display:flex;flex-direction:column;gap:4px">
         {% for t in trending_tags[:10] %}
         <a href="{{ url_for('social.hashtag_feed', tag=t.name) }}" class="trending-tag-pill">
@@ -264,7 +264,7 @@
     <!-- Who to follow -->
     {% if who_to_follow %}
     <div class="sidebar-widget">
-      <div class="widget-title">👥 Who to follow</div>
+      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Who to follow</div>
       {% for u in who_to_follow %}
       <div class="suggest-row" id="wtf-{{ u.id }}">
         <a href="{{ url_for('social.profile', username=u.username) }}" class="suggest-avatar">
@@ -276,7 +276,7 @@
         <div class="suggest-info">
           <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700 suggest-name">
             {{ u.display_name or u.username }}
-            {% if u.is_verified %}<span class="verified-badge">✓</span>{% endif %}
+            {% if u.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
           </a>
           <div class="text-xs text-muted">
             {{ u.follower_count or 0 }} followers
@@ -358,7 +358,7 @@ window.followUser = followUser;
           <a class="ac-item" href="/user/${escapeHtml(u.username)}">
             ${av}
             <div>
-              <div class="ac-item-name">${escapeHtml(u.display_name || u.username)}${u.is_verified ? ' <span class="verified-badge">✓</span>' : ''}</div>
+              <div class="ac-item-name">${escapeHtml(u.display_name || u.username)}${u.is_verified ? ' <span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}</div>
               <div class="ac-item-meta">@${escapeHtml(u.username)} · ${u.follower_count || 0} followers</div>
             </div>
           </a>`);
@@ -437,7 +437,7 @@ async function earnEngagement(postId, type, btn) {
   const d = await r.json();
   if (d.success) {
     const banner = document.getElementById('boost-banner-' + postId);
-    if (banner) { banner.innerHTML = `<span style="color:var(--green);font-weight:700">✅ +$${d.reward.toFixed(2)} earned!</span>`; setTimeout(()=>banner.style.display='none',2500); }
+    if (banner) { banner.innerHTML = `<span style="color:var(--green);font-weight:700"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> +$${d.reward.toFixed(2)} earned!</span>`; setTimeout(()=>banner.style.display='none',2500); }
     showToast(`+$${d.reward.toFixed(2)} earned!`);
   } else { showToast(d.error||'Error.','error'); btn.disabled=false; }
 }

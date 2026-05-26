@@ -25,79 +25,152 @@
     <div class="sidebar-logo">
       <div class="logo-mark" aria-hidden="true">D</div>
       <div class="logo-text">DUYS Boost</div>
-      <button type="button" class="sidebar-close" id="sidebar-close-btn" aria-label="Close menu">✕</button>
+      <button type="button" class="sidebar-close" id="sidebar-close-btn" aria-label="Close menu"><svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section">Social</div>
-      <a href="{{ url_for('social.feed') }}" class="nav-item {% if request.endpoint=='feed' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🏠</span> Home
-      </a>
-      <a href="{{ url_for('social.explore') }}" class="nav-item {% if request.endpoint=='explore' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔍</span> Explore
-      </a>
-      <a href="{{ url_for('social.trending') }}" class="nav-item {% if request.endpoint=='trending' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔥</span> Trending
-      </a>
-      <a href="{{ url_for('social.channels_browse') }}" class="nav-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📡</span> Channels
-      </a>
-      <a href="{{ url_for('wallet.notifications') }}" class="nav-item {% if request.endpoint=='notifications' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔔</span> Notifications
-        <span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
-      </a>
-      <a href="{{ url_for('social.messages_inbox') }}" class="nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
-         style="position:relative">
-        <span class="icon" aria-hidden="true">💬</span> Messages
-        <span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
-      </a>
-      <a href="{{ url_for('social.bookmarks') }}" class="nav-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🔖</span> Bookmarks
-      </a>
-      {% if current_user %}
-      <a href="{{ url_for('social.profile', username=current_user.username) }}" class="nav-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
-        <span class="icon" aria-hidden="true">👤</span> Profile
-      </a>
-      {% endif %}
 
-      <div class="nav-section">Boost</div>
-      <a href="{{ url_for('boost.dashboard') }}" class="nav-item {% if request.endpoint=='dashboard' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📋</span> Campaign
-      </a>
-      <a href="{{ url_for('social.feed', tab='earn') }}" class="nav-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">⚡</span> Earn
-      </a>
-      <a href="{{ url_for('boost.my_boosts') }}" class="nav-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📣</span> My Boosts
-      </a>
-      <a href="{{ url_for('boost.tasks') }}" class="nav-item {% if request.endpoint=='tasks' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">✅</span> Earn Tasks
-      </a>
-      <a href="{{ url_for('boost.analytics') }}" class="nav-item {% if request.endpoint=='analytics' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">📊</span> Analytics
-      </a>
+      {% set _ep = request.endpoint %}
+      {% set _args = request.args %}
 
-      <div class="nav-section">Creator</div>
-      <a href="{{ url_for('boost.creator_earnings') }}" class="nav-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">💎</span> Earnings
-      </a>
-      <a href="{{ url_for('boost.creator_setup') }}" class="nav-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">⭐</span> My Tier
-      </a>
+      
+      <div class="nav-group" id="grp-social">
+        <button class="nav-group-btn" onclick="toggleNavGroup('grp-social')"
+                aria-expanded="false" aria-controls="grp-social-panel">
+          <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 12L12 3l9 9v7a2 2 0 01-2 2H5a2 2 0 01-2-2V12z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span class="nav-label">Social</span>
+          <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-group-panel" id="grp-social-panel">
+          <a href="{{ url_for('social.feed') }}" class="nav-sub-item {% if request.endpoint=='feed' and not request.args.get('tab') %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 12L12 3l9 9v7a2 2 0 01-2 2H5a2 2 0 01-2-2V12z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span class="nav-label">Home</span>
+          </a>
+          <a href="{{ url_for('social.explore') }}" class="nav-sub-item {% if request.endpoint=='explore' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="nav-label">Explore</span>
+          </a>
+          <a href="{{ url_for('social.trending') }}" class="nav-sub-item {% if request.endpoint=='trending' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            <span class="nav-label">Trending</span>
+          </a>
+          <a href="{{ url_for('social.channels_browse') }}" class="nav-sub-item {% if request.endpoint in ['channels_browse','channel_detail','channel_create'] %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            <span class="nav-label">Channels</span>
+          </a>
+          <a href="{{ url_for('social.groups_list') }}" class="nav-sub-item {% if request.endpoint in ['groups_list','group_detail','group_create'] %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            <span class="nav-label">Groups</span>
+          </a>
+          <a href="{{ url_for('wallet.notifications') }}" class="nav-sub-item {% if request.endpoint=='notifications' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="nav-label">Notifications</span><span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
+          </a>
+          <a href="{{ url_for('social.messages_inbox') }}" class="nav-sub-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <span class="nav-label">Messages</span><span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
+          </a>
+          <a href="{{ url_for('social.bookmarks') }}" class="nav-sub-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+            <span class="nav-label">Bookmarks</span>
+          </a>
+          {% if current_user %}
+                    <a href="{{ url_for('social.profile', username=current_user.username) }}" class="nav-sub-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span class="nav-label">My Profile</span>
+          </a>
+          {% endif %}
+        </div>
+      </div>
 
-      <div class="nav-section">Money</div>
-      <a href="{{ url_for('wallet.wallet') }}" class="nav-item {% if request.endpoint=='wallet' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">💳</span> Wallet
-      </a>
-      <a href="{{ url_for('wallet.referral') }}" class="nav-item {% if request.endpoint=='referral' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🎁</span> Referrals
-      </a>
+      
+      <div class="nav-group" id="grp-boost">
+        <button class="nav-group-btn" onclick="toggleNavGroup('grp-boost')"
+                aria-expanded="false" aria-controls="grp-boost-panel">
+          <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span class="nav-label">Boost</span>
+          <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-group-panel" id="grp-boost-panel">
+          <a href="{{ url_for('boost.dashboard') }}" class="nav-sub-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="nav-label">Campaign</span>
+          </a>
+          <a href="{{ url_for('social.feed', tab='earn') }}" class="nav-sub-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span class="nav-label">Earn</span>
+          </a>
+          <a href="{{ url_for('boost.my_boosts') }}" class="nav-sub-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+            <span class="nav-label">My Boosts</span>
+          </a>
+          <a href="{{ url_for('boost.tasks') }}" class="nav-sub-item {% if request.endpoint=='tasks' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <span class="nav-label">Tasks</span>
+          </a>
+          <a href="{{ url_for('boost.analytics') }}" class="nav-sub-item {% if request.endpoint=='analytics' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <span class="nav-label">Analytics</span>
+          </a>
+        </div>
+      </div>
+
+      
+      <div class="nav-group" id="grp-creator">
+        <button class="nav-group-btn" onclick="toggleNavGroup('grp-creator')"
+                aria-expanded="false" aria-controls="grp-creator-panel">
+          <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span class="nav-label">Creator</span>
+          <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-group-panel" id="grp-creator-panel">
+          <a href="{{ url_for('boost.creator_earnings') }}" class="nav-sub-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M2.7 10.3l9.3 9.3 9.3-9.3L12 2 2.7 10.3z"/></svg>
+            <span class="nav-label">Earnings</span>
+          </a>
+          <a href="{{ url_for('boost.creator_setup') }}" class="nav-sub-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span class="nav-label">My Tier</span>
+          </a>
+        </div>
+      </div>
+
+      
+      <div class="nav-group" id="grp-money">
+        <button class="nav-group-btn" onclick="toggleNavGroup('grp-money')"
+                aria-expanded="false" aria-controls="grp-money-panel">
+          <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+          <span class="nav-label">Money</span>
+          <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-group-panel" id="grp-money-panel">
+          <a href="{{ url_for('wallet.wallet') }}" class="nav-sub-item {% if request.endpoint=='wallet' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            <span class="nav-label">Wallet</span>
+          </a>
+          <a href="{{ url_for('wallet.referral') }}" class="nav-sub-item {% if request.endpoint=='referral' %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
+            <span class="nav-label">Referrals</span>
+          </a>
+        </div>
+      </div>
 
       {% if current_user and current_user.is_admin %}
-      <div class="nav-section">Admin</div>
-      <a href="{{ url_for('admin.admin') }}" class="nav-item {% if request.endpoint=='admin' %}active{% endif %}">
-        <span class="icon" aria-hidden="true">🛡</span> Admin Panel
-      </a>
+      
+      <div class="nav-group" id="grp-admin">
+        <button class="nav-group-btn" onclick="toggleNavGroup('grp-admin')"
+                aria-expanded="false" aria-controls="grp-admin-panel">
+          <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="nav-label">Admin</span>
+          <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-group-panel" id="grp-admin-panel">
+          <a href="{{ url_for('admin.admin') }}" class="nav-sub-item {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}">
+            <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+            <span class="nav-label">Dashboard</span>
+          </a>
+        </div>
+      </div>
       {% endif %}
     </nav>
 
@@ -110,7 +183,7 @@
           <div class="user-balance">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance or 0) }}</div>
         </div>
       </div>
-      <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm btn-block">Sign Out</a>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm btn-block" style="display:flex;align-items:center;gap:7px;justify-content:center"><svg class="nav-icon " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Sign Out</a>
       {% endif %}
     </div>
   </aside>
@@ -122,19 +195,19 @@
       <div class="topbar-left">
         <button type="button" class="hamburger" id="hamburger-btn"
                 aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
-          <span aria-hidden="true">☰</span>
+          <svg class="nav-icon " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <div class="topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
       </div>
       <div class="topbar-actions">
         <button type="button" class="btn-icon" id="theme-btn"
                 aria-label="Toggle theme" title="Toggle light/dark mode">
-          <span data-theme-icon>{{ '☀️' if current_user.theme == 'dark' else '🌙' }}</span>
+          {% if current_user.theme == 'dark' %}<svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>{% else %}<svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>{% endif %}
         </button>
         <div class="notif-dropdown-wrap">
           <button type="button" class="btn-icon" id="notif-btn"
                   aria-label="Notifications" aria-haspopup="true">
-            <span aria-hidden="true">🔔</span>
+            <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span class="notif-dot" id="notif-dot" style="display:none" aria-hidden="true"></span>
           </button>
           <div class="notif-dropdown" id="notif-dropdown" role="menu">
