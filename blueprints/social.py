@@ -1225,9 +1225,11 @@ def send_message(username):
         return jsonify({'success': False, 'error': 'Message too long (max 2000 chars).'}), 400
 
     conv = _get_or_create_conversation(db, uid, other['id'])
+    if not conv:
+        return jsonify({'success': False, 'error': 'Could not create conversation.'}), 500
     now  = datetime.now(timezone.utc).isoformat()
 
-    # Upload file attachment to B2 if present
+    # Upload file attachment to R2 if present
     file_url = None
     if file_data:
         try:
@@ -1235,14 +1237,17 @@ def send_message(username):
         except (ValueError, RuntimeError) as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
-    db.execute(
+    # Messages and conversations are personal data → udb
+    udb.execute(
         'INSERT INTO messages '
         '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,created_at) '
         'VALUES (?,?,?,?,?,?,?,?)',
         (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, now)
     )
-    msg_id = db.lastrowid
+    msg_id = udb.lastrowid
     udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
+    udb.commit()
+    # Global DB: update unread count and online status
     db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
     db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
     db.commit()

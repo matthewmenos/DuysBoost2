@@ -4,7 +4,9 @@
 
 {% block head_extra %}
 <style>
-body.landing-body { background: var(--bg); }
+body.landing-body {
+  background: radial-gradient(ellipse 120% 50% at 50% -5%, rgba(29,155,240,.2) 0%, transparent 55%),
+    linear-gradient(180deg, #040d1a 0%, #020810 100%) !important; background: var(--bg); }
 
 /* ── Landing shell ──────────────────────────────────────────────────────── */
 .landing { width: 100%; min-height: 100vh; overflow-x: hidden; }
@@ -51,7 +53,7 @@ body.landing-body { background: var(--bg); }
 .hero::before {
   content: '';
   position: absolute; inset: 0;
-  background: var(--gradient-hero);
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(29,155,240,.3) 0%, transparent 70%);
   pointer-events: none;
 }
 .hero::after {
@@ -92,7 +94,7 @@ body.landing-body { background: var(--bg); }
   animation: fadeUp .6s .1s cubic-bezier(.34,1.4,.64,1) both;
 }
 .hero h1 .grad {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #fff 0%, #1d9bf0 60%, #00c6ff 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -125,7 +127,7 @@ body.landing-body { background: var(--bg); }
 .proof-num {
   font-family: var(--font-display);
   font-size: 24px; font-weight: 800;
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #fff 0%, #1d9bf0 60%, #00c6ff 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1;

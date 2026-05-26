@@ -8,37 +8,46 @@
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 :root {
   /* ── Dark theme (default) ───────────────────────────────────────────── */
-  --bg:           #0c0d10;
-  --bg-elevated:  #111318;
-  --surface:      #111318;
-  --surface-2:    #181b22;
-  --surface-3:    #1e2230;
-  --border:       rgba(255,255,255,0.06);
-  --border-strong:rgba(255,255,255,0.13);
+  --bg:           #040d1a;
+  --bg-elevated:  #071428;
+  --surface:      rgba(8, 20, 44, 0.92);
+  --surface-2:    rgba(13, 32, 64, 0.85);
+  --surface-3:    rgba(18, 40, 76, 0.9);
+  --border:       rgba(29,155,240,0.12);
+  --border-strong:rgba(29,155,240,0.25);
 
   --text:         #eeedf0;
   --text-dim:     #a8a8c0;
   --muted:        #6b6b88;
   --muted-2:      #4a4a66;
 
-  /* Brand: warm indigo-violet + electric mint */
-  --accent:       #7f5af0;
-  --accent-light: #a78bf6;
-  --accent-2:     #2cb67d;
-  --accent-2-light:#3fe0a0;
-  --green:        #2cb67d;
-  --green-light:  #3fe0a0;
-  --red:          #ef4565;
-  --red-light:    #ff6b87;
-  --yellow:       #f4c94e;
-  --orange:       #f77f4e;
+  /* Brand: electric blue dominant + cyan accent */
+  --accent:       #1d9bf0;
+  --accent-light: #60b8f9;
+  --accent-2:     #00c6ff;
+  --accent-2-light:#7de3ff;
+  --green:        #00ba7c;
+  --green-light:  #1be6a4;
+  --red:          #f4212e;
+  --red-light:    #ff6b7a;
+  --yellow:       #ffd400;
+  --orange:       #ff7a00;
 
-  --gradient-primary:  linear-gradient(135deg, #7f5af0 0%, #2cb67d 100%);
-  --gradient-accent:   linear-gradient(135deg, #7f5af0 0%, #a78bf6 100%);
-  --gradient-green:    linear-gradient(135deg, #2cb67d 0%, #3fe0a0 100%);
-  --gradient-warm:     linear-gradient(135deg, #f77f4e 0%, #f4c94e 100%);
-  --gradient-subtle:   linear-gradient(160deg, rgba(127,90,240,.06) 0%, rgba(44,182,125,.06) 100%);
-  --gradient-hero:     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(127,90,240,.22) 0%, transparent 70%);
+  /* Liquid-glass blue palette */
+  --glass-bg:     rgba(10, 20, 40, 0.65);
+  --glass-border: rgba(29, 155, 240, 0.18);
+  --glass-glow:   rgba(29, 155, 240, 0.12);
+  --blue-deep:    #0a1628;
+  --blue-mid:     #0d2040;
+  --blue-surface: rgba(13, 32, 64, 0.8);
+
+  --gradient-primary:  linear-gradient(135deg, #1d9bf0 0%, #00c6ff 100%);
+  --gradient-accent:   linear-gradient(135deg, #1d9bf0 0%, #60b8f9 100%);
+  --gradient-green:    linear-gradient(135deg, #00ba7c 0%, #1be6a4 100%);
+  --gradient-warm:     linear-gradient(135deg, #ff7a00 0%, #ffd400 100%);
+  --gradient-subtle:   linear-gradient(160deg, rgba(29,155,240,.06) 0%, rgba(0,198,255,.04) 100%);
+  --gradient-hero:     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(29,155,240,.28) 0%, transparent 70%);
+  --gradient-glass:    linear-gradient(135deg, rgba(29,155,240,.1) 0%, rgba(0,198,255,.06) 100%);
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -52,10 +61,12 @@
   --shadow:    0 8px 30px rgba(0,0,0,.25);
   --shadow-lg: 0 16px 50px rgba(0,0,0,.32);
   --shadow-xl: 0 24px 64px rgba(0,0,0,.4);
-  --glow-accent: 0 0 0 1px rgba(127,90,240,.25), 0 6px 24px rgba(127,90,240,.2);
-  --glow-green:  0 0 0 1px rgba(44,182,125,.25), 0 6px 24px rgba(44,182,125,.18);
+  --glow-accent: 0 0 0 1px rgba(29,155,240,.3), 0 6px 24px rgba(29,155,240,.22);
+  --glow-green:  0 0 0 1px rgba(0,186,124,.28), 0 6px 24px rgba(0,186,124,.2);
 
   --sidebar-width:    252px;
+  /* Liquid glass surface style */
+  --glass-surface: rgba(8, 22, 50, 0.7) backdrop-filter:blur(20px);
   --topbar-height:    62px;
   --bottomnav-height: 68px;
 
@@ -2119,3 +2130,170 @@ button:hover .i-icon, a:hover .i-icon,
   color: #fff; font-size: 14px;
 }
 .story-viewer-reaction { font-size: 18px; margin-left: auto; }
+
+
+/* ══ Liquid glass design system ══════════════════════════════════════════════ */
+
+/* Glass card base */
+.glass-card, .sidebar, .topbar, .surface-card {
+  background: rgba(8, 20, 44, 0.75) !important;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(29, 155, 240, 0.14) !important;
+}
+
+/* Sidebar liquid glass */
+.sidebar {
+  background: rgba(4, 14, 34, 0.88) !important;
+  border-right: 1px solid rgba(29,155,240,.13) !important;
+  box-shadow: 4px 0 32px rgba(29,155,240,.05);
+}
+
+/* Topbar glass */
+.topbar {
+  background: rgba(4, 13, 30, 0.82) !important;
+  border-bottom: 1px solid rgba(29,155,240,.12) !important;
+  backdrop-filter: blur(20px) saturate(1.5);
+}
+
+/* Post cards glass */
+.post-card {
+  background: rgba(6, 18, 42, 0.72) !important;
+  border: 1px solid rgba(29,155,240,.1) !important;
+  backdrop-filter: blur(12px);
+  transition: border-color .2s, box-shadow .2s;
+}
+.post-card:hover {
+  border-color: rgba(29,155,240,.22) !important;
+  box-shadow: 0 4px 24px rgba(29,155,240,.08);
+}
+
+/* Widgets glass */
+.sidebar-widget {
+  background: rgba(8, 20, 48, 0.7) !important;
+  border: 1px solid rgba(29,155,240,.12) !important;
+  backdrop-filter: blur(16px);
+}
+
+/* Modal glass */
+.modal {
+  background: rgba(4, 14, 38, 0.92) !important;
+  border: 1px solid rgba(29,155,240,.2) !important;
+  backdrop-filter: blur(32px);
+  box-shadow: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px rgba(29,155,240,.08);
+}
+
+/* Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #1d9bf0, #0080d4) !important;
+  border-color: #1d9bf0 !important;
+  box-shadow: 0 4px 16px rgba(29,155,240,.35);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2aabff, #1d9bf0) !important;
+  box-shadow: 0 6px 24px rgba(29,155,240,.5);
+}
+.btn-outline:hover {
+  border-color: rgba(29,155,240,.5) !important;
+  color: var(--accent) !important;
+  background: rgba(29,155,240,.07) !important;
+}
+
+/* Nav active states */
+.nav-sub-item.active {
+  background: rgba(29,155,240,.12) !important;
+  color: var(--accent) !important;
+}
+.nav-sub-item.active::before { background: var(--accent) !important; }
+.nav-group-btn.active-group::before { background: var(--accent) !important; }
+
+/* Form inputs */
+.form-input:focus, .field-input:focus {
+  border-color: rgba(29,155,240,.6) !important;
+  box-shadow: 0 0 0 3px rgba(29,155,240,.15) !important;
+}
+
+/* Body background — deep blue gradient */
+body {
+  background: radial-gradient(ellipse 120% 80% at 50% -10%,
+    rgba(29,155,240,.18) 0%, rgba(4,13,28,.0) 60%),
+    linear-gradient(180deg, #040d1a 0%, #020810 100%) !important;
+  min-height: 100vh;
+}
+
+/* App layout background */
+.app-layout {
+  background: transparent;
+}
+
+/* Bottom nav glass */
+.bottom-nav {
+  background: rgba(4, 13, 30, 0.88) !important;
+  border-top: 1px solid rgba(29,155,240,.12) !important;
+  backdrop-filter: blur(20px);
+}
+
+/* Feed sidebar widgets */
+.feed-sidebar .sidebar-widget {
+  background: rgba(6, 16, 40, 0.72) !important;
+  border: 1px solid rgba(29,155,240,.1) !important;
+}
+
+/* Search bar fake */
+.search-bar-fake {
+  background: rgba(29,155,240,.07) !important;
+  border: 1px solid rgba(29,155,240,.15) !important;
+}
+.search-bar-fake:hover {
+  background: rgba(29,155,240,.12) !important;
+  border-color: rgba(29,155,240,.3) !important;
+}
+
+/* Logo mark */
+.logo-mark {
+  background: linear-gradient(135deg, #1d9bf0, #0055aa) !important;
+  box-shadow: 0 4px 16px rgba(29,155,240,.4);
+}
+
+/* User card */
+.user-card { border-top: 1px solid rgba(29,155,240,.1); }
+
+/* Verified badge */
+.verified-badge { color: #1d9bf0 !important; }
+
+/* Active nav item bottom bar */
+.bottom-nav-item.active .bn-icon svg {
+  stroke: var(--accent);
+}
+.bn-add-btn {
+  background: linear-gradient(135deg, #1d9bf0, #0066cc) !important;
+  box-shadow: 0 4px 20px rgba(29,155,240,.45) !important;
+}
+
+/* Light theme override */
+[data-theme="light"] {
+  --bg:           #e8f4fd;
+  --bg-elevated:  #f0f8ff;
+  --surface:      rgba(255,255,255,0.92);
+  --surface-2:    rgba(232,244,253,0.9);
+  --surface-3:    rgba(220,238,252,0.95);
+  --border:       rgba(29,155,240,.18);
+  --border-strong:rgba(29,155,240,.35);
+  --text:         #0a1628;
+  --text-dim:     #1a3a5c;
+  --muted:        #4a7898;
+  --glass-bg:     rgba(255,255,255,0.75);
+  --glass-border: rgba(29,155,240,.2);
+}
+[data-theme="light"] body {
+  background: radial-gradient(ellipse 120% 60% at 50% -10%,
+    rgba(29,155,240,.15) 0%, transparent 60%),
+    linear-gradient(180deg, #e8f4fd 0%, #f5fbff 100%) !important;
+}
+[data-theme="light"] .sidebar,
+[data-theme="light"] .topbar,
+[data-theme="light"] .post-card,
+[data-theme="light"] .modal {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(29,155,240,.16) !important;
+}
