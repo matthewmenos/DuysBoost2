@@ -34,7 +34,7 @@
         <div class="post-author-info">
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-display-name">
             {{ a.display_name or a.username }}
-            {% if a.is_verified %}<span class="verified-badge" title="Verified"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
+            {%- if a.is_verified -%}{%- set _tier = a.get('verified_tier', 'blue') if a.get else 'blue' -%}<span class="badge-verified {{ _tier }}" title="Verified"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{%- endif -%}
           </a>
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
           <span class="post-dot" aria-hidden="true">·</span>

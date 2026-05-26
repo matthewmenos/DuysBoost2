@@ -2307,3 +2307,38 @@ body { background: var(--bg) !important; }
 body:has(.bottom-nav.force-hidden) .toast-container {
   bottom: 20px !important;
 }
+/* ══ X-style verification badges ════════════════════════════════════════════
+   Order (X/Twitter hierarchy):
+   1. Gold  — Organisations & businesses (X Gold / verified orgs)
+   2. Blue  — Notable individuals, journalists, public figures (X Blue)
+   3. Grey  — Government officials & agencies
+   Controlled by `verified_tier` column: 'gold' | 'blue' (default) | 'grey'
+═══════════════════════════════════════════════════════════════════════════ */
+.badge-verified {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.badge-verified svg { display: block; }
+
+/* Gold — organisations */
+.badge-verified.gold  { background: #F4B400; width: 20px; height: 20px; }
+.badge-verified.gold svg { width: 12px; height: 12px; }
+
+/* Blue — verified individuals (default) */
+.badge-verified.blue  { background: #1D9BF0; width: 20px; height: 20px; }
+.badge-verified.blue svg { width: 12px; height: 12px; }
+
+/* Grey — government */
+.badge-verified.grey  { background: #829AAB; width: 20px; height: 20px; }
+.badge-verified.grey svg { width: 12px; height: 12px; }
+
+/* Legacy compat */
+.verified-badge { display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;border-radius:50%;background:#1D9BF0;
+  vertical-align:middle;margin-left:2px; }
+.verified-badge svg { width:12px;height:12px;display:block; }

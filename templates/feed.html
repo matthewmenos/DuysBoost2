@@ -371,8 +371,15 @@ if (composeInput) {
         fd.append('post_type', 'poll');
         fd.append('poll_options', JSON.stringify(pollOptions));
       }
-      const r  = await fetch('/post', { method: 'POST', body: fd });
-      const d  = await r.json();
+      const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const r  = await fetch('/post', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': CSRF_TOKEN },
+        body: fd
+      });
+      let d;
+      try { d = await r.json(); }
+      catch (_) { showToast('Server error — check R2_PUBLIC_URL is set.', 'error'); return; }
       if (d.success) {
         composeInput.value = '';
         composeChars.textContent = 500;
@@ -462,28 +469,56 @@ async function quickRepost() {
   const fd = new FormData();
   fd.append('repost_of_id', _repostTargetId);
   fd.append('body', '');
-  const r = await fetch('/post', { method: 'POST', body: fd });
-  const d = await r.json();
-  closeModal('repost-modal');
-  if (d.success) {
-    _updateRepostButton(_repostTargetId, true, 1);
-    showToast('Reposted!');
-  } else {
-    showToast(d.error || 'Could not repost.', 'error');
+  const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  let d = null;
+  try {
+    const r = await fetch('/post', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+      body: fd
+    });
+    d = await r.json();
+  } catch (_) {
+    closeModal('repost-modal');
+    showToast('Network error', 'error');
+    return;
   }
+  closeModal('repost-modal');
+  // Small delay so modal backdrop clears before toast renders
+  setTimeout(function() {
+    if (d && d.success) {
+      _updateRepostButton(_repostTargetId, true, 1);
+      showToast('Reposted! ♻️');
+    } else {
+      showToast((d && d.error) ? d.error : 'Could not repost.', 'error');
+    }
+  }, 180);
 }
 window.quickRepost = quickRepost;
 
 async function undoRepost() {
-  const r = await fetch('/post/' + _repostTargetId + '/unrepost', { method: 'POST' });
-  const d = await r.json();
-  closeModal('repost-modal');
-  if (d.success) {
-    _updateRepostButton(_repostTargetId, false, -(d.removed || 1));
-    showToast('Repost removed.');
-  } else {
-    showToast(d.error || 'Could not remove repost.', 'error');
+  const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  let d = null;
+  try {
+    const r = await fetch('/post/' + _repostTargetId + '/unrepost', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN }
+    });
+    d = await r.json();
+  } catch (_) {
+    closeModal('repost-modal');
+    showToast('Network error', 'error');
+    return;
   }
+  closeModal('repost-modal');
+  setTimeout(function() {
+    if (d && d.success) {
+      _updateRepostButton(_repostTargetId, false, -(d.removed || 1));
+      showToast('Repost removed.');
+    } else {
+      showToast((d && d.error) ? d.error : 'Could not remove repost.', 'error');
+    }
+  }, 180);
 }
 window.undoRepost = undoRepost;
 
