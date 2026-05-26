@@ -34,14 +34,14 @@
 <div style="max-width:680px;margin:0 auto">
   <div class="grp-header">
     <div>
-      <div style="font-family:var(--font-display);font-size:22px;font-weight:800"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Groups</div>
+      <div style="font-family:var(--font-display);font-size:22px;font-weight:800">💬 Groups</div>
       <div class="text-sm text-muted">Chat with communities</div>
     </div>
     <a href="{{ url_for('social.group_create') }}" class="btn btn-primary btn-sm">+ New group</a>
   </div>
 
   <div class="grp-tabs">
-    <a href="{{ url_for('social.groups_list', tab='my') }}"       class="grp-tab {% if tab=='my' %}active{% endif %}"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> My Groups</a>
+    <a href="{{ url_for('social.groups_list', tab='my') }}"       class="grp-tab {% if tab=='my' %}active{% endif %}">💬 My Groups</a>
     <a href="{{ url_for('social.groups_list', tab='discover') }}" class="grp-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
   </div>
 
@@ -55,7 +55,7 @@
         </div>
         <div class="grp-info">
           <div class="grp-name">{{ g.name }}</div>
-          <div class="grp-sub"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> {{ g.member_count or 0 }} members · {{ '🌐 Public' if g.is_public else '🔒 Private' }}</div>
+          <div class="grp-sub">👥 {{ g.member_count or 0 }} members · {{ '🌐 Public' if g.is_public else '🔒 Private' }}</div>
           {% if g.last_msg %}
           <div class="grp-last">
             <strong>{{ g.last_msg.sender_name }}</strong>: {{ (g.last_msg.body or '(media)')[:60] }}
@@ -69,7 +69,7 @@
       {% endfor %}
     {% else %}
       <div class="empty-state" style="padding:72px 20px">
-        <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+        <div class="empty-icon">💬</div>
         <div class="empty-title">
           {% if tab == 'my' %}You haven't joined any groups{% else %}No public groups found{% endif %}
         </div>

@@ -28,7 +28,7 @@
 <div class="split-2">
   <!-- Deposit History (auto-verified on-chain) -->
   <div class="card">
-    <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Recent Deposit Activity</div>
+    <div class="section-title mb-16">💰 Recent Deposit Activity</div>
     {% if pending_deposits %}
     <div class="table-wrap">
       <table>
@@ -101,14 +101,14 @@
     </div>
     {% else %}
     <div class="empty-state" style="padding:28px 20px">
-      <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+      <div class="empty-icon">✅</div>
       <div class="empty-text">No withdrawals need action.</div>
     </div>
     {% endif %}
   </div>
 
   <!-- Send Notification -->
-  <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg> Send Notification</div>
+  <div class="section-title mb-16">📢 Send Notification</div>
   <form id="send-notification-form" method="POST" action="/admin/send_notification" novalidate>
     <div class="form-group">
       <label class="form-label" for="notif-user">Recipient (leave empty for all users)</label>
@@ -130,7 +130,7 @@
 <div class="split-2 mt-32">
   <!-- Deposit to User -->
   <div class="card">
-    <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Deposit Funds to User</div>
+    <div class="section-title mb-16">💰 Deposit Funds to User</div>
     <form id="admin-deposit-form" method="POST" action="/admin/deposit_user" novalidate>
       <div class="form-group">
         <label class="form-label" for="adm-user">Select User</label>
@@ -155,7 +155,7 @@
 {% if recent_withdrawals %}
 <!-- Recent withdrawals audit -->
 <div class="card mb-24">
-  <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Recent Withdrawals</div>
+  <div class="section-title mb-16">🧾 Recent Withdrawals</div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -190,7 +190,7 @@
 
 <!-- All Users -->
 <div class="card mb-24">
-  <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> All Users</div>
+  <div class="section-title mb-16">👥 All Users</div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -228,7 +228,7 @@
 
 <!-- All Ads -->
 <div class="card">
-  <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg> All Campaigns</div>
+  <div class="section-title mb-16">📢 All Campaigns</div>
   <div class="table-wrap">
     <table>
       <thead>

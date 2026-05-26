@@ -677,6 +677,7 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('users', 'website',               'TEXT'),
         ('users', 'location',              'TEXT'),
         ('users', 'is_verified',           'INTEGER DEFAULT 0'),
+        ('users', 'verified_tier',         "TEXT DEFAULT 'blue'"),
         ('users', 'follower_count',        'INTEGER DEFAULT 0'),
         ('users', 'following_count',       'INTEGER DEFAULT 0'),
         ('users', 'post_count',            'INTEGER DEFAULT 0'),

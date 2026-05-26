@@ -9,7 +9,10 @@ requests>=2.32.0
 python-dotenv>=1.0.0
 markupsafe>=2.1.0
 
-# ── Cloudflare R2 (media bucket + per-user SQLite DB bucket) ──────────────────
+# ── PostgreSQL driver ─────────────────────────────────────────────────────────
+psycopg2-binary>=2.9.9
+
+# ── Cloudflare R2 object storage (S3-compatible) ─────────────────────────────
 boto3>=1.34.0
 
 # ── On-chain signing — EVM (BSC / Avalanche) ──────────────────────────────────
@@ -17,5 +20,3 @@ eth-account>=0.10.0
 
 # ── On-chain signing — Aptos ──────────────────────────────────────────────────
 aptos-sdk>=0.8.0
-
-# NOTE: psycopg2 / SQLAlchemy removed — using built-in sqlite3 module.

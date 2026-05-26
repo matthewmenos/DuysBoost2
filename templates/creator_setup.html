@@ -78,14 +78,14 @@
     <div class="section-title mb-12">Preview — what subscribers see</div>
     <div class="tier-preview-card">
       <div class="tier-preview-header">
-        <div class="tier-preview-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> {{ tier.title }}</div>
+        <div class="tier-preview-badge">⭐ {{ tier.title }}</div>
         <div class="tier-preview-price">${{ '%.2f'|format(tier.price_usd) }}<span class="text-muted text-sm">/mo</span></div>
       </div>
       {% if tier.description %}<p class="text-sm text-muted" style="margin:8px 0">{{ tier.description }}</p>{% endif %}
       {% if tier.perks %}
       <ul class="tier-perks-list">
         {% for perk in tier.perks.split('\n') if perk.strip() %}
-        <li><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> {{ perk.strip() }}</li>
+        <li>✓ {{ perk.strip() }}</li>
         {% endfor %}
       </ul>
       {% endif %}

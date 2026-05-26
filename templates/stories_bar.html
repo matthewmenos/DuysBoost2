@@ -564,18 +564,20 @@ async function openViewers() {
       if (!d.viewers.length) {
         list.innerHTML = '<div style="padding:24px;text-align:center;color:rgba(255,255,255,.4);font-size:13px">No views yet</div>';
       } else {
-        list.innerHTML = d.viewers.map(v => {
-          const av = v.avatar_url
-            ? `<img src="${v.avatar_url}" style="width:38px;height:38px;border-radius:50%;object-fit:cover">`
-            : `<div style="width:38px;height:38px;border-radius:50%;background:rgba(127,90,240,.6);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff">${(v.display_name||v.username||'?')[0].toUpperCase()}</div>`;
-          return `<div class="story-viewer-item">
-            ${av}
-            <div>
-              <div style="font-weight:700;font-size:13.5px">${escapeHtml(v.display_name||v.username)}</div>
-              <div style="font-size:12px;color:rgba(255,255,255,.5)">@${escapeHtml(v.username)}</div>
-            </div>
-          </div>`;
-        }).join('');
+        list.innerHTML = d.viewers.map(function(v) {
+          var av = v.avatar_url
+            ? '<img src="' + escapeHtml(v.avatar_url) + '" style="width:38px;height:38px;border-radius:50%;object-fit:cover">'
+            : '<div style="width:38px;height:38px;border-radius:50%;background:rgba(29,155,240,.4);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff">' + (v.display_name||v.username||'?')[0].toUpperCase() + '</div>';
+          var rxBadge = v.reaction
+            ? '<span style="font-size:22px;margin-left:auto;flex-shrink:0">' + v.reaction + '</span>'
+            : '<span style="font-size:11px;color:rgba(255,255,255,.3);margin-left:auto;flex-shrink:0">Viewed</span>';
+          return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px">' +
+            av +
+            '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:700;font-size:13.5px;color:#fff">' + escapeHtml(v.display_name||v.username||'') + '</div>' +
+            '<div style="font-size:12px;color:rgba(255,255,255,.5)">@' + escapeHtml(v.username||'') + '</div>' +
+            '</div>' + rxBadge + '</div>';
+        }).join('')
       }
     }
   } catch (_) {}

@@ -96,72 +96,6 @@
     }
     if (backdrop) backdrop.addEventListener('click', closeSidebar);
 
-    // ── Collapsible nav groups ────────────────────────────────────────────
-    window.toggleNavGroup = function(groupId) {
-      const group = document.getElementById(groupId);
-      if (!group) return;
-      const isOpen = group.classList.contains('open');
-      // Close all other groups
-      document.querySelectorAll('.nav-group.open').forEach(function(g) {
-        if (g.id !== groupId) {
-          g.classList.remove('open');
-          const btn = g.querySelector('.nav-group-btn');
-          if (btn) btn.setAttribute('aria-expanded', 'false');
-        }
-      });
-      // Toggle this one
-      group.classList.toggle('open', !isOpen);
-      const btn = group.querySelector('.nav-group-btn');
-      if (btn) btn.setAttribute('aria-expanded', String(!isOpen));
-      // Persist in sessionStorage
-      sessionStorage.setItem('navGroup', !isOpen ? groupId : '');
-    };
-
-    // Auto-open the group that contains an active link
-    (function autoOpenActiveGroup() {
-      // First try: find a sub-item with .active class
-      let opened = false;
-      document.querySelectorAll('.nav-group').forEach(function(group) {
-        if (group.querySelector('.nav-sub-item.active')) {
-          group.classList.add('open');
-          const btn = group.querySelector('.nav-group-btn');
-          if (btn) {
-            btn.setAttribute('aria-expanded', 'true');
-            btn.classList.add('active-group');
-          }
-          opened = true;
-        }
-      });
-      // If nothing is active (e.g. fresh load), restore from sessionStorage
-      if (!opened) {
-        const saved = sessionStorage.getItem('navGroup');
-        if (saved) {
-          const g = document.getElementById(saved);
-          if (g) {
-            g.classList.add('open');
-            const btn = g.querySelector('.nav-group-btn');
-            if (btn) btn.setAttribute('aria-expanded', 'true');
-          }
-        } else {
-          // Default: open Social
-          const social = document.getElementById('grp-social');
-          if (social) {
-            social.classList.add('open');
-            const btn = social.querySelector('.nav-group-btn');
-            if (btn) btn.setAttribute('aria-expanded', 'true');
-          }
-        }
-      }
-    })();
-
-    // ── Close sidebar when sub-item clicked on mobile ─────────────────
-    if (sidebar) {
-      sidebar.addEventListener('click', function(e) {
-        const subLink = e.target.closest('a.nav-sub-item');
-        if (subLink && window.innerWidth < 900) closeSidebar();
-      });
-    }
-
     // Close sidebar when a nav link is clicked on mobile
     if (sidebar) {
       sidebar.addEventListener('click', function (e) {
@@ -190,11 +124,7 @@
         const d = await r.json();
         document.documentElement.setAttribute('data-theme', d.theme);
         document.querySelectorAll('[data-theme-icon]').forEach(function (el) {
-          // SVG icons for theme — replaces emoji
-          const sunPath = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-          const moonPath = '<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>';
-          const paths = d.theme === 'dark' ? sunPath : moonPath;
-          el.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+          el.textContent = d.theme === 'dark' ? '☀️' : '🌙';
         });
       } catch (_err) {
         showToast('Could not change theme.', 'error');

@@ -40,50 +40,39 @@ _cleanup_lock    = threading.Lock()
 
 
 def _run_cleanup(app):
-    """Delete expired stories every 10 minutes."""
-    import sqlite3
-    
-    import os
+    """Delete expired stories from SQLite + R2 every 10 minutes."""
+    import sqlite3 as _sq
+    import os as _os
+    import storage as _st
 
     while True:
-        time.sleep(600)  # 10 minutes
+        time.sleep(600)
         try:
-            dsn = (
-                os.environ.get('DATABASE_URL') or
-                os.environ.get('POSTGRES_URL', '')
-            )
-            if not dsn:
+            db_path = _os.path.join(app.root_path, 'global.db')
+            if not _os.path.exists(db_path):
                 continue
-            if dsn.startswith('postgres://'):
-                dsn = 'postgresql://' + dsn[len('postgres://'):]
-
-            conn = sqlite3.connect(dsn)
-            cur  = conn.cursor()
-
-            cur.execute(
+            conn = _sq.connect(db_path)
+            conn.row_factory = _sq.Row
+            expired = conn.execute(
                 "SELECT id, media_url FROM stories WHERE expires_at < datetime('now')"
-            )
-            expired = cur.fetchall()
-
+            ).fetchall()
             if expired:
-                import storage as _st
                 for row in expired:
                     try:
                         _st.delete_object(row['media_url'])
                     except Exception:
                         pass
-
                 ids = [r['id'] for r in expired]
-                cur.execute(
-                    'DELETE FROM stories WHERE id = ANY(?)', (ids,)
+                conn.execute(
+                    'DELETE FROM stories WHERE id IN ({})'.format(
+                        ','.join('?' * len(ids))
+                    ), ids
                 )
                 conn.commit()
-                logger.info('Stories cleanup: deleted %d expired stories', len(expired))
-
-            cur.close()
+                logger.info('Stories cleanup: deleted %d expired', len(expired))
             conn.close()
         except Exception as e:
-            logger.warning('Stories cleanup error: ?', e)
+            logger.warning('Stories cleanup error: %s', e)
 
 
 def start_cleanup_thread(app):
@@ -111,8 +100,7 @@ def _format_story(row, viewer_uid):
     except Exception:
         viewed_list = []
     d['viewed']      = viewer_uid in viewed_list
-    # Exclude owner from view count
-    d['view_count']  = len([v for v in viewed_list if v != d.get('user_id')])
+    d['view_count']  = len(viewed_list)
     d['is_own']      = d['user_id'] == viewer_uid
     # Time remaining
     try:
@@ -130,7 +118,6 @@ def _format_story(row, viewer_uid):
 
 @bp.route('/api/story/create', methods=['POST'])
 @login_required
-@csrf_exempt
 @limiter.limit('20 per hour')
 def create_story():
     """
@@ -157,22 +144,18 @@ def create_story():
     except (ValueError, RuntimeError) as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
-    db.execute(
-        'INSERT INTO stories (user_id, media_url, media_mime, caption) VALUES (?, ?, ?, ?)',
-        (uid, media_url, mime, caption or None)
-    )
-    story_id = db.lastrowid
-    db.commit()
-    row = db.execute(
-        'SELECT id, media_url, media_mime, expires_at, created_at FROM stories WHERE id=?', (story_id,)
-    ).fetchone()
+    row = db.execute("""
+        INSERT INTO stories (user_id, media_url, media_mime, caption)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id, expires_at, created_at
+    """, (uid, media_url, mime, caption or None)).fetchone()
     db.commit()
 
     return jsonify({
         'success':    True,
-        'story_id':   story_id,
+        'story_id':   row['id'],
         'media_url':  media_url,
-        'media_mime': mime,
+        'expires_at': row['expires_at'].isoformat() if hasattr(row['expires_at'], 'isoformat') else str(row['expires_at']),
     })
 
 
@@ -198,10 +181,10 @@ def stories_feed():
                u.is_verified  AS author_verified
         FROM stories s
         JOIN users u ON u.id = s.user_id
-        WHERE s.expires_at > datetime('now')
+        WHERE s.expires_at > NOW()
           AND (
-              s.user_id = ?
-              OR s.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?)
+              s.user_id = %s
+              OR s.user_id IN (SELECT following_id FROM follows WHERE follower_id = %s)
           )
         ORDER BY s.user_id, s.created_at ASC
     """, (uid, uid)).fetchall()
@@ -247,7 +230,7 @@ def user_stories(user_id):
     rows = db.execute("""
         SELECT s.*, u.username, u.display_name, u.avatar_url
         FROM stories s JOIN users u ON u.id = s.user_id
-        WHERE s.user_id = ? AND s.expires_at > datetime('now')
+        WHERE s.user_id = %s AND s.expires_at > NOW()
         ORDER BY s.created_at ASC
     """, (user_id,)).fetchall()
     return jsonify({'stories': [_format_story(r, uid) for r in rows]})
@@ -263,7 +246,7 @@ def get_story(story_id):
     row = db.execute("""
         SELECT s.*, u.username, u.display_name, u.avatar_url
         FROM stories s JOIN users u ON u.id = s.user_id
-        WHERE s.id = ? AND s.expires_at > datetime('now')
+        WHERE s.id = %s AND s.expires_at > NOW()
     """, (story_id,)).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found or expired.'}), 404
@@ -279,7 +262,7 @@ def view_story(story_id):
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        "SELECT id, viewed_by, user_id FROM stories WHERE id = ? AND expires_at > datetime('now')",
+        "SELECT id, viewed_by, user_id FROM stories WHERE id = %s AND expires_at > NOW()",
         (story_id,)
     ).fetchone()
     if not row:
@@ -292,7 +275,7 @@ def view_story(story_id):
 
     if uid not in viewed:
         viewed.append(uid)
-        db.execute('UPDATE stories SET viewed_by = ? WHERE id = ?',
+        db.execute('UPDATE stories SET viewed_by = %s WHERE id = %s',
                    (json.dumps(viewed), story_id))
         db.commit()
 
@@ -304,15 +287,12 @@ def view_story(story_id):
 @login_required
 @csrf_exempt
 def story_viewers(story_id):
-    """
-    Return the list of users who viewed this story.
-    Only accessible by the story owner.
-    Also returns reaction counts.
-    """
+    """Return viewers list with reactions for the story owner."""
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        'SELECT id, user_id, viewed_by FROM stories WHERE id = ?', (story_id,)
+        'SELECT id, user_id, viewed_by, reactions_data FROM stories WHERE id=?',
+        (story_id,)
     ).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found.'}), 404
@@ -324,11 +304,15 @@ def story_viewers(story_id):
     except Exception:
         viewed_list = []
 
-    # Exclude story owner from viewer list/count
-    story_owner = row['user_id']
-    viewed_list = [v for v in viewed_list if v != story_owner]
+    # Exclude owner from count
+    viewed_list = [v for v in viewed_list if v != uid]
 
-    # Fetch user details for each viewer
+    # Parse reactions
+    try:
+        reactions_map = json.loads(row['reactions_data'] or '{}')
+    except Exception:
+        reactions_map = {}
+
     viewers = []
     for viewer_uid in viewed_list:
         u = db.execute(
@@ -336,19 +320,16 @@ def story_viewers(story_id):
             (viewer_uid,)
         ).fetchone()
         if u:
-            viewers.append({
-                'id':           u['id'],
-                'username':     u['username'],
-                'display_name': u['display_name'],
-                'avatar_url':   u['avatar_url'],
-            })
+            ud = dict(u)
+            ud['reaction'] = reactions_map.get(str(viewer_uid))
+            viewers.append(ud)
 
     return jsonify({
-        'success':     True,
-        'view_count':  len(viewed_list),
-        'viewers':     viewers,
+        'success':    True,
+        'view_count': len(viewed_list),
+        'viewers':    viewers,
+        'reactions':  reactions_map,
     })
-
 
 
 @bp.route('/api/story/<int:story_id>/react', methods=['POST'])
@@ -369,17 +350,13 @@ def story_react(story_id):
 
     data  = request.get_json(silent=True) or {}
     emoji = (data.get('emoji') or '').strip()
-    ALLOWED = {'❤️','😂','😮','😢','😡','🔥','👏','💯','🎉','😍'}
+    ALLOWED = {'❤️','😂','😮','😢','😡','🔥','👏','💯','🎉','😍','🥹','🫶','😭','🤩','😅'}
     if emoji not in ALLOWED:
         return jsonify({'success': False, 'error': 'Invalid reaction.'}), 400
 
-    # Store reactions as dict {user_id: emoji} in a separate column
-    # We add reactions_data column via migration
     try:
-        react_row = db.execute(
-            'SELECT reactions_data FROM stories WHERE id=?', (story_id,)
-        ).fetchone()
-        reactions = json.loads(react_row['reactions_data'] or '{}') if react_row else {}
+        rrow = db.execute('SELECT reactions_data FROM stories WHERE id=?', (story_id,)).fetchone()
+        reactions = json.loads(rrow['reactions_data'] or '{}') if rrow else {}
     except Exception:
         reactions = {}
 
@@ -399,7 +376,7 @@ def delete_story(story_id):
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        'SELECT id, user_id, media_url, media_mime FROM stories WHERE id = ?', (story_id,)
+        'SELECT id, user_id, media_url FROM stories WHERE id = ?', (story_id,)
     ).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found.'}), 404
@@ -413,7 +390,7 @@ def delete_story(story_id):
     try:
         _st.delete_object(row['media_url'])
     except Exception as e:
-        logger.warning('Story R2 delete failed (continuing): ?', e)
+        logger.warning('Story R2 delete failed (continuing): %s', e)
 
     # Hard-delete from DB
     db.execute('DELETE FROM stories WHERE id = ?', (story_id,))

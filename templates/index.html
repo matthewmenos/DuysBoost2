@@ -51,14 +51,14 @@ body.landing-body { background: var(--bg); }
 .hero::before {
   content: '';
   position: absolute; inset: 0;
-  background: var(--bg);
+  background: var(--gradient-hero);
   pointer-events: none;
 }
 .hero::after {
   content: '';
   position: absolute;
   width: 600px; height: 600px;
-  background: var(--bg);
+  background: radial-gradient(circle, rgba(44,182,125,.1) 0%, transparent 65%);
   bottom: -150px; right: -100px;
   pointer-events: none;
 }
@@ -91,7 +91,11 @@ body.landing-body { background: var(--bg); }
   letter-spacing: -0.03em;
   animation: fadeUp .6s .1s cubic-bezier(.34,1.4,.64,1) both;
 }
-.hero h1 .grad { color: var(--accent); }
+.hero h1 .grad {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
 .hero-sub {
   font-size: clamp(15px,3.5vw,19px);
@@ -121,7 +125,7 @@ body.landing-body { background: var(--bg); }
 .proof-num {
   font-family: var(--font-display);
   font-size: 24px; font-weight: 800;
-  background: var(--text);
+  background: var(--gradient-primary);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1;
@@ -259,7 +263,7 @@ body.landing-body { background: var(--bg); }
 .cta-banner {
   margin: 40px 20px 72px;
   max-width: 860px; margin-left: auto; margin-right: auto;
-  background: var(--surface-2);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-2xl);
   padding: 48px 28px;
@@ -267,8 +271,20 @@ body.landing-body { background: var(--bg); }
   position: relative; overflow: hidden;
 }
 @media (min-width: 720px) { .cta-banner { padding: 64px 48px; margin: 40px auto 72px; } }
-.cta-banner::before { display:none; }
-.cta-banner::after { display:none; }
+.cta-banner::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--gradient-subtle);
+  pointer-events: none;
+}
+.cta-banner::after {
+  content: '';
+  position: absolute;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(127,90,240,.15) 0%, transparent 65%);
+  top: -100px; right: -80px;
+  pointer-events: none;
+}
 .cta-banner > * { position: relative; z-index: 1; }
 .cta-banner h2 { margin-bottom: 12px; letter-spacing: -0.03em; }
 .cta-banner p {
@@ -331,14 +347,14 @@ body.landing-body { background: var(--bg); }
   <section class="hero" aria-labelledby="hero-heading">
     <div class="hero-eyebrow">
       <span class="dot" aria-hidden="true"></span>
-      Social growth meets crypto earnings
+      Real users. Real engagement. Instant payouts.
     </div>
     <h1 id="hero-heading">
-      Grow faster.<br><span class="grad">Earn while you do.</span>
+      The smarter way to<br><span class="grad">grow your audience</span>
     </h1>
     <p class="hero-sub">
-      DUYS Boost is a social platform where creators run engagement campaigns
-      and users earn USDT for real interactions — no bots, no faking, on-chain payouts.
+      Run campaigns to gain real followers, or earn USDT by completing tasks —
+      all verified on-chain with automatic crypto payments.
     </p>
     <div class="hero-ctas">
       <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-xl">Start for free →</a>
@@ -346,23 +362,23 @@ body.landing-body { background: var(--bg); }
     </div>
     <div class="hero-proof" role="list" aria-label="Platform stats">
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">Post</div>
-        <div class="proof-label">Share content</div>
+        <div class="proof-num">10K+</div>
+        <div class="proof-label">Active users</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">Boost</div>
-        <div class="proof-label">Run campaigns</div>
+        <div class="proof-num">$50K+</div>
+        <div class="proof-label">Paid out</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">Earn</div>
-        <div class="proof-label">USDT payouts</div>
+        <div class="proof-num">500K+</div>
+        <div class="proof-label">Tasks done</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
         <div class="proof-num">3 chains</div>
-        <div class="proof-label">Aptos · BSC · Avalanche</div>
+        <div class="proof-label">USDT supported</div>
       </div>
     </div>
   </section>
@@ -370,31 +386,31 @@ body.landing-body { background: var(--bg); }
   <!-- How it works -->
   <section class="how-section" id="how" aria-labelledby="how-heading">
     <div class="section-eyebrow">Simple process</div>
-    <h2 id="how-heading">Two paths, one platform</h2>
-    <p class="lead">Whether you want to grow an audience or earn crypto — DUYS Boost has you covered in minutes.</p>
+    <h2 id="how-heading">How DUYS Boost works</h2>
+    <p class="lead">Four steps from sign-up to seeing results — whether you're a creator or an earner.</p>
 
     <div class="steps">
       <div class="step">
         <div class="step-num" data-n="1">Step</div>
-        <div class="step-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="step-icon">👤</div>
         <h3>Create your account</h3>
         <p>Sign up in seconds with email or Google. Your wallet is ready immediately — no KYC needed to start earning.</p>
       </div>
       <div class="step">
         <div class="step-num" data-n="2">Step</div>
-        <div class="step-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+        <div class="step-icon">💳</div>
         <h3>Deposit or start earning</h3>
         <p>Fund your wallet with USDT on Aptos, Avalanche or BSC. Or jump straight in — earn by completing tasks for other campaigns.</p>
       </div>
       <div class="step">
         <div class="step-num" data-n="3">Step</div>
-        <div class="step-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/></svg></div>
+        <div class="step-icon">🚀</div>
         <h3>Launch a campaign</h3>
         <p>Set your platform, target count and budget. Your campaign goes live instantly and real users start engaging.</p>
       </div>
       <div class="step">
         <div class="step-num" data-n="4">Step</div>
-        <div class="step-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+        <div class="step-icon">💸</div>
         <h3>Get paid automatically</h3>
         <p>Earnings hit your wallet the moment a task is approved. Withdraw any time — sent on-chain within seconds.</p>
       </div>
@@ -420,7 +436,7 @@ body.landing-body { background: var(--bg); }
 
       <div class="features-grid">
         <div class="feat">
-          <div class="feat-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></div>
+          <div class="feat-icon">📣</div>
           <h3>Multi-platform campaigns</h3>
           <p>Run follower, like, share or comment campaigns across Instagram, TikTok, YouTube, Twitter and Facebook.</p>
         </div>
@@ -430,17 +446,17 @@ body.landing-body { background: var(--bg); }
           <p>Every deposit is verified against the blockchain in real time. No admin delays, no trust required.</p>
         </div>
         <div class="feat">
-          <div class="feat-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          <div class="feat-icon">⚡</div>
           <h3>Instant payouts</h3>
           <p>Task rewards land in your wallet the moment they're approved. Withdraw and receive USDT on-chain automatically.</p>
         </div>
         <div class="feat">
-          <div class="feat-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="feat-icon">📊</div>
           <h3>Live analytics</h3>
           <p>See followers gained, budget utilization, completion rates and ROI across all your campaigns in real time.</p>
         </div>
         <div class="feat">
-          <div class="feat-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg></div>
+          <div class="feat-icon">🎁</div>
           <h3>Referral rewards</h3>
           <p>Earn {{ CURRENCY_SYMBOL }}0.50 for every person you refer who activates their account. Share your link and stack up.</p>
         </div>

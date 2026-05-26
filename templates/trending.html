@@ -34,7 +34,7 @@
 <div class="social-layout">
   <div class="feed-col">
     <div class="card mb-0" style="border-radius:var(--radius-lg) var(--radius-lg) 0 0;border-bottom:none;padding:16px 20px">
-      <div class="section-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2c0 0-4 4-4 8a4 4 0 008 0c0-4-4-8-4-8z"/><path d="M8.5 14c-.5 1-.5 2 .5 3a3.5 3.5 0 004 0c1-1 1-2 .5-3"/></svg> Trending on DUYS Boost</div>
+      <div class="section-title">🔥 Trending on DUYS Boost</div>
       <div class="window-pills mt-12">
         {% for w, label in [('6h','Last 6h'), ('24h','24 hours'), ('48h','48 hours'), ('7d','7 days')] %}
         <a href="{{ url_for('social.trending', w=w) }}"
@@ -58,7 +58,7 @@
     <!-- Rising creators -->
     {% if rising %}
     <div class="sidebar-widget">
-      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/></svg> Rising creators</div>
+      <div class="widget-title">🚀 Rising creators</div>
       {% for u in rising %}
       <div class="rising-card mb-8">
         <a href="{{ url_for('social.profile', username=u.username) }}">
@@ -96,7 +96,7 @@
     <!-- Who to follow -->
     {% if who_to_follow %}
     <div class="sidebar-widget">
-      <div class="widget-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Who to follow</div>
+      <div class="widget-title">👥 Who to follow</div>
       {% for u in who_to_follow %}
       <div class="suggest-row">
         <a href="{{ url_for('social.profile', username=u.username) }}" class="suggest-avatar">
@@ -170,7 +170,7 @@ window.deletePost = deletePost;
 async function earnEngagement(postId, type, btn) {
   btn.disabled = true;
   const r = await fetch(`/post/${postId}/earn`, {method:'POST'}); const d = await r.json();
-  if (d.success) { showToast(`+$${d.reward.toFixed(2)} earned!`); const b = document.getElementById('boost-banner-'+postId); if(b){b.innerHTML=`<span style="color:var(--green);font-weight:700"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> +$${d.reward.toFixed(2)}</span>`;setTimeout(()=>b.style.display='none',2500);} }
+  if (d.success) { showToast(`+$${d.reward.toFixed(2)} earned!`); const b = document.getElementById('boost-banner-'+postId); if(b){b.innerHTML=`<span style="color:var(--green);font-weight:700">✅ +$${d.reward.toFixed(2)}</span>`;setTimeout(()=>b.style.display='none',2500);} }
   else { showToast(d.error||'Error.','error'); btn.disabled=false; }
 }
 window.earnEngagement = earnEngagement;

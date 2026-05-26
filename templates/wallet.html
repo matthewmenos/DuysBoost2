@@ -124,7 +124,7 @@
 <div class="split-2">
   <!-- Deposit -->
   <div class="card">
-    <div class="section-title mb-16"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Add Funds (USDT)</div>
+    <div class="section-title mb-16">💳 Add Funds (USDT)</div>
 
     <div class="info-box mb-16">
       ℹ️ Send USDT to the platform wallet address below, then submit your transaction hash for confirmation. Supported networks: <strong>Aptos, Avalanche, BSC</strong>.
@@ -147,7 +147,7 @@
       <div class="deposit-wallet-box">
         <div class="text-xs text-muted fw-700">SEND USDT TO THIS ADDRESS</div>
         <div class="wallet-addr" id="deposit-wallet-addr">—</div>
-        <button type="button" class="copy-btn" onclick="copyWalletAddr()" title="Copy address"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Copy</button>
+        <button type="button" class="copy-btn" onclick="copyWalletAddr()" title="Copy address">📋 Copy</button>
       </div>
     </div>
 
@@ -179,7 +179,7 @@
 
     {% if current_user.crypto_address %}
     <div class="crypto-card mb-16">
-      <div class="crypto-icon" aria-hidden="true"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+      <div class="crypto-icon" aria-hidden="true">🔑</div>
       <div class="crypto-info">
         <div class="network-label">{{ CRYPTO_NETWORKS.get(current_user.crypto_network, {}).get('label', 'Crypto') if current_user.crypto_network else 'Crypto' }}</div>
         <div class="address">{{ current_user.crypto_address }}</div>
@@ -206,7 +206,7 @@
     </form>
     {% else %}
     <div class="crypto-card empty mb-16">
-      <div class="crypto-icon empty" aria-hidden="true"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+      <div class="crypto-icon empty" aria-hidden="true">🔑</div>
       <div class="crypto-info">
         <div class="network-label" style="color:var(--accent)">No withdrawal address</div>
         <div class="holder">Add your USDT wallet address to withdraw earnings.</div>
@@ -287,7 +287,7 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+    <div class="empty-icon">💳</div>
     <div class="empty-title">No transactions yet</div>
     <div class="empty-text">Deposits and earnings will appear here.</div>
   </div>
@@ -342,7 +342,7 @@
       <div class="modal-title" id="address-title">
         {{ 'Change Withdrawal Address' if current_user.crypto_address else 'Add Withdrawal Address' }}
       </div>
-      <button class="modal-close" onclick="closeModal('address-modal')" aria-label="Close"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="modal-close" onclick="closeModal('address-modal')" aria-label="Close">✕</button>
     </div>
 
     <p class="text-sm text-muted mb-16">

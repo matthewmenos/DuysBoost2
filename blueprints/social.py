@@ -7,7 +7,7 @@ from flask import (
     request, session, url_for
 )
 from helpers import (
-    get_db, get_user_db, login_required, safe_float, safe_int,
+    get_db, login_required, safe_float, safe_int,
     add_notification, update_counts, recalc_post_score,
     format_post, format_post_with_poll,
     get_personalized_post_ids,
@@ -41,9 +41,9 @@ def feed():
         rows = db.execute("""
             SELECT p.* FROM posts p
             WHERE p.reply_to_id IS NULL
-              AND p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?)
+              AND p.user_id IN (SELECT following_id FROM follows WHERE follower_id=%s)
               AND p.id NOT IN (SELECT post_id FROM channel_posts)
-            ORDER BY p.created_at DESC LIMIT ? OFFSET ?
+            ORDER BY p.created_at DESC LIMIT %s OFFSET %s
         """, (uid, per, off)).fetchall()
     elif tab == 'earn':
         rows = db.execute("""
@@ -51,17 +51,17 @@ def feed():
             JOIN post_boosts pb ON pb.post_id = p.id
             WHERE pb.status='active'
               AND pb.budget_spent < pb.budget
-              AND pb.user_id != ?
+              AND pb.user_id != %s
               AND NOT EXISTS (
                 SELECT 1 FROM boost_engagements be
-                WHERE be.boost_id=pb.id AND be.worker_id=?
+                WHERE be.boost_id=pb.id AND be.worker_id=%s
               )
-            ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT ? OFFSET ?
+            ORDER BY pb.reward_per_engage DESC, p.created_at DESC LIMIT %s OFFSET %s
         """, (uid, uid, per, off)).fetchall()
     else:
         ranked_ids = get_personalized_post_ids(db, uid, limit=per, offset=off)
         if ranked_ids:
-            ph   = ','.join(['?'] * len(ranked_ids))
+            ph   = ','.join(['%s'] * len(ranked_ids))
             rows = db.execute(f'SELECT * FROM posts WHERE id IN ({ph})', ranked_ids).fetchall()
             row_map = {r['id']: r for r in rows}
             rows    = [row_map[pid] for pid in ranked_ids if pid in row_map]
@@ -70,7 +70,7 @@ def feed():
                 SELECT * FROM posts
                 WHERE reply_to_id IS NULL
                   AND id NOT IN (SELECT post_id FROM channel_posts)
-                ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?
+                ORDER BY score DESC, created_at DESC LIMIT %s OFFSET %s
             """, (per, off)).fetchall()
 
     posts    = [format_post_with_poll(r, uid, db) for r in rows]
@@ -82,8 +82,8 @@ def feed():
     suggestions = [dict(s) for s in db.execute("""
         SELECT id, username, display_name, avatar_url, is_verified, follower_count
         FROM users
-        WHERE id != ?
-          AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        WHERE id != %s
+          AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=%s)
         ORDER BY follower_count DESC, id DESC LIMIT 5
     """, (uid, uid)).fetchall()]
 
@@ -91,7 +91,7 @@ def feed():
         SELECT p.*, u.username, u.display_name, u.avatar_url, u.is_verified
         FROM posts p JOIN users u ON p.user_id=u.id
         WHERE p.reply_to_id IS NULL
-          AND p.created_at >= datetime('now', '-48 hours')
+          AND p.created_at >= NOW() - INTERVAL '48 hours'
         ORDER BY p.like_count DESC LIMIT 5
     """).fetchall()]
 
@@ -118,23 +118,12 @@ def create_post():
     _raw_media_data = (request.form.get('media_data') or '').strip() or None
     media_mime      = (request.form.get('media_mime') or '').strip() or None
     # Upload media to Cloudflare R2 if present; store URL instead of blob
-    media_url  = None
+    media_url = None
     if _raw_media_data:
         try:
             media_url = storage.upload_post_media(uid, _raw_media_data)
-        except ValueError as _e:
-            return jsonify({'success': False, 'error': str(_e)}), 400
-        except RuntimeError as _e:
-            logger.error('Media upload RuntimeError: %s', _e)
-            return jsonify({'success': False,
-                            'error': 'Media storage is not configured. '
-                                     'Check R2_PUBLIC_URL in your environment.'}), 503
-        except Exception as _e:
-            logger.error('Media upload unexpected error: %s', _e)
-            return jsonify({'success': False, 'error': 'Media upload failed.'}), 500
-        # Infer mime from data URI if not supplied by client
-        if not media_mime and _raw_media_data.startswith('data:'):
-            media_mime = _raw_media_data.split(';')[0][5:] or None
+        except (ValueError, RuntimeError) as _e:
+            return jsonify({'success': False, 'error': f'Media upload failed: {_e}'}), 400
     post_type       = (request.form.get('post_type') or 'post').strip().lower()
     channel_id      = safe_int(request.form.get('channel_id'), 0) or None
 
@@ -154,58 +143,56 @@ def create_post():
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    db.execute("""
+    post_id = db.execute("""
         INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
-                           is_subscriber_only, media_url, media_mime,
+                           is_subscriber_only, media_url,
                            post_type, poll_expires_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    """, (uid, body or None, reply_to, repost_of, quote_body,
-          subscriber_only, media_url, media_mime if media_url else None,
-          post_type, poll_expires_at, now))
-    post_id = db.lastrowid
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id""", (uid, body or None, reply_to, repost_of, quote_body,
+          subscriber_only, media_url, post_type, poll_expires_at, now)).fetchone()['id']
 
     for opt_label in poll_options:
-        db.execute('INSERT INTO poll_options (post_id, label) VALUES (?,?)', (post_id, opt_label))
+        db.execute('INSERT INTO poll_options (post_id, label) VALUES (%s,%s)', (post_id, opt_label))
 
     if channel_id:
-        ch = db.execute('SELECT id FROM channels WHERE id=?', (channel_id,)).fetchone()
+        ch = db.execute('SELECT id FROM channels WHERE id=%s', (channel_id,)).fetchone()
         if ch:
-            db.execute('INSERT INTO channel_posts (channel_id, post_id) VALUES (?,?) ',
+            db.execute('INSERT INTO channel_posts (channel_id, post_id) VALUES (%s,%s) ON CONFLICT DO NOTHING',
                        (channel_id, post_id))
-            db.execute('UPDATE channels SET post_count=post_count+1 WHERE id=?', (channel_id,))
+            db.execute('UPDATE channels SET post_count=post_count+1 WHERE id=%s', (channel_id,))
 
     if reply_to:
-        db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=?', (reply_to,))
-        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (reply_to,)).fetchone()
+        db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=%s', (reply_to,))
+        parent = db.execute('SELECT user_id FROM posts WHERE id=%s', (reply_to,)).fetchone()
         if parent and parent['user_id'] != uid:
-            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
             add_notification(db, parent['user_id'], f'💬 @{me["username"]} replied to your post.')
     if repost_of:
-        db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=?', (repost_of,))
-        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (repost_of,)).fetchone()
+        db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=%s', (repost_of,))
+        parent = db.execute('SELECT user_id FROM posts WHERE id=%s', (repost_of,)).fetchone()
         if parent and parent['user_id'] != uid:
-            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
             add_notification(db, parent['user_id'], f'🔁 @{me["username"]} reposted your post.')
 
     tags = list(set(t.lower() for t in re.findall(r'#(\w+)', body or '')))
     for tag in tags[:10]:
-        db.execute('INSERT OR IGNORE INTO hashtags (name) VALUES (?) ', (tag,))
-        ht = db.execute('SELECT id FROM hashtags WHERE name=?', (tag,)).fetchone()
+        db.execute('INSERT INTO hashtags (name) VALUES (%s) ON CONFLICT DO NOTHING', (tag,))
+        ht = db.execute('SELECT id FROM hashtags WHERE name=%s', (tag,)).fetchone()
         if ht:
-            db.execute('INSERT OR IGNORE INTO post_hashtags (post_id,hashtag_id) VALUES (?,?) ',
+            db.execute('INSERT INTO post_hashtags (post_id,hashtag_id) VALUES (%s,%s) ON CONFLICT DO NOTHING',
                        (post_id, ht['id']))
     if tags:
-        db.execute('UPDATE posts SET hashtags_cached=? WHERE id=?',
+        db.execute('UPDATE posts SET hashtags_cached=%s WHERE id=%s',
                    (' '.join('#' + t for t in tags), post_id))
 
     if body:
         mentioned = list(set(re.findall(r'@(\w+)', body)))
-        me_row    = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        me_row    = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
         me_name   = me_row['username'] if me_row else ''
         for username in mentioned[:10]:
             if username.lower() == me_name.lower():
                 continue
-            target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+            target = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
             if target and target['id'] != uid:
                 add_notification(db, target['id'], f'🔔 @{me_name} mentioned you in a post.')
 
@@ -213,7 +200,7 @@ def create_post():
     recalc_post_score(db, post_id)
     db.commit()
 
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     return jsonify({'success': True, 'post': format_post(post, uid, db)})
 
 
@@ -222,58 +209,22 @@ def create_post():
 def delete_post(post_id):
     db  = get_db()
     uid = session['user_id']
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Not found'}), 404
-    user = db.execute('SELECT is_admin FROM users WHERE id=?', (uid,)).fetchone()
+    user = db.execute('SELECT is_admin FROM users WHERE id=%s', (uid,)).fetchone()
     if post['user_id'] != uid and not user['is_admin']:
         return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
     if post['reply_to_id']:
-        db.execute('UPDATE posts SET reply_count=MAX(0, reply_count-1) WHERE id=?', (post['reply_to_id'],))
+        db.execute('UPDATE posts SET reply_count=GREATEST(0, reply_count-1) WHERE id=%s', (post['reply_to_id'],))
     if post['repost_of_id']:
-        db.execute('UPDATE posts SET repost_count=MAX(0, repost_count-1) WHERE id=?', (post['repost_of_id'],))
+        db.execute('UPDATE posts SET repost_count=GREATEST(0, repost_count-1) WHERE id=%s', (post['repost_of_id'],))
 
-    db.execute('DELETE FROM post_likes WHERE post_id=?', (post_id,))
-    db.execute('DELETE FROM bookmarks  WHERE post_id=?', (post_id,))
-    db.execute('DELETE FROM posts      WHERE id=?', (post_id,))
+    db.execute('DELETE FROM post_likes WHERE post_id=%s', (post_id,))
+    db.execute('DELETE FROM bookmarks  WHERE post_id=%s', (post_id,))
+    db.execute('DELETE FROM posts      WHERE id=%s', (post_id,))
     update_counts(db, uid)
-    db.commit()
-    return jsonify({'success': True})
-
-
-@bp.route('/api/report', methods=['POST'])
-@login_required
-@csrf_exempt
-@limiter.limit('10 per hour')
-def report_content():
-    """Submit a content report (post, user, or message)."""
-    db          = get_db()
-    uid         = session['user_id']
-    target_type = (request.json or {}).get('target_type', '')
-    target_id   = safe_int((request.json or {}).get('target_id'), 0)
-    reason      = ((request.json or {}).get('reason') or '').strip()
-    details     = ((request.json or {}).get('details') or '').strip()
-
-    if target_type not in ('post', 'user', 'message'):
-        return jsonify({'success': False, 'error': 'Invalid target type.'}), 400
-    if not target_id or not reason:
-        return jsonify({'success': False, 'error': 'Target and reason required.'}), 400
-
-    # Prevent duplicate open reports from the same user
-    existing = db.execute(
-        "SELECT id FROM reports WHERE reporter_id=? AND target_type=? "
-        "AND target_id=? AND status='open'",
-        (uid, target_type, target_id)
-    ).fetchone()
-    if existing:
-        return jsonify({'success': False, 'error': 'You have already reported this content.'}), 400
-
-    db.execute(
-        'INSERT INTO reports (reporter_id, target_type, target_id, reason, details) '
-        'VALUES (?, ?, ?, ?, ?)',
-        (uid, target_type, target_id, reason, details or None)
-    )
     db.commit()
     return jsonify({'success': True})
 
@@ -288,7 +239,7 @@ def unrepost(post_id):
 
     # Find all reposts/quotes of this post by the current user
     reposts = db.execute(
-        'SELECT id FROM posts WHERE user_id=? AND repost_of_id=?',
+        'SELECT id FROM posts WHERE user_id=%s AND repost_of_id=%s',
         (uid, post_id)
     ).fetchall()
 
@@ -297,13 +248,13 @@ def unrepost(post_id):
 
     deleted_ids = [r['id'] for r in reposts]
     for rid in deleted_ids:
-        db.execute('DELETE FROM post_likes WHERE post_id=?', (rid,))
-        db.execute('DELETE FROM bookmarks  WHERE post_id=?', (rid,))
-        db.execute('DELETE FROM posts      WHERE id=?',       (rid,))
+        db.execute('DELETE FROM post_likes WHERE post_id=%s', (rid,))
+        db.execute('DELETE FROM bookmarks  WHERE post_id=%s', (rid,))
+        db.execute('DELETE FROM posts      WHERE id=%s',       (rid,))
 
     # Decrement repost_count by the number of reposts removed
     db.execute(
-        'UPDATE posts SET repost_count = MAX(0, repost_count - ?) WHERE id=?',
+        'UPDATE posts SET repost_count = GREATEST(0, repost_count - %s) WHERE id=%s',
         (len(deleted_ids), post_id)
     )
     update_counts(db, uid)
@@ -311,7 +262,7 @@ def unrepost(post_id):
     db.commit()
 
     new_count = db.execute(
-        'SELECT repost_count FROM posts WHERE id=?', (post_id,)
+        'SELECT repost_count FROM posts WHERE id=%s', (post_id,)
     ).fetchone()
     return jsonify({
         'success':      True,
@@ -326,7 +277,7 @@ def unrepost(post_id):
 def edit_post(post_id):
     db  = get_db()
     uid = session['user_id']
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Post not found.'}), 404
     if post['user_id'] != uid:
@@ -339,10 +290,10 @@ def edit_post(post_id):
         return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    db.execute('UPDATE posts SET body=?, edited_at=? WHERE id=?', (body or None, now, post_id))
+    db.execute('UPDATE posts SET body=%s, edited_at=%s WHERE id=%s', (body or None, now, post_id))
     db.commit()
 
-    updated = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    updated = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     return jsonify({'success': True, 'post': format_post(updated, uid, db)})
 
 
@@ -351,12 +302,12 @@ def edit_post(post_id):
 def post_detail(post_id):
     db  = get_db()
     uid = session['user_id']
-    row = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    row = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not row:
         return render_template('error.html', code=404, message='Post not found.'), 404
     post    = format_post(row, uid, db)
     replies = [format_post(r, uid, db) for r in
-               db.execute('SELECT * FROM posts WHERE reply_to_id=? ORDER BY created_at ASC',
+               db.execute('SELECT * FROM posts WHERE reply_to_id=%s ORDER BY created_at ASC',
                           (post_id,)).fetchall()]
     return render_template('post_detail.html', post=post, replies=replies)
 
@@ -368,25 +319,25 @@ def post_detail(post_id):
 def toggle_like(post_id):
     db  = get_db()
     uid = session['user_id']
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Not found'}), 404
 
-    existing = db.execute('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?',
+    existing = db.execute('SELECT 1 FROM post_likes WHERE user_id=%s AND post_id=%s',
                           (uid, post_id)).fetchone()
     if existing:
-        db.execute('DELETE FROM post_likes WHERE user_id=? AND post_id=?', (uid, post_id))
-        db.execute('UPDATE posts SET like_count=MAX(0, like_count-1) WHERE id=?', (post_id,))
+        db.execute('DELETE FROM post_likes WHERE user_id=%s AND post_id=%s', (uid, post_id))
+        db.execute('UPDATE posts SET like_count=GREATEST(0, like_count-1) WHERE id=%s', (post_id,))
         liked = False
     else:
-        db.execute('INSERT OR IGNORE INTO post_likes (user_id,post_id) VALUES (?,?) ', (uid, post_id))
-        db.execute('UPDATE posts SET like_count=like_count+1 WHERE id=?', (post_id,))
+        db.execute('INSERT INTO post_likes (user_id,post_id) VALUES (%s,%s) ON CONFLICT DO NOTHING', (uid, post_id))
+        db.execute('UPDATE posts SET like_count=like_count+1 WHERE id=%s', (post_id,))
         liked = True
         if post['user_id'] != uid:
-            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
             add_notification(db, post['user_id'], f'❤️ @{me["username"]} liked your post.')
 
-    new_count = db.execute('SELECT like_count FROM posts WHERE id=?', (post_id,)).fetchone()['like_count']
+    new_count = db.execute('SELECT like_count FROM posts WHERE id=%s', (post_id,)).fetchone()['like_count']
     recalc_post_score(db, post_id)
     db.commit()
     return jsonify({'success': True, 'liked': liked, 'like_count': new_count})
@@ -399,13 +350,13 @@ def toggle_like(post_id):
 def toggle_bookmark(post_id):
     db  = get_db()
     uid = session['user_id']
-    existing = db.execute('SELECT 1 FROM bookmarks WHERE user_id=? AND post_id=?',
+    existing = db.execute('SELECT 1 FROM bookmarks WHERE user_id=%s AND post_id=%s',
                           (uid, post_id)).fetchone()
     if existing:
-        db.execute('DELETE FROM bookmarks WHERE user_id=? AND post_id=?', (uid, post_id))
+        db.execute('DELETE FROM bookmarks WHERE user_id=%s AND post_id=%s', (uid, post_id))
         saved = False
     else:
-        db.execute('INSERT OR IGNORE INTO bookmarks (user_id,post_id) VALUES (?,?) ', (uid, post_id))
+        db.execute('INSERT INTO bookmarks (user_id,post_id) VALUES (%s,%s) ON CONFLICT DO NOTHING', (uid, post_id))
         saved = True
     db.commit()
     return jsonify({'success': True, 'saved': saved})
@@ -418,7 +369,7 @@ def bookmarks():
     uid = session['user_id']
     rows = db.execute("""
         SELECT p.* FROM posts p JOIN bookmarks b ON b.post_id=p.id
-        WHERE b.user_id=? ORDER BY b.created_at DESC
+        WHERE b.user_id=%s ORDER BY b.created_at DESC
     """, (uid,)).fetchall()
     return render_template('bookmarks.html', posts=[format_post(r, uid, db) for r in rows])
 
@@ -432,27 +383,27 @@ def bookmarks():
 def toggle_follow(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT id,username FROM users WHERE username=?', (username,)).fetchone()
+    target = db.execute('SELECT id,username FROM users WHERE username=%s', (username,)).fetchone()
     if not target or target['id'] == uid:
         return jsonify({'success': False, 'error': 'Not found'}), 404
 
-    existing = db.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+    existing = db.execute('SELECT 1 FROM follows WHERE follower_id=%s AND following_id=%s',
                           (uid, target['id'])).fetchone()
     if existing:
-        db.execute('DELETE FROM follows WHERE follower_id=? AND following_id=?', (uid, target['id']))
+        db.execute('DELETE FROM follows WHERE follower_id=%s AND following_id=%s', (uid, target['id']))
         following = False
     else:
-        db.execute('INSERT OR IGNORE INTO follows (follower_id,following_id) VALUES (?,?) ',
+        db.execute('INSERT INTO follows (follower_id,following_id) VALUES (%s,%s) ON CONFLICT DO NOTHING',
                    (uid, target['id']))
         following = True
-        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
         add_notification(db, target['id'], f'👤 @{me["username"]} started following you.')
 
     update_counts(db, uid)
     update_counts(db, target['id'])
     db.commit()
 
-    new_followers = db.execute('SELECT follower_count FROM users WHERE id=?',
+    new_followers = db.execute('SELECT follower_count FROM users WHERE id=%s',
                                (target['id'],)).fetchone()['follower_count']
     return jsonify({'success': True, 'following': following, 'follower_count': new_followers})
 
@@ -462,45 +413,45 @@ def toggle_follow(username):
 def profile(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    target = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
     if not target:
         return render_template('error.html', code=404, message='User not found.'), 404
 
     tab      = request.args.get('tab', 'posts')
     is_own   = (uid == target['id'])
-    is_following = bool(db.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+    is_following = bool(db.execute('SELECT 1 FROM follows WHERE follower_id=%s AND following_id=%s',
                                    (uid, target['id'])).fetchone())
 
     if tab == 'replies':
-        rows = db.execute('SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NOT NULL '
+        rows = db.execute('SELECT * FROM posts WHERE user_id=%s AND reply_to_id IS NOT NULL '
                           'ORDER BY created_at DESC LIMIT 40', (target['id'],)).fetchall()
     elif tab == 'likes':
         rows = db.execute('SELECT p.* FROM posts p JOIN post_likes l ON l.post_id=p.id '
-                          'WHERE l.user_id=? ORDER BY l.created_at DESC LIMIT 40',
+                          'WHERE l.user_id=%s ORDER BY l.created_at DESC LIMIT 40',
                           (target['id'],)).fetchall()
     else:
-        rows = db.execute('SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL '
+        rows = db.execute('SELECT * FROM posts WHERE user_id=%s AND reply_to_id IS NULL '
                           'ORDER BY created_at DESC LIMIT 40', (target['id'],)).fetchall()
 
     posts     = [format_post(r, uid, db) for r in rows]
     followers = [dict(f) for f in db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified
         FROM follows f JOIN users u ON u.id=f.follower_id
-        WHERE f.following_id=? LIMIT 6
+        WHERE f.following_id=%s LIMIT 6
     """, (target['id'],)).fetchall()]
 
     tier = db.execute(
-        "SELECT * FROM subscription_tiers WHERE creator_id=? AND is_active=1", (target['id'],)
+        "SELECT * FROM subscription_tiers WHERE creator_id=%s AND is_active=1", (target['id'],)
     ).fetchone()
     is_subscribed = bool(db.execute(
-        "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+        "SELECT 1 FROM subscriptions WHERE subscriber_id=%s AND creator_id=%s AND status='active'",
         (uid, target['id'])
     ).fetchone()) if not is_own and tier else False
 
     top_tips = [dict(t) for t in db.execute("""
         SELECT t.amount, u.username, u.avatar_url, u.display_name
         FROM tips t JOIN users u ON u.id=t.from_user_id
-        WHERE t.to_user_id=? ORDER BY t.amount DESC LIMIT 5
+        WHERE t.to_user_id=%s ORDER BY t.amount DESC LIMIT 5
     """, (target['id'],)).fetchall()]
 
     return render_template('profile.html', target=dict(target),
@@ -524,13 +475,13 @@ def edit_profile():
         location     = (request.form.get('location')     or '').strip()[:60]
         allow_saves  = 1 if request.form.get('allow_post_saves', '1') != '0' else 0
 
-        db.execute('UPDATE users SET display_name=?, bio=?, website=?, location=?, allow_post_saves=? WHERE id=?',
+        db.execute('UPDATE users SET display_name=%s, bio=%s, website=%s, location=%s, allow_post_saves=%s WHERE id=%s',
                    (display_name or None, bio or None, website or None, location or None, allow_saves, uid))
         db.commit()
-        me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+        me = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
         return jsonify({'success': True, 'redirect': url_for('social.profile', username=me['username'])})
 
-    user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    user = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
     return render_template('edit_profile.html', user=dict(user))
 
 
@@ -544,22 +495,24 @@ def delete_account():
     import storage as _st
     from helpers import verify_password
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
 
-    data   = request.get_json(silent=True) or {}
-    phrase = (data.get('phrase') or '').strip().lower()
-    user   = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    data     = request.get_json(silent=True) or {}
+    password = data.get('password', '')
+    user     = db.execute('SELECT * FROM users WHERE id=%s', (uid,)).fetchone()
     if not user:
         return jsonify({'success': False, 'error': 'User not found.'}), 404
 
-    # Require typed phrase confirmation — works for all auth methods
-    if phrase != 'delete':
-        return jsonify({'success': False,
-                        'error': 'Please type "delete" to confirm.'}), 400
+    # Require password confirmation (skip if Google-only account with no password)
+    if user['password']:
+        if not password:
+            return jsonify({'success': False, 'error': 'Please enter your password to confirm.'}), 400
+        from helpers import verify_password as _vp
+        if not _vp(password, user['password']):
+            return jsonify({'success': False, 'error': 'Incorrect password.'}), 403
 
     # Delete R2 media files
-    for row in db.execute('SELECT media_url FROM stories WHERE user_id=?', (uid,)).fetchall():
+    for row in db.execute('SELECT media_url FROM stories WHERE user_id=%s', (uid,)).fetchall():
         try: _st.delete_object(row['media_url'])
         except Exception: pass
     if user.get('avatar_url') and user['avatar_url'].startswith('http'):
@@ -570,42 +523,42 @@ def delete_account():
         except Exception: pass
 
     # Delete all user data (cascades via FK where set, manual otherwise)
-    db.execute('DELETE FROM stories          WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM notifications    WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM transactions     WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM withdrawals      WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM task_completions WHERE worker_id=?', (uid,))
-    db.execute('DELETE FROM post_likes       WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM bookmarks        WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM follows          WHERE follower_id=? OR following_id=?', (uid, uid))
-    db.execute('DELETE FROM search_history   WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM post_views       WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM poll_votes       WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM tips             WHERE from_user_id=? OR to_user_id=?', (uid, uid))
-    db.execute("DELETE FROM subscriptions    WHERE subscriber_id=? OR creator_id=?", (uid, uid))
-    db.execute('DELETE FROM subscription_tiers WHERE creator_id=?', (uid,))
+    db.execute('DELETE FROM stories          WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM notifications    WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM transactions     WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM withdrawals      WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM task_completions WHERE worker_id=%s', (uid,))
+    db.execute('DELETE FROM post_likes       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM bookmarks        WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM follows          WHERE follower_id=%s OR following_id=%s', (uid, uid))
+    db.execute('DELETE FROM search_history   WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM post_views       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM poll_votes       WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM tips             WHERE from_user_id=%s OR to_user_id=%s', (uid, uid))
+    db.execute("DELETE FROM subscriptions    WHERE subscriber_id=%s OR creator_id=%s", (uid, uid))
+    db.execute('DELETE FROM subscription_tiers WHERE creator_id=%s', (uid,))
     # Delete posts (and cascade likes/bookmarks/reposts)
-    post_ids = [r['id'] for r in db.execute('SELECT id FROM posts WHERE user_id=?', (uid,)).fetchall()]
+    post_ids = [r['id'] for r in db.execute('SELECT id FROM posts WHERE user_id=%s', (uid,)).fetchall()]
     for pid in post_ids:
-        db.execute('DELETE FROM post_likes    WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM bookmarks     WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM poll_options  WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM poll_votes    WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM post_hashtags WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM channel_posts WHERE post_id=?', (pid,))
-    db.execute('DELETE FROM posts WHERE user_id=?', (uid,))
+        db.execute('DELETE FROM post_likes    WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM bookmarks     WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM poll_options  WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM poll_votes    WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM post_hashtags WHERE post_id=%s', (pid,))
+        db.execute('DELETE FROM channel_posts WHERE post_id=%s', (pid,))
+    db.execute('DELETE FROM posts WHERE user_id=%s', (uid,))
     # Leave groups/channels (don't delete them)
-    db.execute('DELETE FROM channel_members WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM group_members   WHERE user_id=?', (uid,))
+    db.execute('DELETE FROM channel_members WHERE user_id=%s', (uid,))
+    db.execute('DELETE FROM group_members   WHERE user_id=%s', (uid,))
     # Delete DMs
     conv_ids = [r['id'] for r in db.execute(
-        'SELECT id FROM conversations WHERE user_a=? OR user_b=?', (uid, uid)
+        'SELECT id FROM conversations WHERE user_a=%s OR user_b=%s', (uid, uid)
     ).fetchall()]
     for cid in conv_ids:
-        udb.execute('DELETE FROM messages     WHERE conversation_id=?', (cid,))
-        udb.execute('DELETE FROM conversations WHERE id=?', (cid,))
+        db.execute('DELETE FROM messages     WHERE conversation_id=%s', (cid,))
+        db.execute('DELETE FROM conversations WHERE id=%s', (cid,))
     # Delete user
-    db.execute('DELETE FROM users WHERE id=?', (uid,))
+    db.execute('DELETE FROM users WHERE id=%s', (uid,))
     db.commit()
 
     session.clear()
@@ -638,7 +591,7 @@ def upload_profile_photo():
         return jsonify({'success': False, 'error': str(e)}), 500
 
     col = 'avatar_url' if kind == 'avatar' else 'banner_url'
-    db.execute(f'UPDATE users SET {col}=? WHERE id=?', (url, uid))
+    db.execute(f'UPDATE users SET {col}=%s WHERE id=%s', (url, uid))
     db.commit()
     return jsonify({'success': True, 'url': url, 'type': kind})
 
@@ -648,15 +601,15 @@ def upload_profile_photo():
 def follower_list(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT id,username,display_name FROM users WHERE username=?', (username,)).fetchone()
+    target = db.execute('SELECT id,username,display_name FROM users WHERE username=%s', (username,)).fetchone()
     if not target:
         return render_template('error.html', code=404, message='User not found.'), 404
     rows = db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
                u.follower_count, u.bio,
-               EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
+               EXISTS(SELECT 1 FROM follows WHERE follower_id=%s AND following_id=u.id) AS you_follow
         FROM follows f JOIN users u ON u.id=f.follower_id
-        WHERE f.following_id=? ORDER BY f.created_at DESC LIMIT 100
+        WHERE f.following_id=%s ORDER BY f.created_at DESC LIMIT 100
     """, (uid, target['id'])).fetchall()
     return render_template('follow_list.html', target=dict(target),
                            users=[dict(r) for r in rows], list_type='Followers')
@@ -667,15 +620,15 @@ def follower_list(username):
 def following_list(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT id,username,display_name FROM users WHERE username=?', (username,)).fetchone()
+    target = db.execute('SELECT id,username,display_name FROM users WHERE username=%s', (username,)).fetchone()
     if not target:
         return render_template('error.html', code=404, message='User not found.'), 404
     rows = db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
                u.follower_count, u.bio,
-               EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
+               EXISTS(SELECT 1 FROM follows WHERE follower_id=%s AND following_id=u.id) AS you_follow
         FROM follows f JOIN users u ON u.id=f.following_id
-        WHERE f.follower_id=? ORDER BY f.created_at DESC LIMIT 100
+        WHERE f.follower_id=%s ORDER BY f.created_at DESC LIMIT 100
     """, (uid, target['id'])).fetchall()
     return render_template('follow_list.html', target=dict(target),
                            users=[dict(r) for r in rows], list_type='Following')
@@ -686,10 +639,10 @@ def following_list(username):
 def _save_search(db, uid, query, result_type='mixed'):
     if not query or len(query) < 2:
         return
-    db.execute('INSERT OR IGNORE INTO search_history (user_id, query, result_type) VALUES (?,?,?)',
+    db.execute('INSERT INTO search_history (user_id, query, result_type) VALUES (%s,%s,%s)',
                (uid, query[:100], result_type))
     db.execute('UPDATE users SET search_count=search_count+1 '
-               'WHERE username LIKE ? OR display_name LIKE ?',
+               'WHERE username LIKE %s OR display_name LIKE %s',
                (f'%{query}%', f'%{query}%'))
 
 
@@ -697,13 +650,13 @@ def _trending_hashtags(db, hours=48, limit=15):
     rows = db.execute("""
         SELECT h.name,
                COUNT(ph.post_id) AS cnt,
-               COUNT(CASE WHEN p.created_at >= datetime('now', '-6 hours') THEN 1 END) AS recent_cnt
+               COUNT(CASE WHEN p.created_at >= NOW() - INTERVAL '6 hours' THEN 1 END) AS recent_cnt
         FROM hashtags h
         JOIN post_hashtags ph ON ph.hashtag_id=h.id
         JOIN posts p ON p.id=ph.post_id
-        WHERE p.created_at >= ?
+        WHERE p.created_at >= NOW() - make_interval(hours => %s)
         GROUP BY h.id HAVING cnt > 0
-        ORDER BY (recent_cnt*3+cnt) DESC LIMIT ?
+        ORDER BY (recent_cnt*3+cnt) DESC LIMIT %s
     """, (hours, limit)).fetchall()
     return [dict(r) for r in rows]
 
@@ -716,20 +669,20 @@ def _who_to_follow(db, uid, limit=8):
         FROM users u
         JOIN follows f1 ON f1.following_id=u.id
         JOIN follows f2 ON f2.following_id=f1.follower_id
-        WHERE f2.follower_id=? AND u.id!=?
-          AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        WHERE f2.follower_id=%s AND u.id!=%s
+          AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=%s)
         GROUP BY u.id
-        ORDER BY mutual_count DESC, u.follower_count DESC LIMIT ?
+        ORDER BY mutual_count DESC, u.follower_count DESC LIMIT %s
     """, (uid, uid, uid, limit)).fetchall()
 
     if len(rows) < limit:
         existing_ids = [r['id'] for r in rows] + [uid]
-        ph    = ','.join(['?'] * len(existing_ids))
+        ph    = ','.join(['%s'] * len(existing_ids))
         extra = db.execute(
             f'SELECT id,username,display_name,avatar_url,is_verified,follower_count,bio,'
             f'subscriber_count, 0 AS mutual_count FROM users WHERE id NOT IN ({ph}) '
-            f'AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?) '
-            f'ORDER BY follower_count DESC LIMIT ?',
+            f'AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=%s) '
+            f'ORDER BY follower_count DESC LIMIT %s',
             existing_ids + [uid, limit - len(rows)]
         ).fetchall()
         rows = list(rows) + list(extra)
@@ -752,7 +705,7 @@ def explore():
         like = f'%{q}%'
         if tab in ('top', 'posts', 'latest'):
             order = 'p.created_at DESC' if tab == 'latest' else 'p.score DESC, p.like_count DESC'
-            post_rows = db.execute(f'SELECT p.* FROM posts p WHERE p.body LIKE ? '
+            post_rows = db.execute(f'SELECT p.* FROM posts p WHERE p.body LIKE %s '
                                    f'AND p.reply_to_id IS NULL ORDER BY {order} LIMIT 40',
                                    (like,)).fetchall()
             posts = [format_post(r, uid, db) for r in post_rows]
@@ -761,8 +714,8 @@ def explore():
             user_rows = db.execute("""
                 SELECT id, username, display_name, avatar_url, is_verified,
                        follower_count, bio, subscriber_count,
-                       EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=id) AS you_follow
-                FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?
+                       EXISTS(SELECT 1 FROM follows WHERE follower_id=%s AND following_id=id) AS you_follow
+                FROM users WHERE (username LIKE %s OR display_name LIKE %s) AND id != %s
                 ORDER BY follower_count DESC LIMIT 12
             """, (uid, like, like, uid)).fetchall()
             users = [dict(u) for u in user_rows]
@@ -772,7 +725,7 @@ def explore():
             tag_rows = db.execute("""
                 SELECT h.name, COUNT(ph.post_id) AS cnt
                 FROM hashtags h JOIN post_hashtags ph ON ph.hashtag_id=h.id
-                WHERE h.name LIKE ? GROUP BY h.id ORDER BY cnt DESC LIMIT 10
+                WHERE h.name LIKE %s GROUP BY h.id ORDER BY cnt DESC LIMIT 10
             """, (f'%{tag_q}%',)).fetchall()
             tags = [dict(t) for t in tag_rows]
         db.commit()
@@ -780,11 +733,11 @@ def explore():
     trending_tags  = _trending_hashtags(db, hours=48, limit=12)
     who_to_follow  = _who_to_follow(db, uid, limit=6)
     history        = db.execute('SELECT DISTINCT query FROM search_history '
-                                'WHERE user_id=? ORDER BY created_at DESC LIMIT 8', (uid,)).fetchall()
+                                'WHERE user_id=%s ORDER BY created_at DESC LIMIT 8', (uid,)).fetchall()
     recent_searches = [r['query'] for r in history]
     trending_posts = [format_post(r, uid, db) for r in db.execute("""
         SELECT p.* FROM posts p WHERE p.reply_to_id IS NULL
-          AND p.created_at >= datetime('now', '-6 hours')
+          AND p.created_at >= NOW() - INTERVAL '6 hours'
         ORDER BY p.score DESC LIMIT 8
     """).fetchall()]
 
@@ -807,13 +760,13 @@ def search_autocomplete():
     like = f'{q}%'
     users = db.execute(
         'SELECT username, display_name, avatar_url, is_verified, follower_count '
-        'FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? '
+        'FROM users WHERE (username LIKE %s OR display_name LIKE %s) AND id != %s '
         'ORDER BY follower_count DESC LIMIT 5', (like, like, uid)
     ).fetchall()
     tags = db.execute(
         'SELECT h.name, COUNT(ph.post_id) AS cnt FROM hashtags h '
         'JOIN post_hashtags ph ON ph.hashtag_id=h.id '
-        'WHERE h.name LIKE ? GROUP BY h.id ORDER BY cnt DESC LIMIT 5', (like,)
+        'WHERE h.name LIKE %s GROUP BY h.id ORDER BY cnt DESC LIMIT 5', (like,)
     ).fetchall()
     return jsonify({'users': [dict(u) for u in users], 'tags': [dict(t) for t in tags]})
 
@@ -825,14 +778,9 @@ def api_trending_posts():
     uid    = session['user_id']
     window = request.args.get('window', '24h')
     hours  = {'6h': 6, '24h': 24, '48h': 48, '7d': 168}.get(window, 24)
-    # Build cutoff time in Python instead of SQLite to avoid quote issues
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-    cutoff = (_dt.now(_tz.utc) - _td(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
-    rows   = db.execute(
-        'SELECT p.* FROM posts p WHERE p.reply_to_id IS NULL '
-        'AND p.created_at >= ? '
-        'ORDER BY p.score DESC LIMIT 10', (cutoff,)
-    ).fetchall()
+    rows   = db.execute('SELECT p.* FROM posts p WHERE p.reply_to_id IS NULL '
+                        'AND p.created_at >= NOW() - make_interval(hours => %s) '
+                        'ORDER BY p.score DESC LIMIT 10', (hours,)).fetchall()
     return jsonify([format_post(r, uid, db) for r in rows])
 
 
@@ -850,7 +798,7 @@ def api_who_to_follow():
     recs = _who_to_follow(db, uid, limit=8)
     for u in recs:
         u['you_follow'] = bool(db.execute(
-            'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (uid, u['id'])
+            'SELECT 1 FROM follows WHERE follower_id=%s AND following_id=%s', (uid, u['id'])
         ).fetchone())
     return jsonify(recs)
 
@@ -863,9 +811,9 @@ def record_post_view(post_id):
     db  = get_db()
     uid = session['user_id']
     try:
-        db.execute('INSERT INTO post_views (post_id, user_id) VALUES (?,?) ', (post_id, uid))
-        db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=? '
-                   'AND NOT EXISTS (SELECT 1 FROM post_views WHERE post_id=? AND user_id=?)',
+        db.execute('INSERT INTO post_views (post_id, user_id) VALUES (%s,%s) ON CONFLICT DO NOTHING', (post_id, uid))
+        db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=%s '
+                   'AND NOT EXISTS (SELECT 1 FROM post_views WHERE post_id=%s AND user_id=%s)',
                    (post_id, post_id, uid))
         recalc_post_score(db, post_id)
         db.commit()
@@ -884,7 +832,7 @@ def trending():
 
     top_posts = [format_post(r, uid, db) for r in db.execute(
         'SELECT p.* FROM posts p WHERE p.reply_to_id IS NULL '
-        'AND p.created_at >= ? '
+        'AND p.created_at >= NOW() - make_interval(hours => %s) '
         'ORDER BY p.score DESC LIMIT 30', (hours,)
     ).fetchall()]
     top_tags      = _trending_hashtags(db, hours=hours, limit=20)
@@ -895,8 +843,8 @@ def trending():
                u.is_verified, u.follower_count, u.bio,
                COUNT(f.follower_id) AS new_followers
         FROM users u JOIN follows f ON f.following_id=u.id
-        WHERE f.created_at >= ?
-          AND u.id != ? AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
+        WHERE f.created_at >= NOW() - make_interval(hours => %s)
+          AND u.id != %s AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id=%s)
         GROUP BY u.id ORDER BY new_followers DESC LIMIT 5
     """, (hours, uid, uid)).fetchall()]
 
@@ -909,7 +857,7 @@ def trending():
 def clear_search_history():
     db  = get_db()
     uid = session['user_id']
-    db.execute('DELETE FROM search_history WHERE user_id=?', (uid,))
+    db.execute('DELETE FROM search_history WHERE user_id=%s', (uid,))
     db.commit()
     return jsonify({'success': True})
 
@@ -920,20 +868,20 @@ def hashtag_feed(tag):
     db  = get_db()
     uid = session['user_id']
     tag = tag.lower().lstrip('#')
-    ht  = db.execute('SELECT * FROM hashtags WHERE name=?', (tag,)).fetchone()
+    ht  = db.execute('SELECT * FROM hashtags WHERE name=%s', (tag,)).fetchone()
     if not ht:
         posts = []
     else:
         rows  = db.execute("""
             SELECT p.* FROM posts p JOIN post_hashtags ph ON ph.post_id=p.id
-            WHERE ph.hashtag_id=? AND p.reply_to_id IS NULL ORDER BY p.created_at DESC LIMIT 40
+            WHERE ph.hashtag_id=%s AND p.reply_to_id IS NULL ORDER BY p.created_at DESC LIMIT 40
         """, (ht['id'],)).fetchall()
         posts = [format_post(r, uid, db) for r in rows]
 
     trending_tags = db.execute("""
         SELECT h.name, COUNT(ph.post_id) as cnt FROM hashtags h
         JOIN post_hashtags ph ON ph.hashtag_id=h.id JOIN posts p ON p.id=ph.post_id
-        WHERE p.created_at >= datetime('now', '-7 days')
+        WHERE p.created_at >= NOW() - INTERVAL '7 days'
         GROUP BY h.id ORDER BY cnt DESC LIMIT 10
     """).fetchall()
     return render_template('hashtag_feed.html', tag=tag, posts=posts,
@@ -951,7 +899,7 @@ def poll_vote(post_id):
     uid       = session['user_id']
     option_id = safe_int(request.form.get('option_id'), 0)
 
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Post not found.'}), 404
     if (post['post_type'] if 'post_type' in post.keys() else 'post') != 'poll':
@@ -965,23 +913,23 @@ def poll_vote(post_id):
         except Exception:
             pass
 
-    opt = db.execute('SELECT * FROM poll_options WHERE id=? AND post_id=?',
+    opt = db.execute('SELECT * FROM poll_options WHERE id=%s AND post_id=%s',
                      (option_id, post_id)).fetchone()
     if not opt:
         return jsonify({'success': False, 'error': 'Invalid option.'}), 400
 
-    existing = db.execute('SELECT option_id FROM poll_votes WHERE post_id=? AND user_id=?',
+    existing = db.execute('SELECT option_id FROM poll_votes WHERE post_id=%s AND user_id=%s',
                           (post_id, uid)).fetchone()
     if existing:
-        db.execute('UPDATE poll_options SET votes=MAX(0, votes-1) WHERE id=?', (existing['option_id'],))
-        db.execute('DELETE FROM poll_votes WHERE post_id=? AND user_id=?', (post_id, uid))
+        db.execute('UPDATE poll_options SET votes=GREATEST(0, votes-1) WHERE id=%s', (existing['option_id'],))
+        db.execute('DELETE FROM poll_votes WHERE post_id=%s AND user_id=%s', (post_id, uid))
 
-    db.execute('INSERT OR IGNORE INTO poll_votes (post_id,option_id,user_id) VALUES (?,?,?) ',
+    db.execute('INSERT INTO poll_votes (post_id,option_id,user_id) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',
                (post_id, option_id, uid))
-    db.execute('UPDATE poll_options SET votes=votes+1 WHERE id=?', (option_id,))
+    db.execute('UPDATE poll_options SET votes=votes+1 WHERE id=%s', (option_id,))
     db.commit()
 
-    options = db.execute('SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (post_id,)).fetchall()
+    options = db.execute('SELECT * FROM poll_options WHERE post_id=%s ORDER BY id', (post_id,)).fetchall()
     total   = sum(o['votes'] for o in options)
     result  = [{'id': o['id'], 'label': o['label'], 'votes': o['votes'],
                 'pct': round(o['votes']*100/total) if total else 0} for o in options]
@@ -993,13 +941,13 @@ def poll_vote(post_id):
 def poll_edit(post_id):
     db  = get_db()
     uid = session['user_id']
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=%s', (post_id,)).fetchone()
     if not post or post['user_id'] != uid:
         return jsonify({'success': False, 'error': 'Not found or not authorized.'}), 404
     if (post['post_type'] if 'post_type' in post.keys() else 'post') != 'poll':
         return jsonify({'success': False, 'error': 'Not a poll.'}), 400
 
-    total_votes = db.execute('SELECT COALESCE(SUM(votes),0) FROM poll_options WHERE post_id=?',
+    total_votes = db.execute('SELECT COALESCE(SUM(votes),0) FROM poll_options WHERE post_id=%s',
                               (post_id,)).fetchone()[0]
     if total_votes > 0:
         return jsonify({'success': False, 'error': 'Cannot edit a poll that already has votes.'}), 400
@@ -1009,12 +957,12 @@ def poll_edit(post_id):
     if len(new_options) < 2:
         return jsonify({'success': False, 'error': 'A poll needs at least 2 options.'}), 400
 
-    db.execute('DELETE FROM poll_options WHERE post_id=?', (post_id,))
+    db.execute('DELETE FROM poll_options WHERE post_id=%s', (post_id,))
     for label in new_options:
-        db.execute('INSERT OR IGNORE INTO poll_options (post_id, label) VALUES (?,?)', (post_id, label))
+        db.execute('INSERT INTO poll_options (post_id, label) VALUES (%s,%s)', (post_id, label))
     db.commit()
 
-    options = db.execute('SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (post_id,)).fetchall()
+    options = db.execute('SELECT * FROM poll_options WHERE post_id=%s ORDER BY id', (post_id,)).fetchall()
     return jsonify({'success': True, 'options': [{'id': o['id'], 'label': o['label']} for o in options]})
 
 
@@ -1027,7 +975,7 @@ def toggle_post_saves():
     uid = session['user_id']
     data  = request.get_json(silent=True) or {}
     allow = 1 if data.get('allow', True) else 0
-    db.execute('UPDATE users SET allow_post_saves=? WHERE id=?', (allow, uid))
+    db.execute('UPDATE users SET allow_post_saves=%s WHERE id=%s', (allow, uid))
     db.commit()
     return jsonify({'success': True, 'allow_post_saves': bool(allow)})
 
@@ -1040,7 +988,7 @@ def online_heartbeat():
     db  = get_db()
     uid = session['user_id']
     now = datetime.now(timezone.utc).isoformat()
-    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
+    db.execute('UPDATE users SET online_at=%s WHERE id=%s', (now, uid))
     db.commit()
     return jsonify({'ok': True})
 
@@ -1052,7 +1000,7 @@ def toggle_online_status():
     uid  = session['user_id']
     data = request.get_json(silent=True) or {}
     show = 1 if data.get('show', True) else 0
-    db.execute('UPDATE users SET show_online=? WHERE id=?', (show, uid))
+    db.execute('UPDATE users SET show_online=%s WHERE id=%s', (show, uid))
     db.commit()
     return jsonify({'show_online': bool(show)})
 
@@ -1061,8 +1009,7 @@ def toggle_online_status():
 @login_required
 def check_online(username):
     db  = get_db()
-    udb   = get_user_db()
-    row = db.execute('SELECT online_at, show_online FROM users WHERE username=?', (username,)).fetchone()
+    row = db.execute('SELECT online_at, show_online FROM users WHERE username=%s', (username,)).fetchone()
     if not row or not row['show_online'] or not row['online_at']:
         return jsonify({'online': False})
     try:
@@ -1078,33 +1025,46 @@ def check_online(username):
 # ── Direct Messages ───────────────────────────────────────────────────────────
 
 def _get_or_create_conversation(db, uid, other_id):
-    """
-    Get or create a conversation. Uses db for global fallback;
-    uses the per-user DB (get_user_db) for the actual conversation record.
-    """
-    from helpers import get_user_db as _udb_fn
-    udb = _udb_fn()
     a, b = min(uid, other_id), max(uid, other_id)
-    conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE user_a=%s AND user_b=%s', (a, b)).fetchone()
     if not conv:
-        from datetime import datetime as _dt, timezone as _tz
-        now = _dt.now(_tz.utc).strftime('%Y-%m-%d %H:%M:%S')
-        udb.execute(
-            'INSERT OR IGNORE INTO conversations (user_a, user_b, last_msg_at) VALUES (?,?,?)',
-            (a, b, now)
-        )
-        udb.commit()
-        conv = udb.execute('SELECT * FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+        row = db.execute(
+            'INSERT INTO conversations (user_a, user_b, last_msg_at) VALUES (%s,%s,NOW()) '
+            'ON CONFLICT (user_a, user_b) DO UPDATE SET last_msg_at=NOW() '
+            'RETURNING id', (a, b)
+        ).fetchone()
+        conv_id = row['id']
+        conv    = db.execute('SELECT * FROM conversations WHERE id=%s', (conv_id,)).fetchone()
     return conv
 
 
+def _format_conversation(conv, uid, db):
+    other_id = conv['user_b'] if conv['user_a'] == uid else conv['user_a']
+    other    = db.execute('SELECT id,username,display_name,avatar_url,is_verified FROM users WHERE id=%s',
+                          (other_id,)).fetchone()
+    try:
+        last_msg = db.execute(
+            'SELECT id,conversation_id,sender_id,body,msg_type,file_name,is_read,created_at '
+            'FROM messages WHERE conversation_id=%s ORDER BY created_at DESC LIMIT 1', (conv['id'],)
+        ).fetchone()
+        unread = db.execute(
+            'SELECT COUNT(*) FROM messages WHERE conversation_id=%s AND sender_id!=%s AND is_read=0',
+            (conv['id'], uid)
+        ).fetchone()[0]
+    except Exception:
+        last_msg = None
+        unread   = 0
+    return {
+        'id': conv['id'], 'other': dict(other) if other else {},
+        'last_msg': dict(last_msg) if last_msg else None,
+        'unread': unread, 'last_msg_at': conv['last_msg_at'],
+    }
 
 
 @bp.route('/messages')
 @login_required
 def messages_inbox():
-    db  = get_db()      # global
-    udb = get_user_db() # personal (conversations, messages)
+    db  = get_db()
     uid = session['user_id']
     tab = request.args.get('tab', 'all').lower()
     if tab not in ('all', 'chats', 'groups'):
@@ -1112,7 +1072,7 @@ def messages_inbox():
 
     # ── Chats (1-to-1 DMs) ───────────────────────────────────────────────────
     chat_rows = db.execute(
-        'SELECT * FROM conversations WHERE user_a=? OR user_b=? '
+        'SELECT * FROM conversations WHERE user_a=%s OR user_b=%s '
         'ORDER BY last_msg_at DESC',
         (uid, uid)
     ).fetchall()
@@ -1122,12 +1082,12 @@ def messages_inbox():
     group_rows = db.execute("""
         SELECT g.* FROM groups g
         JOIN group_members gm ON gm.group_id = g.id
-        WHERE gm.user_id = ?
+        WHERE gm.user_id = %s
         ORDER BY g.created_at DESC
     """, (uid,)).fetchall()
     groups = [_format_group(r, uid, db) for r in group_rows]
 
-    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=?', (uid,))
+    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=%s', (uid,))
     db.commit()
 
     return render_template('messages.html',
@@ -1141,44 +1101,33 @@ def messages_inbox():
 @login_required
 def message_thread(username):
     db    = get_db()
-    udb   = get_user_db()
     uid   = session['user_id']
-    other = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    other = db.execute('SELECT * FROM users WHERE username=%s', (username,)).fetchone()
     if not other:
         return render_template('error.html', code=404, message='User not found.'), 404
     if other['id'] == uid:
         return redirect(url_for('social.messages_inbox'))
 
     conv = _get_or_create_conversation(db, uid, other['id'])
-    msgs = [dict(m) for m in udb.execute("""
+    msgs = [dict(m) for m in db.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
-        FROM messages m JOIN users u ON (
-            SELECT username FROM users WHERE id=m.sender_id LIMIT 1
-        )=u.username
-        WHERE m.conversation_id=? ORDER BY m.created_at ASC LIMIT 100
-    """, (conv['id'],)).fetchall() if False] or []
-    # Simpler join using global db for usernames:
-    raw_msgs = udb.execute(
-        'SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at ASC LIMIT 100',
-        (conv['id'],)
-    ).fetchall()
-    msgs = []
-    for m in raw_msgs:
-        md = dict(m)
-        sender = db.execute('SELECT username, avatar_url FROM users WHERE id=?',
-                             (md['sender_id'],)).fetchone()
-        md['sender_username'] = sender['username'] if sender else ''
-        md['sender_avatar']   = sender['avatar_url'] if sender else None
-        md.setdefault('edited_at', None)
-        md.setdefault('reactions', None)
-        md.setdefault('is_pinned', 0)
-        md.setdefault('reply_to_id', None)
-        md.setdefault('deleted_at', None)
-        msgs.append(md)
+        FROM messages m JOIN users u ON u.id=m.sender_id
+        WHERE m.conversation_id=%s ORDER BY m.created_at ASC LIMIT 100
+    """, (conv['id'],)).fetchall()]
+    for m in msgs:
+        m.setdefault('edited_at', None)
+        m.setdefault('reactions', None)
+        m.setdefault('is_pinned', 0)
+        m.setdefault('reply_to_id', None)
+        m.setdefault('deleted_at', None)
 
-    udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
+    db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=%s AND sender_id!=%s',
                (conv['id'], uid))
-    db.execute('UPDATE users SET unread_dm_count=0 WHERE id=?', (uid,))
+    total_unread = db.execute("""
+        SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
+        WHERE (c.user_a=%s OR c.user_b=%s) AND m.sender_id!=%s AND m.is_read=0
+    """, (uid, uid, uid)).fetchone()[0]
+    db.execute('UPDATE users SET unread_dm_count=%s WHERE id=%s', (total_unread, uid))
     db.commit()
 
     return render_template('message_thread.html', other=dict(other), messages=msgs,
@@ -1191,9 +1140,8 @@ def message_thread(username):
 @csrf_exempt   # JSON POST
 def send_message(username):
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
-    other = db.execute('SELECT id, username FROM users WHERE username=?', (username,)).fetchone()
+    other = db.execute('SELECT id, username FROM users WHERE username=%s', (username,)).fetchone()
     if not other or other['id'] == uid:
         return jsonify({'success': False, 'error': 'Invalid recipient.'}), 400
 
@@ -1222,11 +1170,9 @@ def send_message(username):
         return jsonify({'success': False, 'error': 'Message too long (max 2000 chars).'}), 400
 
     conv = _get_or_create_conversation(db, uid, other['id'])
-    if not conv:
-        return jsonify({'success': False, 'error': 'Could not create conversation.'}), 500
     now  = datetime.now(timezone.utc).isoformat()
 
-    # Upload file attachment to R2 if present
+    # Upload file attachment to B2 if present
     file_url = None
     if file_data:
         try:
@@ -1234,23 +1180,18 @@ def send_message(username):
         except (ValueError, RuntimeError) as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
-    # Messages and conversations are personal data → udb
-    view_once = int(bool(data.get('view_once', 0)))
-    udb.execute(
+    msg_id = db.execute(
         'INSERT INTO messages '
-        '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,view_once,created_at) '
-        'VALUES (?,?,?,?,?,?,?,?,?)',
-        (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, view_once, now)
-    )
-    msg_id = udb.lastrowid
-    udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
-    udb.commit()
-    # Global DB: update unread count and online status
-    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
-    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
+        '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,created_at) '
+        'VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
+        (conv['id'], uid, body, msg_type, file_url, file_name, file_mime, now)
+    ).fetchone()['id']
+    db.execute('UPDATE conversations SET last_msg_at=%s WHERE id=%s', (now, conv['id']))
+    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=%s', (other['id'],))
+    db.execute('UPDATE users SET online_at=%s WHERE id=%s', (now, uid))
     db.commit()
 
-    me = db.execute('SELECT username, avatar_url FROM users WHERE id=?', (uid,)).fetchone()
+    me = db.execute('SELECT username, avatar_url FROM users WHERE id=%s', (uid,)).fetchone()
     return jsonify({'success': True, 'message': {
         'id': msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
@@ -1263,32 +1204,31 @@ def send_message(username):
 @login_required
 def poll_messages(username):
     db    = get_db()
-    udb   = get_user_db()
     uid   = session['user_id']
     after = request.args.get('after', 0, type=int)
-    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    other = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
     if not other:
         return jsonify({'messages': []}), 404
 
     a, b = min(uid, other['id']), max(uid, other['id'])
-    conv = udb.execute('SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)).fetchone()
+    conv = db.execute('SELECT id FROM conversations WHERE user_a=%s AND user_b=%s', (a, b)).fetchone()
     if not conv:
         return jsonify({'messages': []})
 
     rows = db.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
         FROM messages m JOIN users u ON u.id=m.sender_id
-        WHERE m.conversation_id=? AND m.id > ? ORDER BY m.created_at ASC LIMIT 50
+        WHERE m.conversation_id=%s AND m.id > %s ORDER BY m.created_at ASC LIMIT 50
     """, (conv['id'], after)).fetchall()
 
     if rows:
-        udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
+        db.execute('UPDATE messages SET is_read=1 WHERE conversation_id=%s AND sender_id!=%s AND id > %s',
                    (conv['id'], uid, after))
         total_unread = db.execute("""
             SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
-            WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
+            WHERE (c.user_a=%s OR c.user_b=%s) AND m.sender_id!=%s AND m.is_read=0
         """, (uid, uid, uid)).fetchone()[0]
-        db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
+        db.execute('UPDATE users SET unread_dm_count=%s WHERE id=%s', (total_unread, uid))
         db.commit()
 
     return jsonify({'messages': [dict(r) for r in rows]})
@@ -1299,7 +1239,7 @@ def poll_messages(username):
 def api_unread_dms():
     db  = get_db()
     uid = session['user_id']
-    count = db.execute('SELECT unread_dm_count FROM users WHERE id=?', (uid,)).fetchone()
+    count = db.execute('SELECT unread_dm_count FROM users WHERE id=%s', (uid,)).fetchone()
     return jsonify({'count': int((count['unread_dm_count'] or 0)) if count else 0})
 
 
@@ -1318,10 +1258,10 @@ def set_typing(username):
 def is_typing(username):
     db  = get_db()
     uid = session['user_id']
-    other = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    other = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
     if not other:
         return jsonify({'typing': False})
-    me_row = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+    me_row = db.execute('SELECT username FROM users WHERE id=%s', (uid,)).fetchone()
     key    = (other['id'], me_row['username'] if me_row else '')
     ts     = _typing_state.get(key, 0)
     return jsonify({'typing': (datetime.now(timezone.utc).timestamp() - ts) < 3})
@@ -1331,9 +1271,8 @@ def is_typing(username):
 @login_required
 def edit_message(msg_id):
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
-    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
     if msg['sender_id'] != uid:
@@ -1347,23 +1286,49 @@ def edit_message(msg_id):
         return jsonify({'success': False, 'error': 'Invalid message body.'}), 400
 
     now = datetime.now(timezone.utc).isoformat()
-    udb.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
+    db.execute('UPDATE messages SET body=%s, edited_at=%s WHERE id=%s', (body, now, msg_id))
     db.commit()
     return jsonify({'success': True, 'body': body, 'edited_at': now})
+
+
+
+@bp.route('/messages/<int:msg_id>/view-once-open', methods=['POST'])
+@login_required
+@csrf_exempt
+def view_once_open(msg_id):
+    """Mark view-once message as opened; wipe file from R2 and DB."""
+    import storage as _st
+    udb = get_user_db()
+    uid = session['user_id']
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Not found.'}), 404
+    if msg['sender_id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot open your own view-once.'}), 400
+    already = msg['view_once_opened'] if 'view_once_opened' in msg.keys() else 0
+    if already:
+        return jsonify({'success': True, 'already_opened': True})
+    if msg.get('file_url'):
+        try: _st.delete_object(msg['file_url'])
+        except Exception: pass
+    udb.execute(
+        'UPDATE messages SET view_once_opened=1, file_url=NULL WHERE id=?', (msg_id,)
+    )
+    udb.commit()
+    return jsonify({'success': True})
 
 
 @bp.route('/api/messages/delete/<int:msg_id>', methods=['POST'])
 @login_required
 def delete_message(msg_id):
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
-    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
     if not msg or msg['sender_id'] != uid:
         return jsonify({'success': False, 'error': 'Not found or not authorized.'}), 404
     now = datetime.now(timezone.utc).isoformat()
     db.execute("UPDATE messages SET body='(deleted)',msg_type='text',file_url=NULL,"
-               "file_name=NULL,file_mime=NULL,deleted_at=? WHERE id=?", (now, msg_id))
+               "file_name=NULL,file_mime=NULL,deleted_at=%s WHERE id=%s", (now, msg_id))
     db.commit()
     return jsonify({'success': True})
 
@@ -1372,18 +1337,17 @@ def delete_message(msg_id):
 @login_required
 def react_message(msg_id):
     db    = get_db()
-    udb   = get_user_db()
     uid   = session['user_id']
     data  = request.get_json(silent=True) or {}
     emoji = (data.get('emoji') or '').strip()
     if not emoji or len(emoji) > 8:
         return jsonify({'success': False, 'error': 'Invalid emoji.'}), 400
 
-    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
 
-    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1402,7 +1366,7 @@ def react_message(msg_id):
     else:
         reactions.pop(emoji, None)
 
-    udb.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
+    db.execute('UPDATE messages SET reactions=%s WHERE id=%s', (json.dumps(reactions), msg_id))
     db.commit()
     return jsonify({'success': True, 'reactions': reactions})
 
@@ -1411,17 +1375,16 @@ def react_message(msg_id):
 @login_required
 def pin_message(msg_id):
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
-    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    msg = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False, 'error': 'Message not found.'}), 404
-    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
     new_state = 0 if (msg['is_pinned'] if 'is_pinned' in msg.keys() else 0) else 1
-    udb.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
+    db.execute('UPDATE messages SET is_pinned=%s WHERE id=%s', (new_state, msg_id))
     db.commit()
     return jsonify({'success': True, 'pinned': bool(new_state)})
 
@@ -1430,13 +1393,12 @@ def pin_message(msg_id):
 @login_required
 def message_info(msg_id):
     db  = get_db()
-    udb   = get_user_db()
     uid = session['user_id']
     msg = db.execute('SELECT m.*,u.username as sender_username,u.display_name as sender_display '
-                     'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?', (msg_id,)).fetchone()
+                     'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=%s', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False}), 404
-    conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
+    conv = db.execute('SELECT * FROM conversations WHERE id=%s', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False}), 403
     keys = msg.keys()
@@ -1451,7 +1413,6 @@ def message_info(msg_id):
 @login_required
 def forward_message():
     db         = get_db()
-    udb   = get_user_db()
     uid        = session['user_id']
     data       = request.get_json(silent=True) or {}
     msg_id     = data.get('msg_id')
@@ -1459,10 +1420,10 @@ def forward_message():
     if not msg_id or not recipients:
         return jsonify({'success': False, 'error': 'Missing data.'}), 400
 
-    src      = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
+    src      = db.execute('SELECT * FROM messages WHERE id=%s', (msg_id,)).fetchone()
     if not src:
         return jsonify({'success': False, 'error': 'Source message not found.'}), 404
-    src_conv = udb.execute('SELECT * FROM conversations WHERE id=?', (src['conversation_id'],)).fetchone()
+    src_conv = db.execute('SELECT * FROM conversations WHERE id=%s', (src['conversation_id'],)).fetchone()
     if not src_conv or (src_conv['user_a'] != uid and src_conv['user_b'] != uid):
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1476,15 +1437,15 @@ def forward_message():
     sent = 0
     now  = datetime.now(timezone.utc).isoformat()
     for username in recipients[:10]:
-        u = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+        u = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
         if not u or u['id'] == uid:
             continue
         conv = _get_or_create_conversation(db, uid, u['id'])
-        udb.execute('INSERT INTO messages (conversation_id,sender_id,body,msg_type,'
-                   'file_url,file_name,file_mime,created_at) VALUES (?,?,?,?,?,?,?,?)',
+        db.execute('INSERT INTO messages (conversation_id,sender_id,body,msg_type,'
+                   'file_url,file_name,file_mime,created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)',
                    (conv['id'], uid, body, msg_type, file_data, file_name, file_mime, now))
-        udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
-        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (u['id'],))
+        db.execute('UPDATE conversations SET last_msg_at=%s WHERE id=%s', (now, conv['id']))
+        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=%s', (u['id'],))
         sent += 1
     db.commit()
     return jsonify({'success': True, 'sent': sent})
@@ -1501,7 +1462,7 @@ def search_users_for_dm():
     like = f'%{q}%'
     rows = db.execute(
         'SELECT username,display_name,avatar_url,is_verified,follower_count '
-        'FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? '
+        'FROM users WHERE (username LIKE %s OR display_name LIKE %s) AND id != %s '
         'ORDER BY follower_count DESC LIMIT 10', (like, like, uid)
     ).fetchall()
     return jsonify({'users': [dict(u) for u in rows]})
@@ -1512,8 +1473,7 @@ def search_users_for_dm():
 def _format_channel(ch, uid, db):
     row = dict(ch)
     row['is_member'] = bool(db.execute(
-        'SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?',
-        (ch['id'], uid)
+        'SELECT 1 FROM channel_members WHERE channel_id=%s AND user_id=%s', (ch['id'], uid)
     ).fetchone())
     row['is_owner'] = ch['owner_id'] == uid
     return row
@@ -1528,30 +1488,21 @@ def channels_browse():
     tab = request.args.get('tab', 'discover')
 
     if tab == 'joined':
-        rows = db.execute(
-            'SELECT c.* FROM channels c JOIN channel_members cm ON cm.channel_id=c.id '
-            'WHERE cm.user_id=? ORDER BY c.member_count DESC, c.created_at DESC LIMIT 40',
-            (uid,)
-        ).fetchall()
+        rows = db.execute('SELECT c.* FROM channels c JOIN channel_members cm ON cm.channel_id=c.id '
+                          'WHERE cm.user_id=%s ORDER BY c.member_count DESC, c.created_at DESC LIMIT 40',
+                          (uid,)).fetchall()
     elif tab == 'owned':
-        rows = db.execute(
-            'SELECT * FROM channels WHERE owner_id=? ORDER BY created_at DESC LIMIT 40',
-            (uid,)
-        ).fetchall()
+        rows = db.execute('SELECT * FROM channels WHERE owner_id=%s ORDER BY created_at DESC LIMIT 40',
+                          (uid,)).fetchall()
     else:
         if q:
-            rows = db.execute(
-                'SELECT * FROM channels WHERE name LIKE ? OR description LIKE ? '
-                'ORDER BY member_count DESC LIMIT 30',
-                (f'%{q}%', f'%{q}%')
-            ).fetchall()
+            rows = db.execute('SELECT * FROM channels WHERE name LIKE %s OR description LIKE %s '
+                              'ORDER BY member_count DESC LIMIT 30', (f'%{q}%', f'%{q}%')).fetchall()
         else:
-            rows = db.execute(
-                'SELECT * FROM channels ORDER BY member_count DESC, created_at DESC LIMIT 40'
-            ).fetchall()
+            rows = db.execute('SELECT * FROM channels ORDER BY member_count DESC, created_at DESC LIMIT 40'
+                              ).fetchall()
 
-    return render_template('channels.html',
-                           channels=[_format_channel(r, uid, db) for r in rows],
+    return render_template('channels.html', channels=[_format_channel(r, uid, db) for r in rows],
                            tab=tab, q=q)
 
 
@@ -1571,20 +1522,17 @@ def channel_create():
         slug = re.sub(r'-+', '-', slug)[:50] or f'channel-{uid}'
         base_slug = slug
         for i in range(1, 10):
-            if not db.execute('SELECT 1 FROM channels WHERE slug=?', (slug,)).fetchone():
+            if not db.execute('SELECT 1 FROM channels WHERE slug=%s', (slug,)).fetchone():
                 break
             slug = f'{base_slug}-{i}'
         try:
-            db.execute(
+            ch_id = db.execute(
                 'INSERT INTO channels (name,slug,description,owner_id,is_public,member_count) '
-                'VALUES (?,?,?,?,?,1)',
+                'VALUES (%s,%s,%s,%s,%s,1) RETURNING id',
                 (name, slug, description or None, uid, is_public)
-            )
-            ch_id = db.lastrowid
-            db.execute(
-                'INSERT OR IGNORE INTO channel_members (channel_id,user_id,role) VALUES (?,?,?)',
-                (ch_id, uid, 'owner')
-            )
+            ).fetchone()['id']
+            db.execute('INSERT INTO channel_members (channel_id,user_id,role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',
+                       (ch_id, uid, 'owner'))
             db.commit()
             return jsonify({'success': True, 'redirect': url_for('social.channel_detail', slug=slug)})
         except Exception:
@@ -1597,11 +1545,11 @@ def channel_create():
 def channel_detail(slug):
     db  = get_db()
     uid = session['user_id']
-    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
     if not ch:
         return render_template('error.html', code=404, message='Channel not found.'), 404
 
-    member_row = db.execute('SELECT role FROM channel_members WHERE channel_id=? AND user_id=?',
+    member_row = db.execute('SELECT role FROM channel_members WHERE channel_id=%s AND user_id=%s',
                             (ch['id'], uid)).fetchone()
     is_member  = bool(member_row)
     user_role  = member_row['role'] if member_row else None
@@ -1611,12 +1559,12 @@ def channel_detail(slug):
         return render_template('error.html', code=403, message='This channel is private.'), 403
 
     post_rows = db.execute('SELECT p.* FROM posts p JOIN channel_posts cp ON cp.post_id=p.id '
-                           'WHERE cp.channel_id=? ORDER BY p.created_at DESC LIMIT 40',
+                           'WHERE cp.channel_id=%s ORDER BY p.created_at DESC LIMIT 40',
                            (ch['id'],)).fetchall()
     posts   = [format_post_with_poll(r, uid, db) for r in post_rows]
     members = [dict(m) for m in db.execute("""
         SELECT u.username, u.display_name, u.avatar_url, u.is_verified, cm.role
-        FROM channel_members cm JOIN users u ON u.id=cm.user_id WHERE cm.channel_id=?
+        FROM channel_members cm JOIN users u ON u.id=cm.user_id WHERE cm.channel_id=%s
         ORDER BY CASE cm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'mod' THEN 2 ELSE 3 END, cm.joined_at
         LIMIT 40
     """, (ch['id'],)).fetchall()]
@@ -1631,18 +1579,18 @@ def channel_detail(slug):
 def channel_join(slug):
     db  = get_db()
     uid = session['user_id']
-    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
     if not ch:
         return jsonify({'success': False, 'error': 'Channel not found.'}), 404
-    if db.execute('SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?',
+    if db.execute('SELECT 1 FROM channel_members WHERE channel_id=%s AND user_id=%s',
                   (ch['id'], uid)).fetchone():
         return jsonify({'success': False, 'error': 'Already a member.'}), 400
-    db.execute('INSERT OR IGNORE INTO channel_members (channel_id,user_id,role) VALUES (?,?,?) ',
+    db.execute('INSERT INTO channel_members (channel_id,user_id,role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',
                (ch['id'], uid, 'member'))
-    db.execute('UPDATE channels SET member_count=member_count+1 WHERE id=?', (ch['id'],))
+    db.execute('UPDATE channels SET member_count=member_count+1 WHERE id=%s', (ch['id'],))
     db.commit()
     return jsonify({'success': True, 'member_count': db.execute(
-        'SELECT member_count FROM channels WHERE id=?', (ch['id'],)
+        'SELECT member_count FROM channels WHERE id=%s', (ch['id'],)
     ).fetchone()[0]})
 
 
@@ -1651,13 +1599,13 @@ def channel_join(slug):
 def channel_leave(slug):
     db  = get_db()
     uid = session['user_id']
-    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
     if not ch:
         return jsonify({'success': False, 'error': 'Channel not found.'}), 404
     if ch['owner_id'] == uid:
         return jsonify({'success': False, 'error': 'Owner cannot leave.'}), 400
-    db.execute('DELETE FROM channel_members WHERE channel_id=? AND user_id=?', (ch['id'], uid))
-    db.execute('UPDATE channels SET member_count=MAX(0, member_count-1) WHERE id=?', (ch['id'],))
+    db.execute('DELETE FROM channel_members WHERE channel_id=%s AND user_id=%s', (ch['id'], uid))
+    db.execute('UPDATE channels SET member_count=GREATEST(0, member_count-1) WHERE id=%s', (ch['id'],))
     db.commit()
     return jsonify({'success': True})
 
@@ -1669,7 +1617,7 @@ def channel_edit(slug):
     import storage as _st
     db  = get_db()
     uid = session['user_id']
-    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
     if not ch or ch['owner_id'] != uid:
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1692,7 +1640,7 @@ def channel_edit(slug):
             return jsonify({'success': False, 'error': str(e)}), 400
 
     db.execute(
-        'UPDATE channels SET name=?, description=?, avatar_url=? WHERE id=?',
+        'UPDATE channels SET name=%s, description=%s, avatar_url=%s WHERE id=%s',
         (name, description or None, avatar_url, ch['id'])
     )
     db.commit()
@@ -1705,7 +1653,7 @@ def channel_edit(slug):
 def channel_promote(slug):
     db  = get_db()
     uid = session['user_id']
-    ch  = db.execute('SELECT * FROM channels WHERE slug=?', (slug,)).fetchone()
+    ch  = db.execute('SELECT * FROM channels WHERE slug=%s', (slug,)).fetchone()
     if not ch or ch['owner_id'] != uid:
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1715,14 +1663,14 @@ def channel_promote(slug):
     if new_role not in ('admin', 'mod', 'member'):
         return jsonify({'success': False, 'error': 'Invalid role.'}), 400
 
-    target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+    target = db.execute('SELECT id FROM users WHERE username=%s', (username,)).fetchone()
     if not target or target['id'] == uid:
         return jsonify({'success': False, 'error': 'User not found or invalid.'}), 404
-    if not db.execute('SELECT 1 FROM channel_members WHERE channel_id=? AND user_id=?',
+    if not db.execute('SELECT 1 FROM channel_members WHERE channel_id=%s AND user_id=%s',
                       (ch['id'], target['id'])).fetchone():
         return jsonify({'success': False, 'error': 'User is not a member.'}), 400
 
-    db.execute('UPDATE channel_members SET role=? WHERE channel_id=? AND user_id=?',
+    db.execute('UPDATE channel_members SET role=%s WHERE channel_id=%s AND user_id=%s',
                (new_role, ch['id'], target['id']))
     db.commit()
     return jsonify({'success': True, 'username': username, 'role': new_role})
@@ -1732,19 +1680,19 @@ def channel_promote(slug):
 
 def _format_group(row, uid, db):
     g      = dict(row)
-    member = db.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+    member = db.execute('SELECT role FROM group_members WHERE group_id=%s AND user_id=%s',
                         (row['id'], uid)).fetchone()
     g['is_member'] = bool(member)
     g['user_role'] = member['role'] if member else None
     g['is_owner']  = row['owner_id'] == uid
     last = db.execute('SELECT gm.*, u.username as sender_name FROM group_messages gm '
                       'JOIN users u ON u.id=gm.sender_id '
-                      'WHERE gm.group_id=? ORDER BY gm.created_at DESC LIMIT 1', (row['id'],)).fetchone()
+                      'WHERE gm.group_id=%s ORDER BY gm.created_at DESC LIMIT 1', (row['id'],)).fetchone()
     g['last_msg'] = dict(last) if last else None
     unread = db.execute(
-        'SELECT COUNT(*) FROM group_messages WHERE group_id=? AND sender_id!=? '
+        'SELECT COUNT(*) FROM group_messages WHERE group_id=%s AND sender_id!=%s '
         "AND created_at > COALESCE((SELECT last_read_at FROM group_members "
-        "WHERE group_id=? AND user_id=?), '1970-01-01'::timestamptz)",
+        "WHERE group_id=%s AND user_id=%s), '1970-01-01'::timestamptz)",
         (row['id'], uid, row['id'], uid)
     ).fetchone()[0]
     g['unread'] = unread
@@ -1761,13 +1709,13 @@ def groups_list():
     if tab == 'discover':
         rows = db.execute("""
             SELECT g.* FROM groups g
-            WHERE g.is_public=1 AND g.id NOT IN (SELECT group_id FROM group_members WHERE user_id=?)
+            WHERE g.is_public=1 AND g.id NOT IN (SELECT group_id FROM group_members WHERE user_id=%s)
             ORDER BY g.member_count DESC, g.created_at DESC LIMIT 40
         """, (uid,)).fetchall()
     else:
         rows = db.execute("""
             SELECT g.* FROM groups g JOIN group_members gm ON gm.group_id=g.id
-            WHERE gm.user_id=? ORDER BY g.created_at DESC LIMIT 40
+            WHERE gm.user_id=%s ORDER BY g.created_at DESC LIMIT 40
         """, (uid,)).fetchall()
 
     return render_template('groups.html', groups=[_format_group(r, uid, db) for r in rows], tab=tab)
@@ -1789,16 +1737,16 @@ def group_create():
         slug = re.sub(r'-+', '-', slug)[:50] or f'group-{uid}'
         base = slug
         for i in range(1, 20):
-            if not db.execute('SELECT 1 FROM groups WHERE slug=?', (slug,)).fetchone():
+            if not db.execute('SELECT 1 FROM groups WHERE slug=%s', (slug,)).fetchone():
                 break
             slug = f'{base}-{i}'
         try:
             gid = db.execute(
                 'INSERT INTO groups (name,slug,description,owner_id,is_public,member_count) '
-                'VALUES (?,?,?,?,?,1)',
+                'VALUES (%s,%s,%s,%s,%s,1) RETURNING id',
                 (name, slug, description or None, uid, is_public)
             ).fetchone()['id']
-            db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (?,?,?) ',
+            db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',
                        (gid, uid, 'owner'))
             db.commit()
             return jsonify({'success': True, 'redirect': url_for('social.group_detail', slug=slug)})
@@ -1812,11 +1760,11 @@ def group_create():
 def group_detail(slug):
     db  = get_db()
     uid = session['user_id']
-    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g:
         return render_template('error.html', code=404, message='Group not found.'), 404
 
-    member    = db.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+    member    = db.execute('SELECT role FROM group_members WHERE group_id=%s AND user_id=%s',
                            (g['id'], uid)).fetchone()
     is_member = bool(member)
     user_role = member['role'] if member else None
@@ -1826,24 +1774,24 @@ def group_detail(slug):
 
     if is_member:
         now = datetime.now(timezone.utc).isoformat()
-        db.execute('UPDATE group_members SET last_read_at=? WHERE group_id=? AND user_id=?',
+        db.execute('UPDATE group_members SET last_read_at=%s WHERE group_id=%s AND user_id=%s',
                    (now, g['id'], uid))
         db.execute('UPDATE users SET unread_group_count=('
                    'SELECT COUNT(DISTINCT gm2.group_id) FROM group_messages gm2 '
-                   'JOIN group_members gmp ON gmp.group_id=gm2.group_id AND gmp.user_id=? '
-                   'WHERE gm2.sender_id!=? AND gm2.created_at > COALESCE(gmp.last_read_at,\'1970-01-01\'::timestamptz)'
-                   ') WHERE id=?', (uid, uid, uid))
+                   'JOIN group_members gmp ON gmp.group_id=gm2.group_id AND gmp.user_id=%s '
+                   'WHERE gm2.sender_id!=%s AND gm2.created_at > COALESCE(gmp.last_read_at,\'1970-01-01\'::timestamptz)'
+                   ') WHERE id=%s', (uid, uid, uid))
         db.commit()
 
     msgs = [dict(m) for m in db.execute("""
         SELECT gm.*, u.username as sender_username, u.display_name as sender_display,
                u.avatar_url as sender_avatar
         FROM group_messages gm JOIN users u ON u.id=gm.sender_id
-        WHERE gm.group_id=? AND gm.deleted_at IS NULL ORDER BY gm.created_at ASC LIMIT 100
+        WHERE gm.group_id=%s AND gm.deleted_at IS NULL ORDER BY gm.created_at ASC LIMIT 100
     """, (g['id'],)).fetchall()]
     members = [dict(m) for m in db.execute("""
         SELECT u.username, u.display_name, u.avatar_url, u.is_verified, gm.role, gm.joined_at
-        FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=?
+        FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=%s
         ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'mod' THEN 2 ELSE 3 END, gm.joined_at
         LIMIT 50
     """, (g['id'],)).fetchall()]
@@ -1859,10 +1807,10 @@ def group_detail(slug):
 def group_send(slug):
     db  = get_db()
     uid = session['user_id']
-    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g:
         return jsonify({'success': False, 'error': 'Group not found.'}), 404
-    if not db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+    if not db.execute('SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s',
                       (g['id'], uid)).fetchone():
         return jsonify({'success': False, 'error': 'You are not a member.'}), 403
 
@@ -1899,14 +1847,14 @@ def group_send(slug):
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
     msg_id = db.execute(
-        'INSERT OR IGNORE INTO group_messages '
+        'INSERT INTO group_messages '
         '(group_id,sender_id,body,msg_type,file_url,file_name,file_mime,reply_to_id,created_at) '
-        'VALUES (?,?,?,?,?,?,?,?,?)',
+        'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
         (g['id'], uid, body, msg_type, file_url, file_name, file_mime, reply_to, now)
     ).fetchone()['id']
     db.execute('UPDATE users SET unread_group_count=unread_group_count+1 WHERE id IN '
-               '(SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?)', (g['id'], uid))
-    me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()
+               '(SELECT user_id FROM group_members WHERE group_id=%s AND user_id!=%s)', (g['id'], uid))
+    me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=%s', (uid,)).fetchone()
     db.commit()
 
     return jsonify({'success': True, 'message': {
@@ -1930,10 +1878,10 @@ def group_poll_messages(slug):
     db    = get_db()
     uid   = session['user_id']
     after = request.args.get('after', 0, type=int)
-    g     = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g     = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g:
         return jsonify({'messages': []}), 404
-    if not db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+    if not db.execute('SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s',
                       (g['id'], uid)).fetchone():
         return jsonify({'messages': []}), 403
 
@@ -1941,13 +1889,13 @@ def group_poll_messages(slug):
         SELECT gm.*, u.username as sender_username, u.display_name as sender_display,
                u.avatar_url as sender_avatar
         FROM group_messages gm JOIN users u ON u.id=gm.sender_id
-        WHERE gm.group_id=? AND gm.id > ? AND gm.deleted_at IS NULL
+        WHERE gm.group_id=%s AND gm.id > %s AND gm.deleted_at IS NULL
         ORDER BY gm.created_at ASC LIMIT 50
     """, (g['id'], after)).fetchall()
 
     if rows:
         now = datetime.now(timezone.utc).isoformat()
-        db.execute('UPDATE group_members SET last_read_at=? WHERE group_id=? AND user_id=?',
+        db.execute('UPDATE group_members SET last_read_at=%s WHERE group_id=%s AND user_id=%s',
                    (now, g['id'], uid))
         db.commit()
 
@@ -1961,7 +1909,7 @@ def group_edit(slug):
     import storage as _st
     db  = get_db()
     uid = session['user_id']
-    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g or g['owner_id'] != uid:
         return jsonify({'success': False, 'error': 'Not authorized.'}), 403
 
@@ -1984,7 +1932,7 @@ def group_edit(slug):
             return jsonify({'success': False, 'error': str(e)}), 400
 
     db.execute(
-        'UPDATE groups SET name=?, description=?, avatar_url=? WHERE id=?',
+        'UPDATE groups SET name=%s, description=%s, avatar_url=%s WHERE id=%s',
         (name, description or None, avatar_url, g['id'])
     )
     db.commit()
@@ -1997,16 +1945,16 @@ def group_edit(slug):
 def group_join(slug):
     db  = get_db()
     uid = session['user_id']
-    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g:
         return jsonify({'success': False, 'error': 'Group not found.'}), 404
     if not g['is_public']:
         return jsonify({'success': False, 'error': 'This group is private.'}), 403
-    if db.execute('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
+    if db.execute('SELECT 1 FROM group_members WHERE group_id=%s AND user_id=%s',
                   (g['id'], uid)).fetchone():
         return jsonify({'success': False, 'error': 'Already a member.'}), 400
-    db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (?,?,?) ', (g['id'], uid, 'member'))
-    db.execute('UPDATE groups SET member_count=member_count+1 WHERE id=?', (g['id'],))
+    db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING', (g['id'], uid, 'member'))
+    db.execute('UPDATE groups SET member_count=member_count+1 WHERE id=%s', (g['id'],))
     db.commit()
     return jsonify({'success': True})
 
@@ -2016,13 +1964,13 @@ def group_join(slug):
 def group_leave(slug):
     db  = get_db()
     uid = session['user_id']
-    g   = db.execute('SELECT * FROM groups WHERE slug=?', (slug,)).fetchone()
+    g   = db.execute('SELECT * FROM groups WHERE slug=%s', (slug,)).fetchone()
     if not g:
         return jsonify({'success': False, 'error': 'Not found.'}), 404
     if g['owner_id'] == uid:
         return jsonify({'success': False, 'error': 'Owner cannot leave.'}), 400
-    db.execute('DELETE FROM group_members WHERE group_id=? AND user_id=?', (g['id'], uid))
-    db.execute('UPDATE groups SET member_count=MAX(0, member_count-1) WHERE id=?', (g['id'],))
+    db.execute('DELETE FROM group_members WHERE group_id=%s AND user_id=%s', (g['id'], uid))
+    db.execute('UPDATE groups SET member_count=GREATEST(0, member_count-1) WHERE id=%s', (g['id'],))
     db.commit()
     return jsonify({'success': True})
 
@@ -2032,30 +1980,5 @@ def group_leave(slug):
 def api_group_unread():
     db  = get_db()
     uid = session['user_id']
-    row = db.execute('SELECT unread_group_count FROM users WHERE id=?', (uid,)).fetchone()
+    row = db.execute('SELECT unread_group_count FROM users WHERE id=%s', (uid,)).fetchone()
     return jsonify({'count': int(row['unread_group_count'] or 0) if row else 0})
-
-
-@bp.route('/messages/<int:msg_id>/view-once-open', methods=['POST'])
-@login_required
-@csrf_exempt
-def view_once_open(msg_id):
-    """Mark view-once message as opened, wipe file from R2 and DB."""
-    import storage as _st
-    udb = get_user_db()
-    uid = session['user_id']
-    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
-    if not msg: return jsonify({'success': False, 'error': 'Not found.'}), 404
-    if msg['sender_id'] == uid:
-        return jsonify({'success': False, 'error': 'Cannot open your own view-once.'}), 400
-    if msg.get('view_once_opened'):
-        return jsonify({'success': True, 'already_opened': True})
-    if msg.get('file_url'):
-        try: _st.delete_object(msg['file_url'])
-        except Exception: pass
-    udb.execute(
-        'UPDATE messages SET view_once_opened=1, file_url=NULL WHERE id=?', (msg_id,)
-    )
-    udb.commit()
-    return jsonify({'success': True})
-

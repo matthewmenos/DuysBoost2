@@ -50,7 +50,7 @@
 {% block content %}
 <div class="ch-header">
   <div>
-    <div style="font-family:var(--font-display);font-size:22px;font-weight:800"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> Channels</div>
+    <div style="font-family:var(--font-display);font-size:22px;font-weight:800">📡 Channels</div>
     <div class="text-sm text-muted">Join communities around topics you care about</div>
   </div>
   <a href="{{ url_for('social.channel_create') }}" class="btn btn-primary btn-sm">+ Create channel</a>
@@ -58,7 +58,7 @@
 
 <div class="ch-tabs">
   <a href="{{ url_for('social.channels_browse', tab='discover') }}" class="ch-tab {% if tab=='discover' %}active{% endif %}">🌐 Discover</a>
-  <a href="{{ url_for('social.channels_browse', tab='joined') }}"   class="ch-tab {% if tab=='joined' %}active{% endif %}"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> Joined</a>
+  <a href="{{ url_for('social.channels_browse', tab='joined') }}"   class="ch-tab {% if tab=='joined' %}active{% endif %}">✅ Joined</a>
   <a href="{{ url_for('social.channels_browse', tab='owned') }}"    class="ch-tab {% if tab=='owned' %}active{% endif %}">👑 My Channels</a>
 </div>
 
@@ -66,7 +66,7 @@
 <form method="get" action="{{ url_for('social.channels_browse') }}" style="padding:12px 16px;border-bottom:1px solid var(--border)">
   <input type="hidden" name="tab" value="discover">
   <div class="ch-search-bar">
-    <span style="color:var(--muted)"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+    <span style="color:var(--muted)">🔍</span>
     <input name="q" value="{{ q }}" placeholder="Search channels…" autocomplete="off">
     <button type="submit" class="btn btn-primary btn-sm" style="border-radius:50px">Search</button>
   </div>
@@ -95,14 +95,14 @@
     {% endif %}
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <span class="{% if ch.is_public %}ch-badge-pub{% else %}ch-badge-priv{% endif %}">{{ '🌐 Public' if ch.is_public else '🔒 Private' }}</span>
-      {% if ch.is_member %}<span class="ch-joined-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Joined</span>{% endif %}
+      {% if ch.is_member %}<span class="ch-joined-badge">✓ Joined</span>{% endif %}
     </div>
   </a>
   {% endfor %}
 </div>
 {% else %}
 <div class="empty-state" style="padding:64px 20px">
-  <div class="empty-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div>
+  <div class="empty-icon">📡</div>
   <div class="empty-title">
     {% if tab == 'joined' %}You haven't joined any channels yet
     {% elif tab == 'owned' %}You haven't created any channels

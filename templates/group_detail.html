@@ -114,14 +114,14 @@
         <div class="grp-hdr-name">{{ g.name }}</div>
         <div class="grp-hdr-sub">{{ g.member_count or 0 }} members</div>
       </div>
-      <button class="btn btn-ghost btn-sm" id="members-toggle" onclick="toggleMembers()" aria-label="Members"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></button>
+      <button class="btn btn-ghost btn-sm" id="members-toggle" onclick="toggleMembers()" aria-label="Members">👥</button>
       {% if is_member and not is_owner %}
       <button class="btn btn-ghost btn-sm" onclick="leaveGroup()" style="color:var(--muted)">Leave</button>
       {% elif not is_member %}
       <button class="btn btn-primary btn-sm" onclick="joinGroup()">Join</button>
       {% endif %}
       {% if is_owner %}
-      <button class="btn btn-ghost btn-sm" onclick="openModal('grp-edit-modal')" title="Group settings"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+      <button class="btn btn-ghost btn-sm" onclick="openModal('grp-edit-modal')" title="Group settings">⚙️</button>
       {% endif %}
     </div>
 
@@ -158,11 +158,11 @@
                 <div style="flex:1;height:24px;display:flex;align-items:center;gap:2px;overflow:hidden">
                   {% for i in range(20) %}<div style="width:3px;border-radius:2px;background:var(--muted-2);height:{{ [4,6,9,13,16,18,14,10,7,5,8,12,17,15,11,6,9,14,16,12][i%20] }}px"></div>{% endfor %}
                 </div>
-                <span style="font-size:11px;color:var(--muted)"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
+                <span style="font-size:11px;color:var(--muted)">🎙</span>
               </div>
             {% elif mt == 'file' and m.file_data %}
               <a class="grp-file" href="{{ m.file_data }}" download="{{ m.file_name or 'file' }}" target="_blank">
-                <span style="font-size:20px"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>
+                <span style="font-size:20px">📎</span>
                 <div><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">{{ m.file_name or 'file' }}</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div>
               </a>
             {% endif %}
@@ -210,7 +210,7 @@
 
   <!-- Members panel (desktop sidebar) -->
   <div class="grp-members-panel open" id="grp-members-panel">
-    <div class="grp-mp-header"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg> Members ({{ g.member_count or 0 }})</div>
+    <div class="grp-mp-header">👥 Members ({{ g.member_count or 0 }})</div>
     {% for m in members %}
     <div class="grp-mp-item">
       <div class="grp-av-sm" style="width:28px;height:28px;font-size:10px">
@@ -292,8 +292,8 @@ function renderStrip(){
   if(!pendingFiles.length){attStrip.className='grp-attach-strip';attStrip.innerHTML='';return;}
   attStrip.className='grp-attach-strip has-files';
   attStrip.innerHTML=pendingFiles.map(function(f,i){
-    const inner=f.type==='image'?'<img src="'+f.dataUrl+'" alt="" style="width:100%;height:100%;object-fit:cover">':f.type==='video'?'<video src="'+f.dataUrl+'" preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>':'<span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>';
-    return '<div style="position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">'+inner+'<button onclick="rmFile('+i+')" style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.72);border:none;cursor:pointer;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+    const inner=f.type==='image'?'<img src="'+f.dataUrl+'" alt="" style="width:100%;height:100%;object-fit:cover">':f.type==='video'?'<video src="'+f.dataUrl+'" preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>':'<span>📎</span>';
+    return '<div style="position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">'+inner+'<button onclick="rmFile('+i+')" style="position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.72);border:none;cursor:pointer;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center">✕</button></div>';
   }).join('');
 }
 window.rmFile=function(i){pendingFiles.splice(i,1);renderStrip();syncRbtn();};
@@ -332,8 +332,8 @@ function buildBubble(msg,mine){
   let media='';
   if(mt==='image'&&msg.file_data) media='<img class="grp-img" src="'+escapeHtml(msg.file_data)+'" alt="" onclick="lbOpen(this.src)" loading="lazy">';
   else if(mt==='video'&&msg.file_data) media='<video class="grp-vid" src="'+escapeHtml(msg.file_data)+'" controls preload="metadata"></video>';
-  else if(mt==='file'&&msg.file_data) media='<a class="grp-file" href="'+escapeHtml(msg.file_data)+'" download="'+escapeHtml(msg.file_name||'file')+'" target="_blank"><span style="font-size:20px"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">'+escapeHtml(msg.file_name||'file')+'</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div></a>';
-  else if(mt==='voice'&&msg.file_data) media='<div class="grp-voice" data-src="'+escapeHtml(msg.file_data)+'"><button class="vbtn" onclick="vPlay(this)" style="width:30px;height:30px;border-radius:50%;background:var(--gradient-primary);border:none;cursor:pointer;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▶</button><span style="font-size:11px;color:var(--muted)"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Voice</span></div>';
+  else if(mt==='file'&&msg.file_data) media='<a class="grp-file" href="'+escapeHtml(msg.file_data)+'" download="'+escapeHtml(msg.file_name||'file')+'" target="_blank"><span style="font-size:20px">📎</span><div><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">'+escapeHtml(msg.file_name||'file')+'</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div></a>';
+  else if(mt==='voice'&&msg.file_data) media='<div class="grp-voice" data-src="'+escapeHtml(msg.file_data)+'"><button class="vbtn" onclick="vPlay(this)" style="width:30px;height:30px;border-radius:50%;background:var(--gradient-primary);border:none;cursor:pointer;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center">▶</button><span style="font-size:11px;color:var(--muted)">🎙 Voice</span></div>';
   const body=msg.body?'<div class="grp-bub">'+escapeHtml(msg.body||'').replace(/\n/g,'<br>')+'</div>':'';
   const meta='<div class="grp-meta">'+(msg.created_at||'').substring(11,16)+'</div>';
   return '<div class="grp-row '+dir+'" data-id="'+msg.id+'">'+(mine?'':'<div>'+avSrc+'</div>')+'<div class="grp-col">'+senderLine+media+body+meta+'</div></div>';
@@ -405,7 +405,7 @@ window.lbOpen=lbOpen;
     <div class="modal" style="max-width:480px">
       <div class="modal-header">
         <div class="modal-title">Edit group</div>
-        <button class="modal-close" onclick="closeModal('grp-edit-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="modal-close" onclick="closeModal('grp-edit-modal')">✕</button>
       </div>
       <div style="text-align:center;margin-bottom:16px">
         <div id="grp-avatar-preview" style="width:72px;height:72px;border-radius:50%;overflow:hidden;margin:0 auto 10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:28px">
