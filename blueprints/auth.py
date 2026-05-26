@@ -78,6 +78,7 @@ def signup():
         add_notification(db, user['id'], '👋 Welcome to DUYS Boost! Your account is ready.')
         db.commit()
         session['user_id'] = user['id']
+        # New accounts via Google are never admin
         return jsonify({'success': True, 'redirect': url_for('social.feed')})
     return render_template('auth.html', mode='signup')
 
@@ -101,7 +102,11 @@ def login():
         maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
         session['user_id'] = user['id']
-        return jsonify({'success': True, 'redirect': url_for('social.feed')})
+        # Admin accounts land on the dashboard, not the social feed
+        user_d    = dict(user)
+        is_admin  = bool(user_d.get('is_admin', 0))
+        redirect_to = url_for('admin.admin') if is_admin else url_for('social.feed')
+        return jsonify({'success': True, 'redirect': redirect_to})
     return render_template('auth.html', mode='login')
 
 
@@ -309,7 +314,10 @@ def _finalize_oauth_login(userinfo, provider):
         session.clear()
         if user and dict(user).get('is_banned', 0):
             return redirect(url_for('auth.login') + '?banned=1')
-        session['user_id'] = user['id']
+        user_d = dict(user)
+        session['user_id'] = user_d['id']
+        if user_d.get('is_admin', 0):
+            return redirect(url_for('admin.admin'))
         return redirect(url_for('social.feed'))
 
     # New user — stash OAuth info, send to the profile-completion form
@@ -382,6 +390,7 @@ def complete_profile():
         # Clean up and log in
         session.pop('oauth_pending', None)
         session['user_id'] = user['id']
+        # New accounts via Google are never admin
         return jsonify({'success': True, 'redirect': url_for('social.feed')})
 
     return render_template(

@@ -210,7 +210,8 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
 <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
 <aside class="adm-sidebar">
   <div class="adm-logo">
-    <div class="adm-logo-text">DUYS Boost <span class="adm-logo-badge">ADMIN</span></div>
+    <div class="adm-logo-text">DUYS Boost</div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#1d9bf0);margin-top:2px">Admin Dashboard</div>
     <div style="font-size:12px;color:var(--muted);margin-top:3px">
       {{ current_user.username if current_user }}
     </div>
@@ -258,8 +259,19 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
     </a>
   </nav>
 
-  <div class="adm-footer">
-    <a href="{{ url_for('social.feed') }}">← Back to app</a>
+  <div class="adm-footer" style="padding:14px 18px;border-top:1px solid var(--border)">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Signed in as admin</div>
+    <a href="{{ url_for('auth.logout') }}"
+       style="display:flex;align-items:center;gap:7px;font-size:12.5px;
+              color:rgba(239,69,101,.7);text-decoration:none;font-weight:600">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+      Sign out
+    </a>
   </div>
 </aside>
 

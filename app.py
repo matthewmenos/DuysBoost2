@@ -244,14 +244,57 @@ def init_db():
     conn.executescript(GLOBAL_SCHEMA)
     conn.commit()
 
-    # Seed default admin if not present
-    admin = conn.execute('SELECT id FROM users WHERE username=?', ('admin',)).fetchone()
-    if not admin:
+    # ── Admin account — always created/updated from env vars ─────────────────
+    # Set ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD in Render environment.
+    # These are read on EVERY startup so changing the env var immediately
+    # takes effect on next deploy without needing to wipe the database.
+    import os as _os
+    admin_username = _os.environ.get('ADMIN_USERNAME', '').strip() or 'admin'
+    admin_email    = _os.environ.get('ADMIN_EMAIL',    '').strip() or 'admin@duysboost.com'
+    admin_password = _os.environ.get('ADMIN_PASSWORD', '').strip()
+
+    existing = conn.execute(
+        'SELECT id, password FROM users WHERE is_admin=1 LIMIT 1'
+    ).fetchone()
+
+    if not existing:
+        # First boot — create admin from env vars (or safe fallback)
+        if not admin_password:
+            import logging as _log
+            _log.getLogger(__name__).critical(
+                'ADMIN_PASSWORD not set! Using temporary password "changeme" — '
+                'SET ADMIN_PASSWORD in your environment variables immediately.'
+            )
+            admin_password = 'changeme'
         conn.execute(
-            'INSERT INTO users (username,email,password,is_admin,balance,referral_code) '
-            'VALUES (?,?,?,1,1000.0,?)',
-            ('admin', 'admin@duysboost.com', hash_password('admin123'), _sec.token_hex(5))
+            'INSERT INTO users '
+            '(username,email,password,is_admin,balance,referral_code) '
+            'VALUES (?,?,?,1,0,?)',
+            (admin_username, admin_email,
+             hash_password(admin_password), _sec.token_hex(5))
         )
+        print(f'✅ Admin account created: username={admin_username} email={admin_email}')
+    else:
+        # Subsequent boots — sync username/email/password if env vars are set
+        updates = []
+        params  = []
+        if admin_password:
+            updates.append('password=?')
+            params.append(hash_password(admin_password))
+        if admin_username:
+            updates.append('username=?')
+            params.append(admin_username)
+        if admin_email:
+            updates.append('email=?')
+            params.append(admin_email)
+        if updates:
+            params.append(existing['id'])
+            conn.execute(
+                f'UPDATE users SET {", ".join(updates)} WHERE id=?', params
+            )
+        # Ensure is_admin flag is always set
+        conn.execute('UPDATE users SET is_admin=1 WHERE id=?', (existing['id'],))
+
     conn.commit()
     conn.close()
     print('✅ Global SQLite database initialised.')
