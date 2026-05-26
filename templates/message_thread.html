@@ -4,14 +4,24 @@
 
 {% block head_extra %}
 <style>
+/* Ensure the page-content takes full height with no padding for chat */
+.page-content { padding: 0 !important; height: calc(100dvh - var(--topbar-height)); overflow: hidden; }
+
 .chat-shell {
   display: flex; flex-direction: column;
-  height: calc(100dvh - var(--topbar-height) - 80px);
+  /* Mobile: bottom nav is hidden on chat page, use full remaining height */
+  height: calc(100dvh - var(--topbar-height));
   max-width: 760px; margin: 0 auto; min-height: 0;
-  border-radius: var(--radius-lg); overflow: hidden;
-  border: 1px solid var(--border);
+  border-radius: 0; overflow: hidden;
+  border: none; border-left: 1px solid var(--border);
 }
-@media (min-width: 900px) { .chat-shell { height: calc(100dvh - var(--topbar-height) - 28px); } }
+@media (min-width: 900px) {
+  .chat-shell {
+    height: calc(100dvh - var(--topbar-height) - 24px);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+}
 
 .chat-hdr {
   display: flex; align-items: center; gap: 10px;

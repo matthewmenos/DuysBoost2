@@ -8,13 +8,13 @@
 /* ── Design tokens ──────────────────────────────────────────────────────── */
 :root {
   /* ── Dark theme (default) ───────────────────────────────────────────── */
-  --bg:           #040d1a;
-  --bg-elevated:  #071428;
-  --surface:      rgba(8, 20, 44, 0.92);
-  --surface-2:    rgba(13, 32, 64, 0.85);
-  --surface-3:    rgba(18, 40, 76, 0.9);
-  --border:       rgba(29,155,240,0.12);
-  --border-strong:rgba(29,155,240,0.25);
+  --bg:           #0c0d10;
+  --bg-elevated:  #111318;
+  --surface:      #111318;
+  --surface-2:    #181b22;
+  --surface-3:    #1e2230;
+  --border:       rgba(255,255,255,0.07);
+  --border-strong:rgba(255,255,255,0.14);
 
   --text:         #eeedf0;
   --text-dim:     #a8a8c0;
@@ -33,21 +33,19 @@
   --yellow:       #ffd400;
   --orange:       #ff7a00;
 
-  /* Liquid-glass blue palette */
-  --glass-bg:     rgba(10, 20, 40, 0.65);
-  --glass-border: rgba(29, 155, 240, 0.18);
-  --glass-glow:   rgba(29, 155, 240, 0.12);
-  --blue-deep:    #0a1628;
-  --blue-mid:     #0d2040;
-  --blue-surface: rgba(13, 32, 64, 0.8);
+  /* Surface glass variables */
+  --glass-bg:     rgba(17, 19, 24, 0.85);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-glow:   rgba(255,255,255,0.04);
 
-  --gradient-primary:  linear-gradient(135deg, #1d9bf0 0%, #00c6ff 100%);
-  --gradient-accent:   linear-gradient(135deg, #1d9bf0 0%, #60b8f9 100%);
-  --gradient-green:    linear-gradient(135deg, #00ba7c 0%, #1be6a4 100%);
-  --gradient-warm:     linear-gradient(135deg, #ff7a00 0%, #ffd400 100%);
-  --gradient-subtle:   linear-gradient(160deg, rgba(29,155,240,.06) 0%, rgba(0,198,255,.04) 100%);
-  --gradient-hero:     radial-gradient(ellipse 80% 60% at 50% 0%, rgba(29,155,240,.28) 0%, transparent 70%);
-  --gradient-glass:    linear-gradient(135deg, rgba(29,155,240,.1) 0%, rgba(0,198,255,.06) 100%);
+  /* Gradients removed — use flat solid colours */
+  --gradient-primary:  var(--accent);
+  --gradient-accent:   var(--accent);
+  --gradient-green:    var(--green);
+  --gradient-warm:     var(--orange);
+  --gradient-subtle:   rgba(255,255,255,.02);
+  --gradient-hero:     transparent;
+  --gradient-glass:    transparent;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -61,12 +59,12 @@
   --shadow:    0 8px 30px rgba(0,0,0,.25);
   --shadow-lg: 0 16px 50px rgba(0,0,0,.32);
   --shadow-xl: 0 24px 64px rgba(0,0,0,.4);
-  --glow-accent: 0 0 0 1px rgba(29,155,240,.3), 0 6px 24px rgba(29,155,240,.22);
+  --glow-accent: 0 0 0 1px rgba(29,155,240,.2), 0 4px 16px rgba(0,0,0,.3);
   --glow-green:  0 0 0 1px rgba(0,186,124,.28), 0 6px 24px rgba(0,186,124,.2);
 
   --sidebar-width:    252px;
   /* Liquid glass surface style */
-  --glass-surface: rgba(8, 22, 50, 0.7) backdrop-filter:blur(20px);
+
   --topbar-height:    62px;
   --bottomnav-height: 68px;
 
@@ -1892,6 +1890,13 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 /* ── Force-hide bottom nav on chat page ──────────────────────────────────── */
 .bottom-nav.force-hidden {
   display: none !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
+
+/* When bottom nav is hidden, page-content fills to the bottom */
+body:has(.bottom-nav.force-hidden) .page-content {
+  padding-bottom: 0 !important;
 }
 
 /* ── Poll in post card ───────────────────────────────────────────────────── */
@@ -2136,7 +2141,7 @@ button:hover .i-icon, a:hover .i-icon,
 
 /* Glass card base */
 .glass-card, .sidebar, .topbar, .surface-card {
-  background: rgba(8, 20, 44, 0.75) !important;
+  background: var(--surface) !important;
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border: 1px solid rgba(29, 155, 240, 0.14) !important;
@@ -2158,7 +2163,7 @@ button:hover .i-icon, a:hover .i-icon,
 
 /* Post cards glass */
 .post-card {
-  background: rgba(6, 18, 42, 0.72) !important;
+  background: var(--surface) !important;
   border: 1px solid rgba(29,155,240,.1) !important;
   backdrop-filter: blur(12px);
   transition: border-color .2s, box-shadow .2s;
@@ -2177,7 +2182,7 @@ button:hover .i-icon, a:hover .i-icon,
 
 /* Modal glass */
 .modal {
-  background: rgba(4, 14, 38, 0.92) !important;
+  background: var(--bg-elevated) !important;
   border: 1px solid rgba(29,155,240,.2) !important;
   backdrop-filter: blur(32px);
   box-shadow: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px rgba(29,155,240,.08);
@@ -2214,12 +2219,7 @@ button:hover .i-icon, a:hover .i-icon,
 }
 
 /* Body background — deep blue gradient */
-body {
-  background: radial-gradient(ellipse 120% 80% at 50% -10%,
-    rgba(29,155,240,.18) 0%, rgba(4,13,28,.0) 60%),
-    linear-gradient(180deg, #040d1a 0%, #020810 100%) !important;
-  min-height: 100vh;
-}
+body { background: var(--bg) !important; }
 
 /* App layout background */
 .app-layout {
@@ -2228,14 +2228,14 @@ body {
 
 /* Bottom nav glass */
 .bottom-nav {
-  background: rgba(4, 13, 30, 0.88) !important;
+  background: var(--bg-elevated) !important;
   border-top: 1px solid rgba(29,155,240,.12) !important;
   backdrop-filter: blur(20px);
 }
 
 /* Feed sidebar widgets */
 .feed-sidebar .sidebar-widget {
-  background: rgba(6, 16, 40, 0.72) !important;
+  background: var(--surface) !important;
   border: 1px solid rgba(29,155,240,.1) !important;
 }
 
@@ -2285,11 +2285,7 @@ body {
   --glass-bg:     rgba(255,255,255,0.75);
   --glass-border: rgba(29,155,240,.2);
 }
-[data-theme="light"] body {
-  background: radial-gradient(ellipse 120% 60% at 50% -10%,
-    rgba(29,155,240,.15) 0%, transparent 60%),
-    linear-gradient(180deg, #e8f4fd 0%, #f5fbff 100%) !important;
-}
+[data-theme="light"] body { background: var(--bg) !important; }
 [data-theme="light"] .sidebar,
 [data-theme="light"] .topbar,
 [data-theme="light"] .post-card,

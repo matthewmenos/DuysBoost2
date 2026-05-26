@@ -4,9 +4,7 @@
 
 {% block head_extra %}
 <style>
-body.landing-body {
-  background: radial-gradient(ellipse 120% 50% at 50% -5%, rgba(29,155,240,.2) 0%, transparent 55%),
-    linear-gradient(180deg, #040d1a 0%, #020810 100%) !important; background: var(--bg); }
+body.landing-body { background: var(--bg); }
 
 /* ── Landing shell ──────────────────────────────────────────────────────── */
 .landing { width: 100%; min-height: 100vh; overflow-x: hidden; }
@@ -53,14 +51,14 @@ body.landing-body {
 .hero::before {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(29,155,240,.3) 0%, transparent 70%);
+  background: var(--bg);
   pointer-events: none;
 }
 .hero::after {
   content: '';
   position: absolute;
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(44,182,125,.1) 0%, transparent 65%);
+  background: var(--bg);
   bottom: -150px; right: -100px;
   pointer-events: none;
 }
@@ -93,11 +91,7 @@ body.landing-body {
   letter-spacing: -0.03em;
   animation: fadeUp .6s .1s cubic-bezier(.34,1.4,.64,1) both;
 }
-.hero h1 .grad {
-  background: linear-gradient(135deg, #fff 0%, #1d9bf0 60%, #00c6ff 100%);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+.hero h1 .grad { color: var(--accent); }
 
 .hero-sub {
   font-size: clamp(15px,3.5vw,19px);
@@ -127,7 +121,7 @@ body.landing-body {
 .proof-num {
   font-family: var(--font-display);
   font-size: 24px; font-weight: 800;
-  background: linear-gradient(135deg, #fff 0%, #1d9bf0 60%, #00c6ff 100%);
+  background: var(--text);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1;
@@ -265,7 +259,7 @@ body.landing-body {
 .cta-banner {
   margin: 40px 20px 72px;
   max-width: 860px; margin-left: auto; margin-right: auto;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-2xl);
   padding: 48px 28px;
@@ -273,20 +267,8 @@ body.landing-body {
   position: relative; overflow: hidden;
 }
 @media (min-width: 720px) { .cta-banner { padding: 64px 48px; margin: 40px auto 72px; } }
-.cta-banner::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: var(--gradient-subtle);
-  pointer-events: none;
-}
-.cta-banner::after {
-  content: '';
-  position: absolute;
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(127,90,240,.15) 0%, transparent 65%);
-  top: -100px; right: -80px;
-  pointer-events: none;
-}
+.cta-banner::before { display:none; }
+.cta-banner::after { display:none; }
 .cta-banner > * { position: relative; z-index: 1; }
 .cta-banner h2 { margin-bottom: 12px; letter-spacing: -0.03em; }
 .cta-banner p {
@@ -349,14 +331,14 @@ body.landing-body {
   <section class="hero" aria-labelledby="hero-heading">
     <div class="hero-eyebrow">
       <span class="dot" aria-hidden="true"></span>
-      Real users. Real engagement. Instant payouts.
+      Social growth meets crypto earnings
     </div>
     <h1 id="hero-heading">
-      The smarter way to<br><span class="grad">grow your audience</span>
+      Grow faster.<br><span class="grad">Earn while you do.</span>
     </h1>
     <p class="hero-sub">
-      Run campaigns to gain real followers, or earn USDT by completing tasks —
-      all verified on-chain with automatic crypto payments.
+      DUYS Boost is a social platform where creators run engagement campaigns
+      and users earn USDT for real interactions — no bots, no faking, on-chain payouts.
     </p>
     <div class="hero-ctas">
       <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-xl">Start for free →</a>
@@ -364,23 +346,23 @@ body.landing-body {
     </div>
     <div class="hero-proof" role="list" aria-label="Platform stats">
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">10K+</div>
-        <div class="proof-label">Active users</div>
+        <div class="proof-num">Post</div>
+        <div class="proof-label">Share content</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">$50K+</div>
-        <div class="proof-label">Paid out</div>
+        <div class="proof-num">Boost</div>
+        <div class="proof-label">Run campaigns</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
-        <div class="proof-num">500K+</div>
-        <div class="proof-label">Tasks done</div>
+        <div class="proof-num">Earn</div>
+        <div class="proof-label">USDT payouts</div>
       </div>
       <div class="proof-divider" aria-hidden="true"></div>
       <div class="proof-stat" role="listitem">
         <div class="proof-num">3 chains</div>
-        <div class="proof-label">USDT supported</div>
+        <div class="proof-label">Aptos · BSC · Avalanche</div>
       </div>
     </div>
   </section>
@@ -388,8 +370,8 @@ body.landing-body {
   <!-- How it works -->
   <section class="how-section" id="how" aria-labelledby="how-heading">
     <div class="section-eyebrow">Simple process</div>
-    <h2 id="how-heading">How DUYS Boost works</h2>
-    <p class="lead">Four steps from sign-up to seeing results — whether you're a creator or an earner.</p>
+    <h2 id="how-heading">Two paths, one platform</h2>
+    <p class="lead">Whether you want to grow an audience or earn crypto — DUYS Boost has you covered in minutes.</p>
 
     <div class="steps">
       <div class="step">
