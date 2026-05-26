@@ -369,6 +369,7 @@
       <button class="ctx-react-btn" onclick="reactToMsg('😮')">😮</button>
       <button class="ctx-react-btn" onclick="reactToMsg('😢')">😢</button>
       <button class="ctx-react-btn" onclick="reactToMsg('🙏')">🙏</button>
+      <button class="ctx-react-btn" onclick="openMsgEmojiPicker(event)" style="font-size:13px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:2px 8px;color:var(--muted)">+</button>
     </div>
     <div id="ctx-actions"></div>
   </div>
@@ -474,12 +475,6 @@ function syncRbtn() {
   }
 }
 
-function rbtnClick() {
-  const hasContent = txtEl.value.trim().length > 0 || pendingFiles.length > 0;
-  if (isRec) return stopRec();
-  if (hasContent) return doSend();
-  startRec();
-}
 
 /* ── Textarea ────────────────────────────────────────────────────────── */
 txtEl.addEventListener('input', function() {
@@ -921,6 +916,52 @@ function rbtnClick() {
   else startRec();
 }
 window.rbtnClick = rbtnClick;
+
+/* ── Full emoji picker ─────────────────────────────────────────────────── */
+var _FULL_EMOJI = ['❤️','😂','😮','😢','👍','🙏','🔥','😍','🎉','💯',
+  '👏','😭','🤣','😊','🥹','🫶','💪','✨','😤','🤯','😱','🤔','😎',
+  '🥳','😅','😬','🙄','😴','😋','🤩','😇','🥺','😠','🤬'];
+var _emojiPickerEl = null;
+
+function openMsgEmojiPicker(event) {
+  if (_emojiPickerEl && document.body.contains(_emojiPickerEl)) {
+    document.body.removeChild(_emojiPickerEl); _emojiPickerEl = null; return;
+  }
+  _emojiPickerEl = document.createElement('div');
+  _emojiPickerEl.style.cssText =
+    'position:fixed;z-index:6000;background:var(--surface);' +
+    'border:1px solid var(--border);border-radius:16px;padding:10px;' +
+    'display:flex;flex-wrap:wrap;gap:4px;width:264px;' +
+    'box-shadow:0 8px 32px rgba(0,0,0,.45)';
+  _FULL_EMOJI.forEach(function(e) {
+    var b = document.createElement('button');
+    b.textContent = e;
+    b.style.cssText = 'font-size:20px;border:none;background:none;cursor:pointer;padding:4px;border-radius:8px';
+    b.onmouseenter = function() { b.style.background='var(--surface-2)'; };
+    b.onmouseleave = function() { b.style.background='none'; };
+    b.onclick = function() {
+      if (typeof reactToMsg === 'function') reactToMsg(e);
+      if (_emojiPickerEl && document.body.contains(_emojiPickerEl)) {
+        document.body.removeChild(_emojiPickerEl); _emojiPickerEl = null;
+      }
+    };
+    _emojiPickerEl.appendChild(b);
+  });
+  var rect = event.target.getBoundingClientRect();
+  _emojiPickerEl.style.top  = Math.max(10, rect.bottom - 280) + 'px';
+  _emojiPickerEl.style.left = Math.max(10, Math.min(rect.left-120, window.innerWidth-280)) + 'px';
+  document.body.appendChild(_emojiPickerEl);
+  setTimeout(function() {
+    document.body.addEventListener('click', function closePk(ev) {
+      if (_emojiPickerEl && !_emojiPickerEl.contains(ev.target)) {
+        if (document.body.contains(_emojiPickerEl)) document.body.removeChild(_emojiPickerEl);
+        _emojiPickerEl = null;
+        document.body.removeEventListener('click', closePk);
+      }
+    });
+  }, 50);
+}
+window.openMsgEmojiPicker = openMsgEmojiPicker;
 
 </script>
 {% endblock %}

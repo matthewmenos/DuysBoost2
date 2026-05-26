@@ -295,7 +295,22 @@ function openStoryGroup(groupIdx, storyIdx) {
 }
 window.openStoryGroup = openStoryGroup;
 
+let _svPaused = false;
+
+function toggleStoryPause() {
+  _svPaused = !_svPaused;
+  document.querySelectorAll('.sv-seg .fill').forEach(function(el) {
+    el.style.animationPlayState = _svPaused ? 'paused' : 'running';
+  });
+  var vid = document.querySelector('#sv-media video');
+  if (vid) { _svPaused ? vid.pause() : vid.play(); }
+  var badge = document.getElementById('sv-pause-badge');
+  if (badge) badge.style.display = _svPaused ? 'flex' : 'none';
+}
+window.toggleStoryPause = toggleStoryPause;
+
 function _showCurrentStory() {
+  _svPaused = false;
   clearTimeout(_svTimer);
   const grp    = _storyGroups[_svGroupIdx];
   const story  = grp && grp.stories[_svStoryIdx];

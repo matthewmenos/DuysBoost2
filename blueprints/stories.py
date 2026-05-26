@@ -111,7 +111,8 @@ def _format_story(row, viewer_uid):
     except Exception:
         viewed_list = []
     d['viewed']      = viewer_uid in viewed_list
-    d['view_count']  = len(viewed_list)
+    # Exclude owner from view count
+    d['view_count']  = len([v for v in viewed_list if v != d.get('user_id')])
     d['is_own']      = d['user_id'] == viewer_uid
     # Time remaining
     try:
@@ -129,8 +130,8 @@ def _format_story(row, viewer_uid):
 
 @bp.route('/api/story/create', methods=['POST'])
 @login_required
-@csrf_exempt
 @limiter.limit('20 per hour')
+@csrf_exempt
 def create_story():
     """
     Upload a story (image or video).
@@ -311,7 +312,7 @@ def story_viewers(story_id):
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        'SELECT id, user_id, viewed_by FROM stories WHERE id = ?', (story_id,)
+        'SELECT id, user_id, viewed_by, reactions_data FROM stories WHERE id = ?', (story_id,)
     ).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found.'}), 404
@@ -342,10 +343,18 @@ def story_viewers(story_id):
                 'avatar_url':   u['avatar_url'],
             })
 
+    # Parse reactions
+    try:
+        reactions_map = json.loads(row['reactions_data'] or '{}')
+    except Exception:
+        reactions_map = {}
+    for v in viewers:
+        v['reaction'] = reactions_map.get(str(v['id']))
     return jsonify({
         'success':     True,
         'view_count':  len(viewed_list),
         'viewers':     viewers,
+        'reactions':   reactions_map,
     })
 
 
