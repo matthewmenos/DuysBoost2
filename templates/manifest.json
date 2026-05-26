@@ -1,0 +1,12 @@
+{
+  "background_color": "#ffffff",
+  "description": "DUYS-grow your social media with real engagement campaigns.",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "DUYS",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "duys-boost.onrender",
+  "start_url": "/",
+  "theme_color": "#0c0d10"
+}
