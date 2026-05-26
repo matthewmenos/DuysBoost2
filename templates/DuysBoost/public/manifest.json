@@ -1,0 +1,17 @@
+{
+  "background_color": "#ffffff",
+  "description": "DUYS Boost — grow your social media with real engagement campaigns.",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "DUYS",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "duys-boost.onrender",
+  "start_url": "/login",
+  "theme_color": "#0c0d10",
+  "prefer_related_applications": true,
+  "categories": [
+    "finance",
+    "social"
+  ]
+}
