@@ -119,6 +119,7 @@ def _format_story(row, viewer_uid):
 @bp.route('/api/story/create', methods=['POST'])
 @login_required
 @limiter.limit('20 per hour')
+@csrf_exempt
 def create_story():
     """
     Upload a story (image or video).
@@ -146,7 +147,7 @@ def create_story():
 
     row = db.execute("""
         INSERT INTO stories (user_id, media_url, media_mime, caption)
-        VALUES (%s, %s, %s, %s)
+        VALUES (?, ?, ?, ?)
         RETURNING id, expires_at, created_at
     """, (uid, media_url, mime, caption or None)).fetchone()
     db.commit()
@@ -181,10 +182,10 @@ def stories_feed():
                u.is_verified  AS author_verified
         FROM stories s
         JOIN users u ON u.id = s.user_id
-        WHERE s.expires_at > NOW()
+        WHERE s.expires_at > datetime('now')
           AND (
-              s.user_id = %s
-              OR s.user_id IN (SELECT following_id FROM follows WHERE follower_id = %s)
+              s.user_id = ?
+              OR s.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?)
           )
         ORDER BY s.user_id, s.created_at ASC
     """, (uid, uid)).fetchall()
@@ -230,7 +231,7 @@ def user_stories(user_id):
     rows = db.execute("""
         SELECT s.*, u.username, u.display_name, u.avatar_url
         FROM stories s JOIN users u ON u.id = s.user_id
-        WHERE s.user_id = %s AND s.expires_at > NOW()
+        WHERE s.user_id = ? AND s.expires_at > datetime('now')
         ORDER BY s.created_at ASC
     """, (user_id,)).fetchall()
     return jsonify({'stories': [_format_story(r, uid) for r in rows]})
@@ -246,7 +247,7 @@ def get_story(story_id):
     row = db.execute("""
         SELECT s.*, u.username, u.display_name, u.avatar_url
         FROM stories s JOIN users u ON u.id = s.user_id
-        WHERE s.id = %s AND s.expires_at > NOW()
+        WHERE s.id = ? AND s.expires_at > datetime('now')
     """, (story_id,)).fetchone()
     if not row:
         return jsonify({'success': False, 'error': 'Story not found or expired.'}), 404
@@ -262,7 +263,7 @@ def view_story(story_id):
     db  = get_db()
     uid = session['user_id']
     row = db.execute(
-        "SELECT id, viewed_by, user_id FROM stories WHERE id = %s AND expires_at > NOW()",
+        "SELECT id, viewed_by, user_id FROM stories WHERE id = ? AND expires_at > datetime('now')",
         (story_id,)
     ).fetchone()
     if not row:
@@ -275,7 +276,7 @@ def view_story(story_id):
 
     if uid not in viewed:
         viewed.append(uid)
-        db.execute('UPDATE stories SET viewed_by = %s WHERE id = %s',
+        db.execute('UPDATE stories SET viewed_by = ? WHERE id = ?',
                    (json.dumps(viewed), story_id))
         db.commit()
 

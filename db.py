@@ -726,6 +726,8 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('platform_reviews', 'admin_reply','TEXT'),
         ('platform_reviews', 'updated_at', 'TEXT'),
         ('platform_reviews', 'is_featured','INTEGER DEFAULT 0'),
+        ('messages', 'view_once',          'INTEGER DEFAULT 0'),
+        ('messages', 'view_once_opened',   'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()
