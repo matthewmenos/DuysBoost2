@@ -528,8 +528,9 @@ CREATE INDEX IF NOT EXISTS idx_tips_to     ON tips(to_user_id);
 # Global DB — R2 sync
 # ─────────────────────────────────────────────────────────────────────────────
 
-_global_synced    = False
-_global_sync_lock = threading.Lock()
+_global_synced      = False
+_global_sync_lock   = threading.Lock()
+_migrations_done    = False   # run once per worker boot
 
 
 def _global_db_path() -> str:
@@ -577,11 +578,15 @@ def _sync_global_to_r2() -> None:
 
 
 def _open_global_db() -> sqlite3.Connection:
+    global _migrations_done
     path = _global_db_path()
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.executescript(GLOBAL_SCHEMA)
+    conn.executescript(GLOBAL_SCHEMA)   # CREATE TABLE IF NOT EXISTS (new tables)
     conn.commit()
+    if not _migrations_done:
+        run_schema_migrations(conn)     # ALTER TABLE ADD COLUMN (new columns, once)
+        _migrations_done = True
     return conn
 
 
@@ -647,6 +652,94 @@ def _open_personal_db(uid: int) -> tuple:
 # ─────────────────────────────────────────────────────────────────────────────
 # Flask g helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def run_schema_migrations(conn: sqlite3.Connection) -> None:
+    """
+    Idempotent schema migration — adds any columns that exist in the
+    current GLOBAL_SCHEMA but are missing from the live database.
+
+    This handles the case where Render's persistent DB was created with
+    an older schema version. SQLite does not support IF NOT EXISTS for
+    ALTER TABLE ADD COLUMN, so we catch the OperationalError.
+
+    Called automatically by _open_global_db() on every startup.
+    """
+    # Full list of (table, column, column_definition) to ensure exist
+    REQUIRED_COLUMNS = [
+        # users — columns added across versions
+        ('users', 'is_banned',             'INTEGER DEFAULT 0'),
+        ('users', 'ban_reason',            'TEXT'),
+        ('users', 'display_name',          'TEXT'),
+        ('users', 'bio',                   'TEXT'),
+        ('users', 'avatar_url',            'TEXT'),
+        ('users', 'banner_url',            'TEXT'),
+        ('users', 'website',               'TEXT'),
+        ('users', 'location',              'TEXT'),
+        ('users', 'is_verified',           'INTEGER DEFAULT 0'),
+        ('users', 'follower_count',        'INTEGER DEFAULT 0'),
+        ('users', 'following_count',       'INTEGER DEFAULT 0'),
+        ('users', 'post_count',            'INTEGER DEFAULT 0'),
+        ('users', 'subscriber_count',      'INTEGER DEFAULT 0'),
+        ('users', 'total_tips_received',   'REAL DEFAULT 0'),
+        ('users', 'total_tips_sent',       'REAL DEFAULT 0'),
+        ('users', 'unread_dm_count',       'INTEGER DEFAULT 0'),
+        ('users', 'unread_group_count',    'INTEGER DEFAULT 0'),
+        ('users', 'search_count',          'INTEGER DEFAULT 0'),
+        ('users', 'referral_code',         'TEXT'),
+        ('users', 'referred_by',           'INTEGER'),
+        ('users', 'referral_bonus_awarded','INTEGER DEFAULT 0'),
+        ('users', 'reset_token',           'TEXT'),
+        ('users', 'reset_expires',         'INTEGER'),
+        ('users', 'theme',                 "TEXT DEFAULT 'dark'"),
+        ('users', 'crypto_network',        'TEXT'),
+        ('users', 'crypto_address',        'TEXT'),
+        ('users', 'crypto_name',           'TEXT'),
+        ('users', 'online_at',             'TEXT'),
+        ('users', 'show_online',           'INTEGER DEFAULT 1'),
+        ('users', 'allow_post_saves',      'INTEGER DEFAULT 1'),
+        # posts
+        ('posts', 'media_mime',            'TEXT'),
+        ('posts', 'hashtags_cached',       'TEXT'),
+        ('posts', 'quote_body',            'TEXT'),
+        ('posts', 'view_count',            'INTEGER DEFAULT 0'),
+        ('posts', 'score',                 'REAL DEFAULT 0'),
+        ('posts', 'is_boosted',            'INTEGER DEFAULT 0'),
+        ('posts', 'is_subscriber_only',    'INTEGER DEFAULT 0'),
+        ('posts', 'edited_at',             'TEXT'),
+        ('posts', 'repost_count',          'INTEGER DEFAULT 0'),
+        # stories
+        ('stories', 'media_mime',          "TEXT NOT NULL DEFAULT 'image/jpeg'"),
+        ('stories', 'caption',             'TEXT'),
+        ('stories', 'viewed_by',           "TEXT DEFAULT '[]'"),
+        # ads
+        ('ads', 'followers_target',        'INTEGER DEFAULT 0'),
+        ('ads', 'followers_gained',        'INTEGER DEFAULT 0'),
+        # channels / groups
+        ('channels', 'avatar_url',         'TEXT'),
+        ('groups',   'avatar_url',         'TEXT'),
+        # reports
+        ('reports', 'action_taken',        'TEXT'),
+        # platform_reviews
+        ('platform_reviews', 'admin_reply','TEXT'),
+        ('platform_reviews', 'updated_at', 'TEXT'),
+        ('platform_reviews', 'is_featured','INTEGER DEFAULT 0'),
+    ]
+
+    cur = conn.cursor()
+    migrated = 0
+    for table, column, definition in REQUIRED_COLUMNS:
+        try:
+            cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
+            migrated += 1
+            logger.info('Migration: added %s.%s', table, column)
+        except sqlite3.OperationalError:
+            pass  # Column already exists — that's fine
+
+    if migrated:
+        conn.commit()
+        logger.info('Schema migration complete: %d column(s) added', migrated)
+
 
 def get_db() -> sqlite3.Connection:
     """

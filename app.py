@@ -229,71 +229,87 @@ def create_app() -> Flask:
 
 def init_db():
     """
-    Initialize global.db with the shared social schema.
-    Personal DBs are created on-demand when each user first logs in.
-    Called automatically by create_app() on startup.
+    Initialize global.db on every startup:
+      1. Run CREATE TABLE IF NOT EXISTS for all tables (new tables only)
+      2. Run ALTER TABLE ADD COLUMN migrations (new columns on existing tables)
+      3. Upsert the admin account from environment variables
+
+    This is fully idempotent — safe to run on every deploy.
     """
     import sqlite3 as _sqlite
     import secrets as _sec
+    import logging as _log
     from helpers import hash_password
 
+    _logger = _log.getLogger(__name__)
+
     db_path = os.path.join(_base_dir, 'global.db')
-    conn = _sqlite.connect(db_path)
+    conn    = _sqlite.connect(db_path)
     conn.row_factory = _sqlite.Row
-    from db import GLOBAL_SCHEMA
+
+    # Step 1: Create any missing tables
+    from db import GLOBAL_SCHEMA, run_schema_migrations
     conn.executescript(GLOBAL_SCHEMA)
     conn.commit()
 
-    # ── Admin account — always created/updated from env vars ─────────────────
-    # Set ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD in Render environment.
-    # These are read on EVERY startup so changing the env var immediately
-    # takes effect on next deploy without needing to wipe the database.
-    import os as _os
-    admin_username = _os.environ.get('ADMIN_USERNAME', '').strip() or 'admin'
-    admin_email    = _os.environ.get('ADMIN_EMAIL',    '').strip() or 'admin@duysboost.com'
-    admin_password = _os.environ.get('ADMIN_PASSWORD', '').strip()
+    # Step 2: Add any missing columns to existing tables
+    run_schema_migrations(conn)
 
+    # Step 3: Read admin credentials from environment variables
+    # These are re-read on EVERY startup — change them in Render env vars
+    # and redeploy; the admin row will be updated automatically.
+    import os as _os
+    admin_username = (_os.environ.get('ADMIN_USERNAME') or '').strip()
+    admin_email    = (_os.environ.get('ADMIN_EMAIL')    or '').strip()
+    admin_password = (_os.environ.get('ADMIN_PASSWORD') or '').strip()
+
+    # Validate that all three are set
+    missing = [k for k, v in [
+        ('ADMIN_USERNAME', admin_username),
+        ('ADMIN_EMAIL',    admin_email),
+        ('ADMIN_PASSWORD', admin_password),
+    ] if not v]
+    if missing:
+        _logger.critical(
+            'Missing admin environment variables: %s  '
+            '— Set them in your Render dashboard under Environment. '
+            'The admin account will use fallback values until they are set.',
+            ', '.join(missing)
+        )
+        # Fallback values only if env vars truly missing
+        admin_username = admin_username or 'admin'
+        admin_email    = admin_email    or 'admin@duysboost.com'
+        admin_password = admin_password or 'changeme_set_ADMIN_PASSWORD_now'
+
+    hashed_pw = hash_password(admin_password)
+
+    # Step 4: Upsert admin row
+    # Always UPDATE if a row exists (so env var changes take effect immediately)
     existing = conn.execute(
-        'SELECT id, password FROM users WHERE is_admin=1 LIMIT 1'
+        'SELECT id FROM users WHERE is_admin=1 LIMIT 1'
     ).fetchone()
 
-    if not existing:
-        # First boot — create admin from env vars (or safe fallback)
-        if not admin_password:
-            import logging as _log
-            _log.getLogger(__name__).critical(
-                'ADMIN_PASSWORD not set! Using temporary password "changeme" — '
-                'SET ADMIN_PASSWORD in your environment variables immediately.'
-            )
-            admin_password = 'changeme'
+    if existing:
+        conn.execute(
+            'UPDATE users SET username=?, email=?, password=?, is_admin=1 WHERE id=?',
+            (admin_username, admin_email, hashed_pw, existing['id'])
+        )
+        _logger.info(
+            'Admin credentials updated from env vars: username=%s email=%s',
+            admin_username, admin_email
+        )
+    else:
+        # No admin exists yet — INSERT
         conn.execute(
             'INSERT INTO users '
-            '(username,email,password,is_admin,balance,referral_code) '
-            'VALUES (?,?,?,1,0,?)',
-            (admin_username, admin_email,
-             hash_password(admin_password), _sec.token_hex(5))
+            '(username, email, password, is_admin, balance, referral_code) '
+            'VALUES (?, ?, ?, 1, 0, ?)',
+            (admin_username, admin_email, hashed_pw, _sec.token_hex(5))
         )
-        print(f'✅ Admin account created: username={admin_username} email={admin_email}')
-    else:
-        # Subsequent boots — sync username/email/password if env vars are set
-        updates = []
-        params  = []
-        if admin_password:
-            updates.append('password=?')
-            params.append(hash_password(admin_password))
-        if admin_username:
-            updates.append('username=?')
-            params.append(admin_username)
-        if admin_email:
-            updates.append('email=?')
-            params.append(admin_email)
-        if updates:
-            params.append(existing['id'])
-            conn.execute(
-                f'UPDATE users SET {", ".join(updates)} WHERE id=?', params
-            )
-        # Ensure is_admin flag is always set
-        conn.execute('UPDATE users SET is_admin=1 WHERE id=?', (existing['id'],))
+        _logger.info(
+            'Admin account created: username=%s email=%s',
+            admin_username, admin_email
+        )
 
     conn.commit()
     conn.close()

@@ -69,7 +69,10 @@ def admin():
     active_users   = db.execute(
         "SELECT COUNT(*) FROM users WHERE online_at >= datetime('now','-7 days')"
     ).fetchone()[0]
-    banned_users   = db.execute('SELECT COUNT(*) FROM users WHERE is_banned=1').fetchone()[0]
+    try:
+        banned_users = db.execute('SELECT COUNT(*) FROM users WHERE is_banned=1').fetchone()[0]
+    except Exception:
+        banned_users = 0  # Column missing — migration will run on next request
     total_posts    = db.execute('SELECT COUNT(*) FROM posts').fetchone()[0]
     total_ads      = db.execute('SELECT COUNT(*) FROM ads').fetchone()[0]
     total_vol      = db.execute('SELECT COALESCE(SUM(amount),0) FROM transactions').fetchone()[0]
