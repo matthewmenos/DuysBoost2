@@ -98,9 +98,38 @@ def admin_required(f):
 # Notification / transaction helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def add_notification(db, user_id, message):
-    db.execute('INSERT INTO notifications (user_id, message) VALUES (?,?)',
-               (user_id, message))
+def add_notification(db, user_id, message, *, icon=None, link=None):
+    """
+    Insert a notification.
+    - message: plain text (emojis allowed but stripped on the client for icon use)
+    - icon:    optional icon key ('like', 'reply', 'follow', 'repost', 'mention',
+               'message', 'tip', 'subscribe', 'verify', 'system', 'wallet', 'channel',
+               'group', 'boost', 'story')
+    - link:    optional URL or relative path to navigate to on click
+    """
+    # Auto-detect icon from message emoji if not given
+    if icon is None:
+        if message.startswith('❤️') or 'liked' in message.lower():       icon = 'like'
+        elif message.startswith('💬') or 'replied' in message.lower():   icon = 'reply'
+        elif message.startswith('👤') or 'followed' in message.lower(): icon = 'follow'
+        elif message.startswith('🔁') or 'reposted' in message.lower(): icon = 'repost'
+        elif message.startswith('📣') or 'boost' in message.lower():     icon = 'boost'
+        elif message.startswith('📡') or 'channel' in message.lower():   icon = 'channel'
+        elif message.startswith('💰') or 'tip' in message.lower():       icon = 'tip'
+        elif message.startswith('💳') or 'wallet' in message.lower():   icon = 'wallet'
+        elif message.startswith('✅') or 'verif' in message.lower():     icon = 'verify'
+        elif message.startswith('❌'):                                    icon = 'system'
+        else:                                                             icon = 'system'
+
+    try:
+        db.execute(
+            'INSERT INTO notifications (user_id, message, icon, link) VALUES (?,?,?,?)',
+            (user_id, message, icon, link)
+        )
+    except Exception:
+        # Fallback if columns not yet migrated
+        db.execute('INSERT INTO notifications (user_id, message) VALUES (?,?)',
+                   (user_id, message))
 
 
 def add_transaction(db, user_id, type_, amount, description, status='completed'):

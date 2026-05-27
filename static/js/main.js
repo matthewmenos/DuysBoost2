@@ -7,7 +7,49 @@
   'use strict';
 
   // ── Utility: escape HTML ───────────────────────────────────────────────
-  function escapeHtml(s) {
+  
+// ── Notification icon SVGs (favicons replace emojis) ───────────────────────
+const _NOTIF_ICONS = {
+  like:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="#f91880" stroke="#f91880" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>',
+  reply:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>',
+  follow:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
+  repost:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#00ba7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
+  mention: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg>',
+  message: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+  tip:     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fbbc04" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>',
+  wallet:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>',
+  verify:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="#1d9bf0" stroke="none"><path d="M12 1l3 2 3-1 1 3 3 1-1 3 2 3-2 3 1 3-3 1-1 3-3-1-3 2-3-2-3 1-1-3-3-1 1-3-2-3 2-3-1-3 3-1 1-3 3 1 3-2z" /></svg>',
+  boost:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="#a855f7" stroke="none"><path d="M13 2L3 14h7v8l11-14h-7l-1-6z"/></svg>',
+  channel: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
+  group:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1d9bf0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+  story:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#e91e63" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>',
+  system:  '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+};
+
+function renderNotifItem(n) {
+  const icon  = _NOTIF_ICONS[n.icon] || _NOTIF_ICONS.system;
+  const cls   = 'notif-item' + (n.read ? '' : ' notif-unread');
+  const inner = '<div class="notif-icon-wrap">' + icon + '</div>' +
+                '<div class="notif-body">' +
+                '<div class="notif-msg">' + escapeHtml(n.msg) + '</div>' +
+                '<div class="notif-time">' + escapeHtml(n.time) + '</div>' +
+                '</div>';
+  if (n.link) {
+    return '<a class="' + cls + '" href="' + escapeHtml(n.link) +
+           '" data-notif-id="' + n.id + '" onclick="_markNotifRead(' + n.id + ')">' +
+           inner + '</a>';
+  }
+  return '<div class="' + cls + '" data-notif-id="' + n.id + '">' + inner + '</div>';
+}
+window.renderNotifItem = renderNotifItem;
+
+function _markNotifRead(id) {
+  fetch('/api/notifications/' + id + '/read', { method: 'POST' }).catch(function(){});
+}
+window._markNotifRead = _markNotifRead;
+
+
+function escapeHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -245,10 +287,7 @@
           if (!d.recent || !d.recent.length) {
             list.innerHTML = '<div class="notif-item text-muted text-center" style="padding:24px 18px">No new notifications</div>';
           } else {
-            list.innerHTML = d.recent.map(function (n) {
-              return '<div class="notif-item"><div>' + escapeHtml(n.msg) +
-                     '</div><div class="notif-time">' + escapeHtml(n.time) + '</div></div>';
-            }).join('');
+            list.innerHTML = d.recent.map(function (n) { return renderNotifItem(n); }).join('');
           }
         }
       } catch (_err) { /* silent */ }
@@ -278,10 +317,7 @@
           if (!d.recent.length) {
             list.innerHTML = '<div class="notif-item text-muted text-center" style="padding:24px 18px">No new notifications</div>';
           } else {
-            list.innerHTML = d.recent.map(function(n) {
-              return '<div class="notif-item"><div>' + escapeHtml(n.msg) +
-                     '</div><div class="notif-time">' + escapeHtml(n.time) + '</div></div>';
-            }).join('');
+            list.innerHTML = d.recent.map(function (n) { return renderNotifItem(n); }).join('');
           }
         }
       });

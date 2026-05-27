@@ -297,9 +297,16 @@ def referral():
 def notifications():
     db  = get_db()
     uid = session['user_id']
-    notifs = db.execute(
+    rows = db.execute(
         'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
+    # Build clean dicts with stripped emoji
+    notifs = []
+    for n in rows:
+        d = dict(n)
+        d['clean_msg'] = _strip_leading_emoji(d.get('message') or '')
+        d['icon'] = d.get('icon') or 'system'
+        notifs.append(d)
     db.execute('UPDATE notifications SET read=1 WHERE user_id=?', (uid,))
     db.commit()
     return render_template('notifications.html', notifications=notifs)
@@ -314,13 +321,49 @@ def unread_count():
         'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
     ).fetchone()[0]
     recent = db.execute(
-        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 5',
+        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 8',
         (uid,)
     ).fetchall()
-    return jsonify({
-        'count': count,
-        'recent': [{'msg': n['message'], 'time': n['created_at'][:16]} for n in recent]
-    })
+    out = []
+    for n in recent:
+        d = dict(n)
+        out.append({
+            'id':    d['id'],
+            'msg':   _strip_leading_emoji(d['message']),
+            'icon':  d.get('icon') or 'system',
+            'link':  d.get('link'),
+            'read':  d.get('read', 0),
+            'time':  d['created_at'][:16] if d.get('created_at') else ''
+        })
+    return jsonify({'count': count, 'recent': out})
+
+
+def _strip_leading_emoji(text):
+    """Remove the first emoji + spaces from a notification message."""
+    if not text: return text
+    import re as _re
+    return _re.sub(r'^[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]+\s*', '', text)
+
+
+@bp.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
+@login_required
+def mark_notif_read(notif_id):
+    db  = get_db()
+    uid = session['user_id']
+    db.execute('UPDATE notifications SET read=1 WHERE id=? AND user_id=?',
+               (notif_id, uid))
+    db.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/api/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notif_read():
+    db  = get_db()
+    uid = session['user_id']
+    db.execute('UPDATE notifications SET read=1 WHERE user_id=? AND read=0', (uid,))
+    db.commit()
+    return jsonify({'success': True})
 
 
 @bp.route('/api/theme', methods=['POST'])

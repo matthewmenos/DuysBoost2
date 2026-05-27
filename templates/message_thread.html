@@ -145,7 +145,6 @@
 .voice-preview.show { display: flex; }
 
 /* Compose bar */
-.chat-compose {/* Compose bar */
 .chat-compose {
   background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
   padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
@@ -721,11 +720,11 @@ function openEmojiPicker(msgId, anchor) {
 }
 window.openEmojiPicker = openEmojiPicker;
 
-/* ── WhatsApp-style Voice Recording ─────────────────────────────────────── */
-let mediaRec = null, audioChunks = [], isRec = false, recTimer = null, recSecs = 0;
+/* ── WhatsApp-style Voice Recording (function defs only; vars defined above) ── */
+let recTimer = null, recSecs = 0;
 let voicePreviewBlob = null, voicePreviewUrl = null;
 const micBtn = document.getElementById('rbtn');
-const txtEl  = document.getElementById('ctxt');
+// (txtEl, mediaRec, audioChunks, isRec already declared above)
 
 function formatTime(s) {
   return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');

@@ -744,6 +744,8 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('channels', 'verified_tier', "TEXT DEFAULT 'gold'"),
         ('groups', 'is_verified', "INTEGER DEFAULT 0"),
         ('groups', 'verified_tier', "TEXT DEFAULT 'gold'"),
+        ('notifications', 'link',   'TEXT'),
+        ('notifications', 'icon',   'TEXT'),
     ]
 
     cur = conn.cursor()

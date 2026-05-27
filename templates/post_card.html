@@ -34,7 +34,7 @@
         <div class="post-author-info">
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-display-name">
             {{ a.display_name or a.username }}
-            {%- if a.is_verified -%}{%- set _tier = a.get('verified_tier', 'blue') if a.get else 'blue' -%}<span class="badge-verified {{ _tier }}" title="Verified"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{%- endif -%}
+            {%- if a.is_verified -%}<span class="badge-verified" title="Verified"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{%- endif -%}
           </a>
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
           <span class="post-dot" aria-hidden="true">·</span>
@@ -199,7 +199,17 @@
         <button class="post-action-btn like-btn {% if p.liked %}liked{% endif %}"
                 onclick="toggleLike({{ p.id }}, this)" aria-label="Like"
                 aria-pressed="{{ 'true' if p.liked else 'false' }}">
-          <span class="action-icon">{{ '❤️' if p.liked else '🤍' }}</span>
+          <span class="action-icon">
+            {%- if p.liked -%}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            </svg>
+            {%- else -%}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            </svg>
+            {%- endif -%}
+          </span>
           <span class="action-count" id="like-count-{{ p.id }}">{{ p.like_count or '' }}</span>
         </button>
         <button class="post-action-btn bookmark-btn {% if p.bookmarked %}bookmarked{% endif %}"
