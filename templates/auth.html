@@ -629,103 +629,426 @@ if (new URLSearchParams(location.search).get('banned')) {
 }
 </script>
 
-<!-- Forgot password modal -->
+<!-- ── Forgot Password & PIN Verification Modal (2-step) ─────────────── -->
 <div id="fp-overlay" style="
   display:none; position:fixed; inset:0; z-index:9000;
-  background:rgba(0,0,0,.65); backdrop-filter:blur(8px);
+  background:rgba(0,0,0,.72); backdrop-filter:blur(10px);
   align-items:center; justify-content:center; padding:16px;
-">
+" role="dialog" aria-modal="true" aria-label="Reset password">
+
+  <!-- Glass card -->
   <div style="
-    background:rgba(20,20,35,.92); border:1px solid rgba(255,255,255,.12);
-    border-radius:20px; padding:28px; width:100%; max-width:400px;
-    box-shadow:0 24px 60px rgba(0,0,0,.6);
+    background:rgba(17,19,24,.94);
+    border:1px solid rgba(255,255,255,.10);
+    border-radius:22px; padding:32px;
+    width:100%; max-width:420px;
+    box-shadow:0 32px 80px rgba(0,0,0,.65);
+    position:relative;
   ">
-    <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:6px">
-      Reset password
-    </div>
-    <div style="font-size:13px;color:rgba(255,255,255,.45);margin-bottom:20px">
-      Enter your email and we'll send reset instructions.
-    </div>
-    <div id="fp-error" style="
-      display:none;background:rgba(239,69,101,.1);
-      border:1px solid rgba(239,69,101,.3);border-radius:10px;
-      padding:10px 14px;color:#ff7c9c;font-size:13px;margin-bottom:14px
-    "></div>
-    <div id="fp-success" style="
-      display:none;background:rgba(44,182,125,.1);
-      border:1px solid rgba(44,182,125,.3);border-radius:10px;
-      padding:10px 14px;color:#2cb67d;font-size:13px;margin-bottom:14px
-    "></div>
-    <label class="field-label">Email address</label>
-    <input class="field-input" id="fp-email" type="email"
-           placeholder="you@example.com" autocomplete="email"
-           style="margin-bottom:14px">
-    <div style="display:flex;gap:10px">
-      <button onclick="closeForgotPw()"
-              style="flex:1;padding:11px;border-radius:11px;
-                     border:1px solid rgba(255,255,255,.12);
-                     background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);
-                     font-size:14px;font-weight:600;cursor:pointer;">
-        Cancel
-      </button>
-      <button id="fp-btn" onclick="submitForgotPw()"
-              style="flex:2;padding:11px;border-radius:11px;border:none;
-                     background:linear-gradient(135deg,#7f5af0,#5a3fc0);
-                     color:#fff;font-size:14px;font-weight:700;cursor:pointer;">
-        Send reset link
+    <!-- Close -->
+    <button onclick="closeForgotPw()" aria-label="Close" style="
+      position:absolute;top:16px;right:16px;
+      background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.5);
+      width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;
+      display:flex;align-items:center;justify-content:center;
+    ">×</button>
+
+    <!-- ── Step 1: Email entry ─────────────────────────────────────── -->
+    <div id="fp-step-1">
+      <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:6px">
+        Reset password
+      </div>
+      <p style="color:rgba(255,255,255,.42);font-size:13.5px;margin:0 0 22px;line-height:1.55">
+        Enter the email you signed up with and we'll send you a 6-digit PIN.
+      </p>
+
+      <div id="fp-error-1" class="fp-alert fp-alert-error" style="display:none"></div>
+      <div id="fp-success-1" class="fp-alert fp-alert-ok" style="display:none"></div>
+
+      <label class="field-label">Email address</label>
+      <input class="field-input" id="fp-email" type="email"
+             placeholder="you@example.com" autocomplete="email"
+             style="margin-bottom:16px"
+             onkeydown="if(event.key==='Enter')submitForgotEmail()">
+
+      <button id="fp-btn-1" onclick="submitForgotEmail()" class="fp-btn-primary">
+        Send PIN
       </button>
     </div>
+
+    <!-- ── Step 2: PIN + new password ────────────────────────────────── -->
+    <div id="fp-step-2" style="display:none">
+      <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:6px">
+        Enter your PIN
+      </div>
+      <p style="color:rgba(255,255,255,.42);font-size:13.5px;margin:0 0 22px;line-height:1.55">
+        Check your inbox for the 6-digit PIN.
+        It expires in <strong style="color:#1d9bf0">15 minutes</strong>.
+      </p>
+
+      <div id="fp-error-2" class="fp-alert fp-alert-error" style="display:none"></div>
+      <div id="fp-success-2" class="fp-alert fp-alert-ok" style="display:none"></div>
+
+      <!-- 6-digit PIN boxes -->
+      <label class="field-label" style="margin-bottom:8px">Verification PIN</label>
+      <div id="fp-pin-row" style="display:flex;gap:8px;margin-bottom:20px">
+      </div>
+
+      <label class="field-label">New password</label>
+      <div style="position:relative;margin-bottom:12px">
+        <input class="field-input" id="fp-new-pw" type="password"
+               placeholder="New password (min 8 chars)"
+               autocomplete="new-password"
+               oninput="fpCheckPwStrength(this.value)"
+               onkeydown="if(event.key==='Enter')submitVerifyPin()">
+        <button type="button" onclick="fpTogglePw('fp-new-pw',this)"
+                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+                       background:none;border:none;cursor:pointer;padding:0;
+                       color:rgba(255,255,255,.4);font-size:13px">Show</button>
+      </div>
+      <!-- Strength bar -->
+      <div id="fp-strength-wrap" style="margin:-6px 0 14px;height:4px;
+           background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden">
+        <div id="fp-strength-bar" style="height:100%;width:0%;
+             border-radius:99px;transition:width .3s,background .3s"></div>
+      </div>
+
+      <label class="field-label">Confirm new password</label>
+      <input class="field-input" id="fp-confirm-pw" type="password"
+             placeholder="Confirm new password"
+             autocomplete="new-password" style="margin-bottom:20px"
+             onkeydown="if(event.key==='Enter')submitVerifyPin()">
+
+      <div style="display:flex;gap:10px">
+        <button onclick="fpGoBack()" style="
+          flex:1;padding:12px;border-radius:12px;cursor:pointer;font-size:14px;font-weight:600;
+          border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.05);
+          color:rgba(255,255,255,.65);">
+          ← Back
+        </button>
+        <button id="fp-btn-2" onclick="submitVerifyPin()" class="fp-btn-primary" style="flex:2">
+          Reset password
+        </button>
+      </div>
+
+      <p style="margin:16px 0 0;text-align:center;font-size:12.5px;color:rgba(255,255,255,.25)">
+        Didn't receive a PIN?
+        <a href="#" onclick="fpGoBack();return false"
+           style="color:#1d9bf0;text-decoration:none">Resend</a>
+      </p>
+    </div>
+
+    <!-- ── Step 3: Success ────────────────────────────────────────────── -->
+    <div id="fp-step-3" style="display:none;text-align:center">
+      <div style="font-size:52px;margin-bottom:16px">✅</div>
+      <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:8px">
+        Password updated!
+      </div>
+      <p style="color:rgba(255,255,255,.5);font-size:14px;margin:0 0 24px;line-height:1.55">
+        Your password has been reset successfully.
+        You can now sign in with your new password.
+      </p>
+      <button onclick="closeForgotPw();window.location.href='/login'"
+              class="fp-btn-primary">
+        Sign in
+      </button>
+    </div>
+
   </div>
 </div>
 
-<script>
-function openForgotPw(e) {
-  e.preventDefault();
-  document.getElementById('fp-overlay').style.display = 'flex';
-  document.getElementById('fp-email').focus();
-  document.getElementById('fp-error').style.display = 'none';
-  document.getElementById('fp-success').style.display = 'none';
-  document.getElementById('fp-email').value = document.getElementById('identifier')?.value || '';
+<style>
+/* ── Forgot-password modal styles ────────────────────────────────── */
+.fp-btn-primary {
+  width:100%; padding:13px; border-radius:13px; border:none;
+  background:linear-gradient(135deg,#1d9bf0,#0f5fa8);
+  color:#fff; font-size:15px; font-weight:700; cursor:pointer;
+  transition:opacity .15s;
 }
+.fp-btn-primary:hover { opacity:.88; }
+.fp-btn-primary:disabled { opacity:.45; cursor:not-allowed; }
+.fp-alert {
+  border-radius:10px; padding:10px 14px;
+  font-size:13px; margin-bottom:14px; line-height:1.5;
+}
+.fp-alert-error {
+  background:rgba(239,69,101,.10);
+  border:1px solid rgba(239,69,101,.30);
+  color:#ff7c9c;
+}
+.fp-alert-ok {
+  background:rgba(44,182,125,.10);
+  border:1px solid rgba(44,182,125,.30);
+  color:#2cb67d;
+}
+/* PIN input boxes */
+.fp-pin-box {
+  flex:1; height:52px;
+  background:rgba(255,255,255,.06);
+  border:1.5px solid rgba(255,255,255,.12);
+  border-radius:12px;
+  font-size:24px; font-weight:800; color:#fff;
+  text-align:center; outline:none;
+  caret-color:#1d9bf0;
+  transition:border-color .15s, box-shadow .15s;
+}
+.fp-pin-box:focus {
+  border-color:#1d9bf0;
+  box-shadow:0 0 0 3px rgba(29,155,240,.18);
+}
+</style>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   Forgot-password / PIN-verification  —  ES6 native fetch()
+   Works with the Flask endpoints in blueprints/auth_reset.py
+════════════════════════════════════════════════════════════════════ */
+
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+// ── Helpers ──────────────────────────────────────────────────────────
+function fpShow(id)  { document.getElementById(id).style.display = ''; }
+function fpHide(id)  { document.getElementById(id).style.display = 'none'; }
+function fpAlert(id, msg, type /* 'error'|'ok' */) {
+  const el = document.getElementById(id);
+  el.className = 'fp-alert fp-alert-' + type;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function fpClear(...ids) {
+  ids.forEach(id => { document.getElementById(id).style.display = 'none'; });
+}
+
+// ── PIN digit boxes ───────────────────────────────────────────────────
+function fpBuildPinBoxes() {
+  const row = document.getElementById('fp-pin-row');
+  if (row.children.length) return;   // already built
+  for (let i = 0; i < 6; i++) {
+    const inp = document.createElement('input');
+    inp.className   = 'fp-pin-box';
+    inp.maxLength   = 1;
+    inp.inputMode   = 'numeric';
+    inp.pattern     = '[0-9]';
+    inp.autocomplete= 'one-time-code';
+    inp.dataset.idx = i;
+    inp.addEventListener('input', e => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(-1);
+      if (e.target.value) {
+        const next = row.children[i + 1];
+        if (next) next.focus();
+      }
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !e.target.value && i > 0) {
+        row.children[i - 1].focus();
+      }
+      if (e.key === 'Enter') submitVerifyPin();
+    });
+    inp.addEventListener('paste', e => {
+      e.preventDefault();
+      const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      [...digits].forEach((d, j) => {
+        if (row.children[j]) row.children[j].value = d;
+      });
+      const next = row.children[Math.min(digits.length, 5)];
+      if (next) next.focus();
+    });
+    row.appendChild(inp);
+  }
+}
+
+function fpGetPin() {
+  const row = document.getElementById('fp-pin-row');
+  return [...row.children].map(c => c.value).join('');
+}
+
+function fpClearPin() {
+  const row = document.getElementById('fp-pin-row');
+  [...row.children].forEach(c => { c.value = ''; });
+  if (row.children[0]) row.children[0].focus();
+}
+
+// ── Password strength indicator ───────────────────────────────────────
+function fpCheckPwStrength(pw) {
+  let score = 0;
+  if (pw.length >= 8)                          score++;
+  if (pw.length >= 12)                         score++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw))   score++;
+  if (/\d/.test(pw))                           score++;
+  if (/[^A-Za-z0-9]/.test(pw))                score++;
+  const pct    = (score / 5) * 100;
+  const colour = score < 2 ? '#ef4565' : score < 4 ? '#f4b400' : '#2cb67d';
+  const bar    = document.getElementById('fp-strength-bar');
+  bar.style.width      = pct + '%';
+  bar.style.background = colour;
+}
+
+function fpTogglePw(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (inp.type === 'password') {
+    inp.type  = 'text';
+    btn.textContent = 'Hide';
+  } else {
+    inp.type  = 'password';
+    btn.textContent = 'Show';
+  }
+}
+
+// ── Modal open / close ────────────────────────────────────────────────
+function openForgotPw(e) {
+  if (e) e.preventDefault();
+  fpClear('fp-error-1', 'fp-success-1', 'fp-error-2', 'fp-success-2');
+  fpShow('fp-step-1'); fpHide('fp-step-2'); fpHide('fp-step-3');
+  document.getElementById('fp-email').value =
+    document.getElementById('identifier')?.value || '';
+  const overlay = document.getElementById('fp-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('fp-email').focus();
+}
+
 function closeForgotPw() {
   document.getElementById('fp-overlay').style.display = 'none';
 }
-// Close on backdrop click
 document.getElementById('fp-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeForgotPw();
 });
 
-async function submitForgotPw() {
-  const email = document.getElementById('fp-email').value.trim();
-  const btn   = document.getElementById('fp-btn');
-  const errEl = document.getElementById('fp-error');
-  const okEl  = document.getElementById('fp-success');
-  errEl.style.display = 'none';
-  okEl.style.display  = 'none';
-  if (!email) { errEl.textContent = 'Please enter your email.'; errEl.style.display='block'; return; }
+function fpGoBack() {
+  fpClear('fp-error-2', 'fp-success-2');
+  fpClearPin();
+  fpShow('fp-step-1'); fpHide('fp-step-2');
+}
 
-  btn.disabled = true; btn.textContent = 'Sending…';
+// ── Step 1: Submit email, request PIN ────────────────────────────────
+async function submitForgotEmail() {
+  const email = document.getElementById('fp-email').value.trim();
+  const btn   = document.getElementById('fp-btn-1');
+
+  fpClear('fp-error-1', 'fp-success-1');
+
+  if (!email || !email.includes('@')) {
+    fpAlert('fp-error-1', 'Please enter a valid email address.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending PIN…';
 
   try {
-    const r = await fetch('/auth/forgot-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+    const res  = await fetch('/api/auth/forgot-password', {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF,
+      },
       body: JSON.stringify({ email }),
     });
-    const d = await r.json();
-    if (d.success) {
-      okEl.textContent  = '✅ ' + (d.message || 'Check your email for reset instructions.');
-      okEl.style.display = 'block';
-      btn.textContent   = 'Sent!';
-    } else {
-      errEl.textContent   = d.error || 'Could not send reset email.';
-      errEl.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Send reset link';
+
+    // Network-level or parse error
+    let data;
+    try { data = await res.json(); }
+    catch (_) { throw new Error('Server returned an unexpected response.'); }
+
+    if (!res.ok && !data.success) {
+      fpAlert('fp-error-1', data.error || 'Could not send PIN. Please try again.', 'error');
+      return;
     }
-  } catch (_) {
-    errEl.textContent   = 'Network error. Please try again.';
-    errEl.style.display = 'block';
-    btn.disabled = false; btn.textContent = 'Send reset link';
+
+    // Success — transition to step 2
+    fpAlert('fp-success-1',
+      '📬 ' + (data.message || 'PIN sent! Check your inbox (and spam folder).'),
+      'ok');
+
+    // Small delay so user reads the message, then slide to step 2
+    setTimeout(() => {
+      fpBuildPinBoxes();
+      fpHide('fp-step-1');
+      fpShow('fp-step-2');
+      document.getElementById('fp-pin-row').children[0]?.focus();
+    }, 1200);
+
+  } catch (err) {
+    fpAlert('fp-error-1', err.message || 'Network error. Please try again.', 'error');
+  } finally {
+    // Only re-enable if we're still on step 1 (not transitioned)
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Send PIN';
+    }, 1400);
+  }
+}
+
+// ── Step 2: Submit PIN + new password ────────────────────────────────
+async function submitVerifyPin() {
+  const email   = document.getElementById('fp-email').value.trim();
+  const pin     = fpGetPin();
+  const newPw   = document.getElementById('fp-new-pw').value;
+  const confirm = document.getElementById('fp-confirm-pw').value;
+  const btn     = document.getElementById('fp-btn-2');
+
+  fpClear('fp-error-2', 'fp-success-2');
+
+  // Client-side validation
+  if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+    fpAlert('fp-error-2', 'Please enter the complete 6-digit PIN.', 'error');
+    return;
+  }
+  if (newPw.length < 8) {
+    fpAlert('fp-error-2', 'Password must be at least 8 characters.', 'error');
+    return;
+  }
+  if (!/[A-Z]/.test(newPw) || !/[a-z]/.test(newPw) || !/\d/.test(newPw)) {
+    fpAlert('fp-error-2',
+      'Password must contain uppercase, lowercase, and a number.', 'error');
+    return;
+  }
+  if (newPw !== confirm) {
+    fpAlert('fp-error-2', 'Passwords do not match.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Verifying…';
+
+  try {
+    const res  = await fetch('/api/auth/verify-pin', {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF,
+      },
+      body: JSON.stringify({
+        email,
+        pin,
+        new_password:     newPw,
+        confirm_password: confirm,
+      }),
+    });
+
+    let data;
+    try { data = await res.json(); }
+    catch (_) { throw new Error('Server returned an unexpected response.'); }
+
+    if (!res.ok || !data.success) {
+      // Surface server-side errors (expired PIN, invalid PIN, etc.)
+      const msg = Array.isArray(data.errors)
+        ? data.errors.join(' ')
+        : (data.error || 'Verification failed. Please try again.');
+      fpAlert('fp-error-2', msg, 'error');
+      fpClearPin();   // clear PIN boxes on failure
+      return;
+    }
+
+    // ── All good — show success step ─────────────────────────────────
+    fpHide('fp-step-2');
+    fpShow('fp-step-3');
+
+  } catch (err) {
+    fpAlert('fp-error-2', err.message || 'Network error. Please try again.', 'error');
+    fpClearPin();
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Reset password';
   }
 }
 </script>

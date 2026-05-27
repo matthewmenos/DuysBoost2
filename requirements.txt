@@ -19,3 +19,6 @@ eth-account>=0.10.0
 aptos-sdk>=0.8.0
 
 # NOTE: psycopg2 / SQLAlchemy removed — using built-in sqlite3 module.
+
+# ── Transactional email (Brevo / Sendinblue) ─────────────────────────────────
+brevo-python>=3.1.0

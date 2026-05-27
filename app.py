@@ -177,7 +177,8 @@ def create_app() -> Flask:
         return ctx
 
     # ── Blueprints ────────────────────────────────────────────────────────────
-    from blueprints.auth    import bp as auth_bp
+    from blueprints.auth       import bp as auth_bp
+    from blueprints.auth_reset import bp as auth_reset_bp
     from blueprints.social  import bp as social_bp
     from blueprints.boost   import bp as boost_bp
     from blueprints.wallet  import bp as wallet_bp
@@ -186,6 +187,7 @@ def create_app() -> Flask:
     from sse                import bp as sse_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(auth_reset_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(boost_bp)
     app.register_blueprint(wallet_bp)
