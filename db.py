@@ -739,6 +739,11 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('post_boosts', 'duration_days',    'INTEGER DEFAULT 7'),
         ('post_boosts', 'starts_at',        'TEXT'),
         ('post_boosts', 'ends_at',          'TEXT'),
+        # channels/groups verification
+        ('channels', 'is_verified', "INTEGER DEFAULT 0"),
+        ('channels', 'verified_tier', "TEXT DEFAULT 'gold'"),
+        ('groups', 'is_verified', "INTEGER DEFAULT 0"),
+        ('groups', 'verified_tier', "TEXT DEFAULT 'gold'"),
     ]
 
     cur = conn.cursor()

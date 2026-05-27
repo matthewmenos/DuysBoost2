@@ -51,10 +51,30 @@
                 onclick="openModal('adjust-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Adjust Balance</button>
         <button class="adm-btn" style="justify-content:center"
                 onclick="openModal('notify-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg> Send Notification</button>
-        <button class="adm-btn" style="justify-content:center"
-                onclick="doToggleVerify()">
-          {{ '❌ Remove verify' if user.is_verified else '✅ Verify account' }}
-        </button>
+        <div style="grid-column:1/-1;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+            Verification badge{% if user.is_verified %}<span style="color:var(--accent);margin-left:6px;text-transform:none;letter-spacing:0">— currently {{ (user.verified_tier or 'blue') | capitalize }}</span>{% endif %}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="adm-btn" onclick="setVerify('gold')" title="Organisations & businesses">
+              <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#F4B400;margin-right:6px;vertical-align:middle"></span>
+              Gold
+            </button>
+            <button class="adm-btn" onclick="setVerify('blue')" title="Notable individuals">
+              <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#1D9BF0;margin-right:6px;vertical-align:middle"></span>
+              Blue
+            </button>
+            <button class="adm-btn" onclick="setVerify('grey')" title="Government & officials">
+              <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#829AAB;margin-right:6px;vertical-align:middle"></span>
+              Grey
+            </button>
+            {% if user.is_verified %}
+            <button class="adm-btn" onclick="removeVerify()" style="color:var(--red);border-color:var(--red)">
+              ✕ Remove
+            </button>
+            {% endif %}
+          </div>
+        </div>
         <button class="adm-btn" style="justify-content:center"
                 onclick="openModal('pw-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> Reset Password</button>
         {% if user.is_banned %}
@@ -348,12 +368,26 @@ async function submitResetPw() {
   } else showToast(d.error || 'Failed.', 'error');
 }
 
-async function doToggleVerify() {
-  if (!confirm('Toggle verification badge?')) return;
-  const d = await api(`/admin/user/${USER_ID}/verify`, {});
-  if (d.success) { showToast('✅ Verification toggled'); setTimeout(() => location.reload(), 800); }
-  else showToast(d.error || 'Failed.', 'error');
+async function setVerify(tier) {
+  const labels = { gold: 'Gold (orgs)', blue: 'Blue (individuals)', grey: 'Grey (government)' };
+  if (!confirm('Set verification badge to: ' + labels[tier] + '?')) return;
+  const d = await api(`/admin/user/${USER_ID}/verify`, { action: 'set', tier: tier });
+  if (d.success) {
+    showToast('✅ ' + labels[tier] + ' badge set');
+    setTimeout(() => location.reload(), 800);
+  } else showToast(d.error || 'Failed.', 'error');
 }
+window.setVerify = setVerify;
+
+async function removeVerify() {
+  if (!confirm('Remove verification badge?')) return;
+  const d = await api(`/admin/user/${USER_ID}/verify`, { action: 'remove' });
+  if (d.success) {
+    showToast('✕ Badge removed');
+    setTimeout(() => location.reload(), 800);
+  } else showToast(d.error || 'Failed.', 'error');
+}
+window.removeVerify = removeVerify;
 
 async function submitBan() {
   const reason   = document.getElementById('ban-reason').value.trim();

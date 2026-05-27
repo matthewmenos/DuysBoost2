@@ -135,7 +135,7 @@
 
       {# Quoted repost #}
       {% if p.repost_of %}
-      <a href="{{ url_for('social.post_detail', post_id=p.repost_of.id) }}" class="post-quote">
+      <a href="{{ url_for('social.post_detail', post_id=p.repost_of.id) }}" class="post-quote" style="display:block;overflow:hidden;word-break:break-word">
         <div class="post-quote-header">
           <div class="avatar avatar-xs">
             {% if p.repost_of.author.avatar_url %}<img src="{{ p.repost_of.author.avatar_url }}" alt="">

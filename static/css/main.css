@@ -1319,20 +1319,53 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 }
 
 /* Quoted post */
+/* ── Quoted repost (responsive) ─────────────────────────────────────────── */
 .post-quote {
+  display: block;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin: 8px 0 10px;
   background: var(--surface-2);
   transition: border-color var(--transition);
+  text-decoration: none; color: inherit;
+  overflow: hidden;          /* prevent long content blowout */
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
 }
 .post-quote:hover { border-color: var(--border-strong); }
 .post-quote-header {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 6px;
   margin-bottom: 6px; font-size: 13.5px;
+  min-width: 0; flex-wrap: nowrap;
 }
-.post-quote-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.55; }
+.post-quote-header .avatar { flex-shrink: 0; }
+.post-quote-header > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.post-quote-body {
+  font-size: 13.5px; color: var(--text-dim); line-height: 1.5;
+  word-wrap: break-word; overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .post-quote { padding: 8px 10px; margin: 6px 0 8px; }
+  .post-quote-header { font-size: 13px; }
+  .post-quote-body { font-size: 13px; }
+}
+
+/* Repost label row */
+.post-repost-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px 0; font-size: 12.5px; color: var(--muted);
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.post-repost-label a {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
 
 /* Action bar */
 .post-actions {

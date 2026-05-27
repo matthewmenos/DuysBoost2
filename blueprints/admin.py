@@ -518,18 +518,111 @@ def reset_user_password(user_id):
 @bp.route('/admin/user/<int:user_id>/verify', methods=['POST'])
 @admin_required
 def toggle_verify(user_id):
+    """
+    Set/remove verification badge with a specific tier.
+    Accepts JSON: { action: 'set' | 'remove', tier: 'gold' | 'blue' | 'grey' }
+    Default (no body): toggle on/off using 'blue' tier.
+    """
     db   = get_db()
-    user = db.execute('SELECT id, is_verified FROM users WHERE id=?', (user_id,)).fetchone()
+    user = db.execute('SELECT id, is_verified, verified_tier FROM users WHERE id=?',
+                      (user_id,)).fetchone()
     if not user:
         return jsonify({'success': False, 'error': 'User not found'}), 404
-    new_val = 0 if user['is_verified'] else 1
-    db.execute('UPDATE users SET is_verified=? WHERE id=?', (new_val, user_id))
-    add_notification(db, user_id,
-        '✅ Your account has been verified!' if new_val else '❌ Verification badge removed.')
-    _audit(db, 'toggle_verify', 'user', user_id, {'is_verified': new_val})
-    db.commit()
-    return jsonify({'success': True, 'is_verified': new_val})
 
+    data   = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip().lower()
+    tier   = (data.get('tier')   or '').strip().lower()
+
+    ALLOWED_TIERS = {'gold', 'blue', 'grey'}
+
+    if action == 'remove':
+        new_verified = 0
+        new_tier     = 'blue'   # reset
+        msg          = '❌ Verification badge removed.'
+    elif action == 'set':
+        if tier not in ALLOWED_TIERS:
+            return jsonify({'success': False,
+                           'error': 'tier must be gold, blue, or grey'}), 400
+        new_verified = 1
+        new_tier     = tier
+        tier_label   = {'gold':'Gold','blue':'Blue','grey':'Government'}[tier]
+        msg          = f'✅ Your account has been verified ({tier_label} badge)!'
+    else:
+        # Legacy toggle behaviour
+        new_verified = 0 if user['is_verified'] else 1
+        new_tier     = user['verified_tier'] or 'blue'
+        msg = '✅ Your account has been verified!' if new_verified else '❌ Verification badge removed.'
+
+    db.execute(
+        'UPDATE users SET is_verified=?, verified_tier=? WHERE id=?',
+        (new_verified, new_tier, user_id)
+    )
+    if new_verified:
+        add_notification(db, user_id, msg)
+    else:
+        add_notification(db, user_id, msg)
+    _audit(db, 'set_verify', 'user', user_id,
+           {'is_verified': new_verified, 'tier': new_tier})
+    db.commit()
+    return jsonify({
+        'success':     True,
+        'is_verified': new_verified,
+        'tier':        new_tier
+    })
+
+
+
+
+@bp.route('/admin/channel/<int:channel_id>/verify', methods=['POST'])
+@admin_required
+def admin_verify_channel(channel_id):
+    """Set or remove verification badge for a channel (gold/blue/grey)."""
+    db = get_db()
+    ch = db.execute('SELECT id, is_verified FROM channels WHERE id=?', (channel_id,)).fetchone()
+    if not ch:
+        return jsonify({'success': False, 'error': 'Channel not found'}), 404
+    data   = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip().lower()
+    tier   = (data.get('tier') or 'gold').strip().lower()
+    if tier not in {'gold','blue','grey'}:
+        tier = 'gold'
+    if action == 'remove':
+        db.execute('UPDATE channels SET is_verified=0 WHERE id=?', (channel_id,))
+    else:
+        db.execute(
+            'UPDATE channels SET is_verified=1, verified_tier=? WHERE id=?',
+            (tier, channel_id)
+        )
+    _audit(db, 'channel_verify', 'channel', channel_id,
+           {'action': action or 'set', 'tier': tier})
+    db.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/admin/group/<int:group_id>/verify', methods=['POST'])
+@admin_required
+def admin_verify_group(group_id):
+    """Set or remove verification badge for a group."""
+    db = get_db()
+    g = db.execute('SELECT id, is_verified FROM groups WHERE id=?', (group_id,)).fetchone()
+    if not g:
+        return jsonify({'success': False, 'error': 'Group not found'}), 404
+    data   = request.get_json(silent=True) or {}
+    action = (data.get('action') or '').strip().lower()
+    tier   = (data.get('tier') or 'gold').strip().lower()
+    if tier not in {'gold','blue','grey'}:
+        tier = 'gold'
+    if action == 'remove':
+        db.execute('UPDATE groups SET is_verified=0 WHERE id=?', (group_id,))
+    else:
+        db.execute(
+            'UPDATE groups SET is_verified=1, verified_tier=? WHERE id=?',
+            (tier, group_id)
+        )
+    _audit(db, 'group_verify', 'group', group_id,
+           {'action': action or 'set', 'tier': tier})
+    db.commit()
+    return jsonify({'success': True})
 
 @bp.route('/admin/user/<int:user_id>/notify', methods=['POST'])
 @admin_required

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "post_card.html" import render_post %}
-{% block title %}{{ ch.name }} — DUYS Boost{% endblock %}
+{% block title %}{{ ch.name }}{% if ch.is_verified %}{% set _ctier = ch.get('verified_tier', 'gold') if ch.get else 'gold' %}<span class="badge-verified {{ _ctier }}" title="Verified" style="margin-left:6px;vertical-align:middle"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %} — DUYS Boost{% endblock %}
 {% block page_title %}{{ ch.name }}{% endblock %}
 
 {% block head_extra %}
@@ -280,14 +280,23 @@ if (chInput) {
       fd.append('post_type', isPoll ? 'poll' : 'post');
       if (isPoll) fd.append('poll_options', JSON.stringify(pollOptions));
       if (chMediaFiles.length) { fd.append('media_data',chMediaFiles[0].dataUrl); fd.append('media_mime',chMediaFiles[0].mime); }
-      const r = await fetch('/post', {method:'POST',body:fd});
-      const d = await r.json();
-      if (d.success) {
+      const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const r = await fetch('/post', {
+        method:  'POST',
+        headers: { 'X-CSRF-Token': CSRF_TOKEN },
+        body:    fd
+      });
+      let d;
+      try { d = await r.json(); }
+      catch (_) { d = null; }
+      if (d && d.success) {
         chInput.value=''; chMediaFiles=[]; renderChPreviews();
         if (isPoll) { pollWrap.style.display='none'; document.getElementById('poll-toggle-btn').style.color=''; }
         showToast('Posted! 📡'); setTimeout(()=>location.reload(),700);
-      } else showToast(d.error||'Could not post.','error');
-    } catch(_){showToast('Network error.','error');}
+      } else {
+        showToast((d && d.error) || 'Server error — posting failed', 'error');
+      }
+    } catch(_){ showToast('Network error.', 'error'); }
     finally { chSubmit.textContent='Post'; chSubmit.disabled=false; }
   });
 }

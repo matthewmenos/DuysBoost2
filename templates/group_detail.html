@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ g.name }} — DUYS Boost{% endblock %}
+{% block title %}{{ g.name }}{% if g.is_verified %}{% set _ctier = g.get('verified_tier', 'gold') if g.get else 'gold' %}<span class="badge-verified {{ _ctier }}" title="Verified" style="margin-left:6px;vertical-align:middle"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %} — DUYS Boost{% endblock %}
 {% block page_title %}{{ g.name }}{% endblock %}
 
 {% block head_extra %}

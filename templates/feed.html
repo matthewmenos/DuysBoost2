@@ -4,20 +4,29 @@
 {% block page_title %}Home{% endblock %}
 
 {% block head_extra %}<style>
-/* ── Mobile-only "Who to follow" slideshow ──────────────────────────────── */
-.wtf-mobile-section {
-  display: none;
-  padding: 8px 12px;
+/* ── Inline "Who to follow" slideshow — visible on all sizes ───────────── */
+.wtf-feed-section {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
+  margin: 12px 0;
 }
-@media (max-width: 900px) {
-  .wtf-mobile-section { display: block; }
+.wtf-mobile-section { /* legacy alias */
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+@media (min-width: 900px) {
+  /* On desktop the sidebar widget also shows it, so the top one auto-hides */
+  .wtf-mobile-section.top-only { display: none; }
 }
 .wtf-mobile-title {
-  font-size: 13px; font-weight: 700; color: var(--text);
-  margin-bottom: 8px;
+  font-size: 14px; font-weight: 800; color: var(--text);
+  margin-bottom: 10px;
   display: flex; align-items: center; gap: 6px;
+  letter-spacing: -.01em;
 }
 .wtf-mobile-scroll {
   display: flex;
@@ -146,7 +155,7 @@
     <!-- Posts -->
     <div 
 <!-- Mobile "Who to follow" slideshow -->
-<section class="wtf-mobile-section" id="wtf-mobile-section" style="display:none">
+<section class="wtf-mobile-section top-only" id="wtf-mobile-section" style="display:none">
   <div class="wtf-mobile-title">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1367,6 +1376,92 @@ if (document.readyState === 'loading') {
 } else {
   _populateMobileWTF();
 }
+
+
+
+// ── Inject "Who to follow" mid-feed every N posts ────────────────────────────
+function _injectMidFeedWTF(after_n_posts) {
+  const list = document.getElementById('feed-list');
+  if (!list) return;
+  // Avoid double injection
+  if (list.querySelector('.wtf-mid-feed-section')) return;
+  const posts = list.querySelectorAll('.post-card');
+  if (posts.length < after_n_posts) return;
+
+  const section = document.createElement('section');
+  section.className = 'wtf-mid-feed-section wtf-feed-section';
+  section.id = 'wtf-mid-feed-section';
+  section.innerHTML =
+    '<div class="wtf-mobile-title">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>' +
+    'Who to follow</div>' +
+    '<div class="wtf-mobile-scroll" id="wtf-mid-scroll"></div>';
+
+  // Insert after the Nth post
+  const anchor = posts[after_n_posts - 1];
+  anchor.parentNode.insertBefore(section, anchor.nextSibling);
+
+  // Populate it
+  _populateMidFeedWTF();
+}
+
+async function _populateMidFeedWTF() {
+  const scroll = document.getElementById('wtf-mid-scroll');
+  if (!scroll) return;
+  try {
+    const r = await fetch('/api/who-to-follow');
+    const users = await r.json();
+    if (!users || !users.length) {
+      const sec = document.getElementById('wtf-mid-feed-section');
+      if (sec) sec.style.display = 'none';
+      return;
+    }
+    scroll.innerHTML = users.slice(0, 10).map(function(u) {
+      const av = u.avatar_url
+        ? '<img src="' + u.avatar_url + '" alt="">'
+        : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
+      return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
+        '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
+        '<div class="wtf-mobile-card-name">' + (u.display_name || u.username) + '</div>' +
+        '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
+        '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
+        '</a>';
+    }).join('');
+  } catch (_) {}
+}
+
+// Trigger mid-feed injection on first scroll, and re-check on load-more
+(function() {
+  let _injected = false;
+  function _maybeInject() {
+    if (_injected) return;
+    const list = document.getElementById('feed-list');
+    if (!list) return;
+    const posts = list.querySelectorAll('.post-card');
+    if (posts.length >= 5) {
+      _injectMidFeedWTF(5);
+      _injected = true;
+    }
+  }
+  // Listen to scroll
+  window.addEventListener('scroll', _maybeInject, { passive: true });
+  // Try immediately on load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(_maybeInject, 500));
+  } else {
+    setTimeout(_maybeInject, 500);
+  }
+  // Re-inject if user clicks Load more (posts increase)
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'load-more-btn') {
+      setTimeout(() => {
+        _injected = false;
+        _maybeInject();
+      }, 500);
+    }
+  });
+})();
 
 </script>
 {% endblock %}
