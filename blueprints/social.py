@@ -1875,9 +1875,9 @@ def _format_group(row, uid, db):
                       'WHERE gm.group_id=? ORDER BY gm.created_at DESC LIMIT 1', (row['id'],)).fetchone()
     g['last_msg'] = dict(last) if last else None
     unread = db.execute(
-        'SELECT COUNT(*) FROM group_messages WHERE group_id=? AND sender_id!=? '
+        "SELECT COUNT(*) FROM group_messages WHERE group_id=? AND sender_id!=? "
         "AND created_at > COALESCE((SELECT last_read_at FROM group_members "
-        "WHERE group_id=? AND user_id=?), '1970-01-01'::timestamptz)",
+        "WHERE group_id=? AND user_id=?), '1970-01-01')",
         (row['id'], uid, row['id'], uid)
     ).fetchone()[0]
     g['unread'] = unread
@@ -1977,7 +1977,7 @@ def group_detail(slug):
         db.execute('UPDATE users SET unread_group_count=('
                    'SELECT COUNT(DISTINCT gm2.group_id) FROM group_messages gm2 '
                    'JOIN group_members gmp ON gmp.group_id=gm2.group_id AND gmp.user_id=? '
-                   'WHERE gm2.sender_id!=? AND gm2.created_at > COALESCE(gmp.last_read_at,\'1970-01-01\'::timestamptz)'
+                   'WHERE gm2.sender_id!=? AND gm2.created_at > COALESCE(gmp.last_read_at,\'1970-01-01\')'
                    ') WHERE id=?', (uid, uid, uid))
         db.commit()
 

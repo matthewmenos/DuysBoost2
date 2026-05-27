@@ -1245,14 +1245,7 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .avatar-xl  { width: 80px; height: 80px; font-size: 30px; border: 4px solid var(--surface); }
 
 /* ── Verified badge ────────────────────────────────────────────────────── */
-.verified-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px;
-  background: var(--accent);
-  color: #fff; border-radius: 50%;
-  font-size: 9px; font-weight: 800;
-  margin-left: 3px; vertical-align: middle;
-}
+
 
 /* ── Post cards ────────────────────────────────────────────────────────── */
 .post-card {
@@ -2341,20 +2334,12 @@ body:has(.bottom-nav.force-hidden) .toast-container {
   bottom: 20px !important;
 }
 /* Gold — organisations */
-.badge-verified.gold  { background: #F4B400; width: 20px; height: 20px; }
-.badge-verified.gold svg { width: 12px; height: 12px; }
 
 /* Blue — verified individuals (default) */
-.badge-verified.blue  { background: #1D9BF0; width: 20px; height: 20px; }
-.badge-verified.blue svg { width: 12px; height: 12px; }
 
 /* Grey — government */
-.badge-verified.grey  { background: #829AAB; width: 20px; height: 20px; }
-.badge-verified.grey svg { width: 12px; height: 12px; }
 
 /* Legacy compat */
-
-
 
 /* ══ Avatar placeholder — person SVG instead of initials ═══════════════════ */
 .avatar-placeholder, .avatar-empty {
@@ -2372,130 +2357,39 @@ body:has(.bottom-nav.force-hidden) .toast-container {
 .avatar-placeholder.small svg, .avatar-empty.small svg { width: 60%; height: 60%; }
 
 
-/* ══ X-style scalloped verification badge (8-petal flower) ════════════════════
-   The badge is a clip-path scalloped circle (matches X / Twitter exactly).
-   - On posts, comments, sidebars, etc. → always BLUE
-   - On profile pages (.badge-verified.profile-badge.gold/grey) → use tier colour
-═══════════════════════════════════════════════════════════════════════════ */
+
+/* ══ X-style verification badge (exact shape from X source) ═══════════════════
+   The badge is two overlapping SVGs: a star-shaped shell + a checkmark.
+   Blue everywhere EXCEPT profile page which uses .tier-gold / .tier-grey.
+══════════════════════════════════════════════════════════════════════════════ */
 .badge-verified {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  vertical-align: middle;
-  margin-left: 3px;
-  /* Default everywhere = blue */
-  background: #1D9BF0;
-  /* X's 8-point scalloped clip-path (flower silhouette) */
-  -webkit-clip-path: path("M11.996 2.233L13.732 0l2.45 1.667L19.06 0.96l1.32 2.677 2.96.594-.32 2.97 2.32 1.92-1.733 2.42 1.36 2.68-2.55 1.58.013 2.987-2.96.4-1.213 2.737-2.75-1.18-2.48 1.65L9.997 21.05 7.39 22.667l-1.937-2.27-2.96-.273-.213-2.987-2.65-1.36L1.04 13.43 0 10.59l2.193-2.04L1.687 5.61l2.667-1.39L4.187 1.27 7.16.997 8.927.04l2.337 1.67z");
-          clip-path: path("M11.996 2.233L13.732 0l2.45 1.667L19.06 0.96l1.32 2.677 2.96.594-.32 2.97 2.32 1.92-1.733 2.42 1.36 2.68-2.55 1.58.013 2.987-2.96.4-1.213 2.737-2.75-1.18-2.48 1.65L9.997 21.05 7.39 22.667l-1.937-2.27-2.96-.273-.213-2.987-2.65-1.36L1.04 13.43 0 10.59l2.193-2.04L1.687 5.61l2.667-1.39L4.187 1.27 7.16.997 8.927.04l2.337 1.67z");
-  /* Liquid-glass feel: subtle inset highlight + drop shadow */
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.25));
   position: relative;
-}
-.badge-verified::before {
-  /* Highlight sweep for glassy look */
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 45%);
-  -webkit-clip-path: inherit;
-          clip-path: inherit;
-  pointer-events: none;
-}
-.badge-verified svg {
-  width: 12px; height: 12px;
-  position: relative; z-index: 2;
-}
-
-/* Profile-page tier colouring — only when .profile-badge is also present */
-.badge-verified.profile-badge.gold { background: #F4B400; }
-.badge-verified.profile-badge.blue { background: #1D9BF0; }
-.badge-verified.profile-badge.grey { background: #829AAB; }
-
-/* Larger profile-page badge */
-.badge-verified.profile-badge {
-  width: 24px; height: 24px;
-  margin-left: 4px;
-}
-.badge-verified.profile-badge svg {
-  width: 14px; height: 14px;
-}
-
-/* Channels and groups also use the same blue badge by default */
-.badge-verified.channel-badge,
-.badge-verified.group-badge {
-  /* Always blue on the listing — gold only on detail pages */
-  background: #1D9BF0;
-}
-.badge-verified.profile-badge.channel-badge.gold,
-.badge-verified.profile-badge.group-badge.gold { background: #F4B400; }
-
-/* Legacy fallback */
-.verified-badge {
-  display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px;
-  background: #1D9BF0;
-  -webkit-clip-path: path("M11.996 2.233L13.732 0l2.45 1.667L19.06 0.96l1.32 2.677 2.96.594-.32 2.97 2.32 1.92-1.733 2.42 1.36 2.68-2.55 1.58.013 2.987-2.96.4-1.213 2.737-2.75-1.18-2.48 1.65L9.997 21.05 7.39 22.667l-1.937-2.27-2.96-.273-.213-2.987-2.65-1.36L1.04 13.43 0 10.59l2.193-2.04L1.687 5.61l2.667-1.39L4.187 1.27 7.16.997 8.927.04l2.337 1.67z");
-          clip-path: path("M11.996 2.233L13.732 0l2.45 1.667L19.06 0.96l1.32 2.677 2.96.594-.32 2.97 2.32 1.92-1.733 2.42 1.36 2.68-2.55 1.58.013 2.987-2.96.4-1.213 2.737-2.75-1.18-2.48 1.65L9.997 21.05 7.39 22.667l-1.937-2.27-2.96-.273-.213-2.987-2.65-1.36L1.04 13.43 0 10.59l2.193-2.04L1.687 5.61l2.667-1.39L4.187 1.27 7.16.997 8.927.04l2.337 1.67z");
+  flex-shrink: 0;
   vertical-align: middle;
   margin-left: 3px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.25));
 }
-.verified-badge svg { width: 12px; height: 12px; }
-
-
-/* Liked state — red heart fill */
-.like-btn.liked .action-icon svg {
-  color: #f91880;
-  fill: #f91880;
-  stroke: #f91880;
+.badge-verified .badge-shell {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  color: #1D9BF0;          /* always blue by default */
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.22));
 }
-.like-btn .action-icon { display: inline-flex; align-items: center; }
-
-
-/* ── Notification dropdown items ─────────────────────────────────────────── */
-.notif-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  text-decoration: none;
-  color: var(--text);
-  transition: background var(--transition);
-  font-size: 13.5px;
-  position: relative;
-  cursor: default;
+.badge-verified .badge-check {
+  position: relative; z-index: 2;
+  width: 52%; height: 52%;
 }
-a.notif-item, .notif-item[href] { cursor: pointer; }
-.notif-item:hover { background: var(--surface-2); }
-.notif-item:last-child { border-bottom: none; }
-.notif-item.notif-unread::before {
-  content: '';
-  position: absolute;
-  left: 4px; top: 50%;
-  transform: translateY(-50%);
-  width: 6px; height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-}
-.notif-icon-wrap {
-  flex-shrink: 0;
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  display: flex; align-items: center; justify-content: center;
-}
-.notif-body { flex: 1; min-width: 0; }
-.notif-msg {
-  font-weight: 500;
-  line-height: 1.4;
-  word-break: break-word;
-}
-.notif-time {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin-top: 2px;
-}
+/* Profile page: tier colour via .profile-tier.tier-* */
+.badge-verified.profile-tier { width: 24px; height: 24px; margin-left: 4px; }
+.badge-verified.profile-tier .badge-check { width: 50%; height: 50%; }
+.badge-verified.profile-tier.tier-gold .badge-shell { color: #F4B400; }
+.badge-verified.profile-tier.tier-blue .badge-shell { color: #1D9BF0; }
+.badge-verified.profile-tier.tier-grey .badge-shell { color: #829AAB; }
+/* Legacy fallback */
+.verified-badge { display:inline-flex; align-items:center; justify-content:center;
+  position:relative; width:20px; height:20px; vertical-align:middle; margin-left:3px; }
+/* Like button */
+.like-btn.liked .action-icon svg { color:#f91880; fill:#f91880; stroke:#f91880; }
+.like-btn .action-icon { display:inline-flex; align-items:center; }
