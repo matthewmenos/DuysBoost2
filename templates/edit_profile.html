@@ -113,6 +113,32 @@
     <!-- Text fields -->
     <form id="edit-profile-form" novalidate>
       <div class="form-group">
+        <label class="form-label" for="ep-username">
+          Username
+          <span class="text-muted" style="font-weight:400;font-size:12px">
+            ({{ 3 - (user.username_changes or 0) }} changes remaining)
+          </span>
+        </label>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="ep-username" type="text" maxlength="30"
+                 value="{{ user.username }}" pattern="[a-z0-9_]+"
+                 style="flex:1;text-transform:lowercase">
+          <button type="button" class="btn btn-outline btn-sm"
+                  onclick="changeUsername()"
+                  {% if (user.username_changes or 0) >= 3 %}disabled title="No changes left"{% endif %}>
+            Change
+          </button>
+        </div>
+        <div class="form-hint">
+          {% if (user.username_changes or 0) >= 3 %}
+            You\'ve used all 3 username changes.
+          {% else %}
+            3 changes total · 60-day cooldown between changes
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="form-group">
         <label class="form-label" for="ep-display">Display name</label>
         <input class="form-input" id="ep-display" name="display_name" type="text" maxlength="60"
                value="{{ user.display_name or '' }}" placeholder="Your name">
@@ -297,6 +323,36 @@ async function confirmDeleteAccount() {
   }
 }
 window.confirmDeleteAccount = confirmDeleteAccount;
+
+async function changeUsername() {
+  const inp = document.getElementById('ep-username');
+  const newUn = inp.value.trim().toLowerCase();
+  if (!newUn) return;
+  if (!/^[a-z0-9_]{3,30}$/.test(newUn)) {
+    showToast('Username must be 3-30 letters, numbers, or underscores', 'error');
+    return;
+  }
+  if (!confirm('Change username to "' + newUn + '"? You only have a limited number of changes.')) return;
+  try {
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const r = await fetch('/profile/change-username', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token': CSRF_TOKEN},
+      body:    JSON.stringify({ username: newUn })
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Username changed! ' + d.changes_remaining + ' change(s) left.');
+      setTimeout(() => location.href = '/user/' + d.username + '/edit', 900);
+    } else {
+      showToast(d.error || 'Could not change username.', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+}
+window.changeUsername = changeUsername;
+
 </script>
 
 <!-- Delete account modal -->

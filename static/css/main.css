@@ -2342,3 +2342,19 @@ body:has(.bottom-nav.force-hidden) .toast-container {
   width:20px;height:20px;border-radius:50%;background:#1D9BF0;
   vertical-align:middle;margin-left:2px; }
 .verified-badge svg { width:12px;height:12px;display:block; }
+
+
+/* ══ Avatar placeholder — person SVG instead of initials ═══════════════════ */
+.avatar-placeholder, .avatar-empty {
+  background: var(--surface-2);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-placeholder svg, .avatar-empty svg {
+  width: 60%;
+  height: 60%;
+  opacity: .6;
+}
+.avatar-placeholder.small svg, .avatar-empty.small svg { width: 60%; height: 60%; }

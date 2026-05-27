@@ -699,6 +699,8 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('users', 'online_at',             'TEXT'),
         ('users', 'show_online',           'INTEGER DEFAULT 1'),
         ('users', 'allow_post_saves',      'INTEGER DEFAULT 1'),
+        ('users', 'username_changes',      'INTEGER DEFAULT 0'),
+        ('users', 'username_last_changed', 'TEXT'),
         # posts
         ('posts', 'media_mime',            'TEXT'),
         ('posts', 'hashtags_cached',       'TEXT'),
@@ -728,6 +730,15 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('platform_reviews', 'is_featured','INTEGER DEFAULT 0'),
         ('messages', 'view_once',          'INTEGER DEFAULT 0'),
         ('messages', 'view_once_opened',   'INTEGER DEFAULT 0'),
+        # post_boosts — targeting columns
+        ('post_boosts', 'target_location',  'TEXT'),
+        ('post_boosts', 'target_age_min',   'INTEGER'),
+        ('post_boosts', 'target_age_max',   'INTEGER'),
+        ('post_boosts', 'landing_url',      'TEXT'),
+        ('post_boosts', 'cta_label',        "TEXT DEFAULT 'Learn More'"),
+        ('post_boosts', 'duration_days',    'INTEGER DEFAULT 7'),
+        ('post_boosts', 'starts_at',        'TEXT'),
+        ('post_boosts', 'ends_at',          'TEXT'),
     ]
 
     cur = conn.cursor()
@@ -743,6 +754,34 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     if migrated:
         conn.commit()
         logger.info('Schema migration complete: %d column(s) added', migrated)
+
+    # ── BACKFILL_REFERRAL_CODES ──────────────────────────────────────────────
+    # Update users whose referral_code looks like a random hex token (10 chars)
+    # to use their username instead. Idempotent.
+    try:
+        rows = conn.execute(
+            "SELECT id, username, referral_code FROM users "
+            "WHERE referral_code IS NOT NULL"
+        ).fetchall()
+        updated = 0
+        for r in rows:
+            rc = r['referral_code']
+            # token_hex(5) produces a 10-char hex string
+            if rc and len(rc) == 10 and all(c in '0123456789abcdef' for c in rc):
+                # Check username isn't already used as someone else's referral
+                conflict = conn.execute(
+                    'SELECT id FROM users WHERE referral_code=? AND id!=?',
+                    (r['username'], r['id'])
+                ).fetchone()
+                if not conflict:
+                    conn.execute('UPDATE users SET referral_code=? WHERE id=?',
+                                (r['username'], r['id']))
+                    updated += 1
+        if updated:
+            conn.commit()
+            logger.info('Backfilled %d referral codes to usernames', updated)
+    except Exception as _e:
+        logger.warning('Referral backfill skipped: %s', _e)
 
 
 def get_db() -> sqlite3.Connection:

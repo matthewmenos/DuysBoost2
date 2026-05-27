@@ -393,43 +393,112 @@
 {% endif %}
 
 {% if current_user %}
-<!-- Global Boost Post Modal -->
+<!-- Global Boost Post Modal — Facebook Ads style -->
 <div class="modal-overlay" id="boost-modal" role="dialog" aria-modal="true" aria-label="Boost post">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <div class="modal-header">
-      <div class="modal-title">📣 Boost this post</div>
+      <div class="modal-title">📣 Promote your post</div>
       <button class="modal-close" onclick="closeModal('boost-modal')" aria-label="Close">✕</button>
     </div>
     <p class="text-sm text-muted mb-16">
-      Pay from your wallet to surface this post in feeds. Others earn by engaging with it.
+      Reach more people in their feeds. <strong>$1 per 1,000 audience.</strong>
     </p>
-    <div class="info-box mb-16">
-      💳 Wallet balance: <strong class="text-green">${{ '%.2f'|format(current_user.balance or 0) }}</strong>
+    <div class="info-box mb-16" style="background:rgba(29,155,240,.08);border:1px solid rgba(29,155,240,.2);padding:10px 14px;border-radius:10px">
+      💳 Wallet balance: <strong style="color:var(--accent)">${{ '%.2f'|format(current_user.balance or 0) }}</strong>
     </div>
     <form id="boost-form" novalidate>
       <input type="hidden" id="boost-post-id" name="post_id" value="">
+
+      <!-- Target audience size -->
       <div class="form-group">
-        <label class="form-label">Engagement type</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap" id="boost-engage-btns">
-          <button type="button" class="network-badge selected" data-type="like"   onclick="selectEngageType('like',this)">❤️ Like</button>
-          <button type="button" class="network-badge"          data-type="follow" onclick="selectEngageType('follow',this)">👤 Follow</button>
-          <button type="button" class="network-badge"          data-type="comment" onclick="selectEngageType('comment',this)">💬 Comment</button>
-          <button type="button" class="network-badge"          data-type="share"  onclick="selectEngageType('share',this)">🔁 Share</button>
-        </div>
-        <input type="hidden" id="boost-engage-type" name="engage_type" value="like">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="boost-target">Target engagements</label>
+        <label class="form-label" for="boost-target">
+          🎯 Target audience
+          <span class="text-muted" style="font-weight:400;font-size:12px">(1,000 people = $1)</span>
+        </label>
         <input class="form-input" id="boost-target" name="target_count" type="number"
-               min="1" max="10000" placeholder="e.g. 100" required inputmode="numeric">
-        <div class="form-hint">
-          Cost: ${{ '%.2f'|format(0.10) }} per engagement
-          · Total: <strong id="boost-cost-preview">$0.00</strong>
+               min="100" max="1000000" step="500" placeholder="e.g. 5000"
+               value="1000" required inputmode="numeric"
+               oninput="updateBoostCost()">
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('boost-target').value='1000';updateBoostCost()">1K</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('boost-target').value='5000';updateBoostCost()">5K</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('boost-target').value='10000';updateBoostCost()">10K</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('boost-target').value='50000';updateBoostCost()">50K</button>
         </div>
       </div>
+
+      <!-- Duration -->
+      <div class="form-group">
+        <label class="form-label" for="boost-duration">⏱ Duration</label>
+        <select class="form-input" id="boost-duration" name="duration_days" onchange="updateBoostCost()">
+          <option value="1">1 day</option>
+          <option value="3">3 days</option>
+          <option value="7" selected>7 days</option>
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+        </select>
+      </div>
+
+      <!-- Location -->
+      <div class="form-group">
+        <label class="form-label" for="boost-location">🌍 Location <span class="optional">(optional)</span></label>
+        <input class="form-input" id="boost-location" name="target_location" type="text"
+               placeholder="e.g. Ghana, Nigeria, United States" maxlength="100">
+        <div class="form-hint">Leave empty to target worldwide.</div>
+      </div>
+
+      <!-- Age range -->
+      <div class="form-group">
+        <label class="form-label">👥 Age range <span class="optional">(optional)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-input" id="boost-age-min" name="target_age_min" type="number"
+                 min="13" max="100" placeholder="Min (e.g. 18)" style="flex:1">
+          <span class="text-muted">to</span>
+          <input class="form-input" id="boost-age-max" name="target_age_max" type="number"
+                 min="13" max="100" placeholder="Max (e.g. 65)" style="flex:1">
+        </div>
+      </div>
+
+      <!-- Landing URL + CTA -->
+      <div class="form-group">
+        <label class="form-label" for="boost-landing">🔗 Website URL <span class="optional">(optional)</span></label>
+        <input class="form-input" id="boost-landing" name="landing_url" type="url"
+               placeholder="https://yoursite.com">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="boost-cta">Call-to-action button</label>
+        <select class="form-input" id="boost-cta" name="cta_label">
+          <option value="Learn More" selected>Learn More</option>
+          <option value="Visit Site">Visit Site</option>
+          <option value="Sign Up">Sign Up</option>
+          <option value="Shop Now">Shop Now</option>
+          <option value="Contact Us">Contact Us</option>
+          <option value="Download">Download</option>
+          <option value="Apply Now">Apply Now</option>
+          <option value="Book Now">Book Now</option>
+        </select>
+      </div>
+
+      <!-- Cost summary -->
+      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Estimated reach</span>
+          <span style="font-weight:700" id="boost-reach-display">1,000 people</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Duration</span>
+          <span style="font-weight:700" id="boost-dur-display">7 days</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border)">
+          <span style="font-weight:700">Total</span>
+          <span style="font-weight:800;color:var(--accent);font-size:18px" id="boost-cost-preview">$1.00</span>
+        </div>
+      </div>
+
       <div id="boost-error" class="error-list" style="display:none"></div>
       <button type="submit" class="btn btn-primary btn-block btn-lg" id="boost-submit-btn">
-        Boost now 🚀
+        Promote post
       </button>
     </form>
   </div>
@@ -836,15 +905,61 @@ window.gcSubmit = gcSubmit;
     }
     const boostForm = document.getElementById('boost-form');
     if (boostForm) {
-      boostForm.addEventListener('submit', async e => {
+      // Live cost calculator
+      window.updateBoostCost = function() {
+        const target   = parseInt(document.getElementById('boost-target').value) || 0;
+        const duration = parseInt(document.getElementById('boost-duration').value) || 7;
+        const cost     = Math.max(0.01, target / 1000);
+        document.getElementById('boost-cost-preview').textContent = '$' + cost.toFixed(2);
+        document.getElementById('boost-reach-display').textContent = target.toLocaleString() + ' people';
+        document.getElementById('boost-dur-display').textContent = duration + (duration===1?' day':' days');
+      };
+      // Init
+      setTimeout(window.updateBoostCost, 100);
+
+      boostForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const btn  = document.getElementById('boost-submit-btn');
-        const err  = document.getElementById('boost-error');
         const postId = document.getElementById('boost-post-id').value;
-        if (err) err.style.display = 'none';
-        if (btn) { btn.textContent = 'Boosting…'; btn.disabled = true; }
+        if (!postId) return;
+        const btn = document.getElementById('boost-submit-btn');
+        const err = document.getElementById('boost-error');
+        err.style.display = 'none';
+        const orig = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Promoting…';
+        const payload = {
+          target_count:    parseInt(document.getElementById('boost-target').value) || 1000,
+          duration_days:   parseInt(document.getElementById('boost-duration').value) || 7,
+          target_location: document.getElementById('boost-location').value.trim(),
+          target_age_min:  parseInt(document.getElementById('boost-age-min').value) || 0,
+          target_age_max:  parseInt(document.getElementById('boost-age-max').value) || 0,
+          landing_url:     document.getElementById('boost-landing').value.trim(),
+          cta_label:       document.getElementById('boost-cta').value
+        };
         try {
-          const r = await fetch('/post/' + postId + '/boost', { method: 'POST', body: new FormData(boostForm) });
+          const r = await fetch('/post/' + postId + '/boost', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify(payload)
+          });
+          const d = await r.json();
+          if (d.success) {
+            if (typeof closeModal === 'function') closeModal('boost-modal');
+            if (typeof showToast === 'function') {
+              setTimeout(() => showToast('Post promoted! 🚀 $' + d.budget.toFixed(2) + ' debited.'), 150);
+            }
+            setTimeout(() => location.reload(), 900);
+          } else {
+            err.style.display = 'block';
+            err.textContent = d.error || 'Could not promote post.';
+          }
+        } catch (_) {
+          err.style.display = 'block';
+          err.textContent = 'Network error. Please try again.';
+        } finally {
+          btn.disabled = false; btn.textContent = orig;
+        }
+      });
+    }
           const d = await r.json();
           if (d.success) {
             if (typeof closeModal === 'function') closeModal('boost-modal');

@@ -3,6 +3,74 @@
 {% block title %}Home — DUYS Boost{% endblock %}
 {% block page_title %}Home{% endblock %}
 
+{% block head_extra %}<style>
+/* ── Mobile-only "Who to follow" slideshow ──────────────────────────────── */
+.wtf-mobile-section {
+  display: none;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+@media (max-width: 900px) {
+  .wtf-mobile-section { display: block; }
+}
+.wtf-mobile-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.wtf-mobile-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+.wtf-mobile-scroll::-webkit-scrollbar { display: none; }
+.wtf-mobile-card {
+  flex-shrink: 0;
+  width: 150px;
+  scroll-snap-align: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--text);
+}
+.wtf-mobile-card-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.wtf-mobile-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.wtf-mobile-card-name {
+  font-weight: 700; font-size: 13.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: 100%; text-align: center;
+}
+.wtf-mobile-card-handle {
+  font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: 100%; text-align: center;
+}
+.wtf-mobile-follow-btn {
+  margin-top: 6px;
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 99px;
+  padding: 5px 16px; font-weight: 700; font-size: 12.5px;
+  cursor: pointer; white-space: nowrap;
+}
+.wtf-mobile-follow-btn.following { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+</style>
+
+{% endblock %}
 {% block content %}
 {% include 'stories_bar.html' %}
 <div class="social-layout">
@@ -76,7 +144,22 @@
     </div>
 
     <!-- Posts -->
-    <div id="feed-list">
+    <div 
+<!-- Mobile "Who to follow" slideshow -->
+<section class="wtf-mobile-section" id="wtf-mobile-section" style="display:none">
+  <div class="wtf-mobile-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+    </svg>
+    Who to follow
+  </div>
+  <div class="wtf-mobile-scroll" id="wtf-mobile-scroll"></div>
+</section>
+
+<div id="feed-list">
       {% if posts %}
         {% for post in posts %}
           {{ render_post(post) }}
@@ -153,27 +236,80 @@
 
 <!-- Reply modal -->
 <div class="modal-overlay" id="reply-modal" role="dialog" aria-modal="true" aria-label="Reply">
-  <div class="modal">
-    <div class="modal-header">
+  <div class="modal reply-tray" style="max-width:600px;border-radius:16px 16px 0 0;
+       max-height:85vh;display:flex;flex-direction:column">
+
+    <div class="modal-header" style="flex-shrink:0">
       <div class="modal-title">Reply</div>
-      <button class="modal-close" onclick="closeModal('reply-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="modal-close" onclick="closeModal('reply-modal')" aria-label="Close">
+        <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
     </div>
-    <div class="reply-context text-muted text-sm mb-12" id="reply-context"></div>
-    <div class="compose-inner">
-      <div class="avatar avatar-md flex-shrink-0">
-        {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
-        {% else %}{{ current_user.username[0].upper() }}{% endif %}
+
+    <!-- Context: the post being replied to -->
+    <div class="reply-context-card" id="reply-context-card"
+         style="flex-shrink:0;padding:12px 14px;background:var(--surface-2);
+                border-bottom:1px solid var(--border);font-size:13.5px"></div>
+
+    <!-- Existing replies list -->
+    <div id="reply-existing-list"
+         style="flex:1;min-height:0;overflow-y:auto;padding:8px 14px"></div>
+
+    <!-- Compose row at bottom -->
+    <div style="flex-shrink:0;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface)">
+      <input type="hidden" id="reply-post-id" value="">
+
+      <!-- Photo preview strip -->
+      <div id="reply-photo-preview" style="display:none;position:relative;margin-bottom:8px;
+           border-radius:10px;overflow:hidden;max-height:160px">
+        <img id="reply-photo-img" style="width:100%;display:block;max-height:160px;object-fit:contain;background:var(--surface-2)">
+        <button onclick="clearReplyPhoto()" type="button"
+                style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);
+                       border:none;color:#fff;border-radius:50%;width:26px;height:26px;
+                       cursor:pointer;font-size:16px;line-height:1">✕</button>
       </div>
-      <div class="compose-right" style="flex:1">
-        <textarea class="compose-input" id="reply-input"
-                  placeholder="Post your reply…" maxlength="500" rows="3"></textarea>
-        <input type="hidden" id="reply-post-id" value="">
-        <div class="compose-footer">
-          <span class="compose-chars" id="reply-chars">500</span>
-          <button class="btn btn-primary btn-sm" onclick="submitReply()">Reply</button>
+
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button type="button" onclick="document.getElementById('reply-photo-input').click()"
+                title="Add photo" aria-label="Add photo"
+                style="background:none;border:none;cursor:pointer;color:var(--accent);
+                       padding:6px;border-radius:50%;flex-shrink:0">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
+        <input type="file" id="reply-photo-input" accept="image/*" style="display:none"
+               onchange="handleReplyPhoto(this)">
+
+        <textarea id="reply-input" rows="1" maxlength="200"
+                  placeholder="Post your reply…"
+                  style="flex:1;border:1px solid var(--border);border-radius:18px;
+                         padding:8px 14px;background:var(--surface-2);color:var(--text);
+                         resize:none;font-family:inherit;font-size:14.5px;
+                         min-height:38px;max-height:120px;overflow-y:auto"
+                  oninput="updateReplyChars(this)"></textarea>
+
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          <span id="reply-chars" style="font-size:11px;color:var(--muted)">200</span>
+          <button onclick="submitReply()" id="reply-submit-btn"
+                  style="background:var(--accent);color:#fff;border:none;border-radius:50%;
+                         width:38px;height:38px;cursor:pointer;display:flex;align-items:center;
+                         justify-content:center" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none">
+              <path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
+  </div>
+</div>
   </div>
 </div>
 
@@ -399,14 +535,7 @@ if (composeInput) {
 }
 
 // ── Reply ───────────────────────────────────────────────────────────────────
-const replyInput = document.getElementById('reply-input');
-const replyChars = document.getElementById('reply-chars');
-if (replyInput) {
-  replyInput.addEventListener('input', () => {
-    const left = 500 - replyInput.value.length;
-    replyChars.textContent = left;
-    replyChars.style.color = left < 20 ? 'var(--red)' : 'var(--muted)';
-  });
+// (handled by updateReplyChars));
 }
 
 function openReplyModal(postId, username) {
@@ -868,7 +997,7 @@ if (boostForm) {
     const list   = document.getElementById('wtf-list');
     if (!widget || !list) return;
     list.innerHTML = users.slice(0,5).map(u => {
-      const init = (u.display_name || u.username || '?')[0].toUpperCase();
+      // avatar uses person SVG (no initials)
       const av = u.avatar_url
         ? `<img src="${escapeHtml(u.avatar_url)}" style="width:34px;height:34px;border-radius:50%;object-fit:cover" alt="">`
         : `<div class="avatar avatar-sm">${escapeHtml(init)}</div>`;
@@ -1019,7 +1148,7 @@ function _renderSearchResults(data, q) {
     html += data.users.map(u => {
       const av = u.avatar_url
         ? `<img src="${u.avatar_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
-        : `<div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff">${(u.display_name||u.username||'?')[0].toUpperCase()}</div>`;
+        : `<div class="avatar-placeholder" style="width:36px;height:36px;border-radius:50%"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>`;
       return `<a class="feed-search-item" href="/user/${encodeURIComponent(u.username)}">
         ${av}
         <div>
@@ -1072,6 +1201,172 @@ document.addEventListener('click', function(e) {
   }
 });
 
+
+let _replyPhotoData = null;
+
+function updateReplyChars(el) {
+  const c = 200 - el.value.length;
+  document.getElementById('reply-chars').textContent = c;
+  document.getElementById('reply-submit-btn').disabled =
+    (el.value.trim().length === 0 && !_replyPhotoData);
+  el.style.height = 'auto';
+  el.style.height = Math.min(120, el.scrollHeight) + 'px';
+}
+window.updateReplyChars = updateReplyChars;
+
+function handleReplyPhoto(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { showToast('Image too large (max 5MB)', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    _replyPhotoData = { dataUrl: e.target.result, mime: f.type };
+    document.getElementById('reply-photo-img').src = e.target.result;
+    document.getElementById('reply-photo-preview').style.display = 'block';
+    document.getElementById('reply-submit-btn').disabled = false;
+  };
+  reader.readAsDataURL(f);
+}
+window.handleReplyPhoto = handleReplyPhoto;
+
+function clearReplyPhoto() {
+  _replyPhotoData = null;
+  document.getElementById('reply-photo-input').value = '';
+  document.getElementById('reply-photo-preview').style.display = 'none';
+  const ta = document.getElementById('reply-input');
+  document.getElementById('reply-submit-btn').disabled = ta.value.trim().length === 0;
+}
+window.clearReplyPhoto = clearReplyPhoto;
+
+async function openReplyModal(postId, authorUsername) {
+  document.getElementById('reply-post-id').value = postId;
+  const ctx = document.getElementById('reply-context-card');
+  if (ctx) ctx.innerHTML = '<span style="color:var(--muted)">Replying to</span> <strong>@' + authorUsername + '</strong>';
+  document.getElementById('reply-input').value = '';
+  document.getElementById('reply-chars').textContent = '200';
+  document.getElementById('reply-submit-btn').disabled = true;
+  clearReplyPhoto();
+  openModal('reply-modal');
+
+  // Load existing replies into the tray
+  const listEl = document.getElementById('reply-existing-list');
+  if (listEl) {
+    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading replies…</div>';
+    try {
+      const r = await fetch('/api/post/' + postId + '/replies');
+      const d = await r.json();
+      if (d.success && d.replies && d.replies.length) {
+        listEl.innerHTML = d.replies.map(function(rp) {
+          const av = rp.author.avatar_url
+            ? '<img src="' + rp.author.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+            : '<div class="avatar-placeholder" style="width:32px;height:32px;border-radius:50%;flex-shrink:0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
+          const mediaHtml = rp.media_url
+            ? '<img src="' + rp.media_url + '" style="max-width:100%;border-radius:10px;margin-top:6px">'
+            : '';
+          return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            av +
+            '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:700;font-size:13.5px">' + (rp.author.display_name || rp.author.username) + ' <span style="color:var(--muted);font-weight:400">@' + rp.author.username + '</span></div>' +
+            '<div style="font-size:14px;margin-top:2px;word-wrap:break-word">' + (rp.body || '') + '</div>' +
+            mediaHtml + '</div></div>';
+        }).join('');
+      } else {
+        listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No replies yet. Be the first!</div>';
+      }
+    } catch (_) {
+      listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Could not load replies</div>';
+    }
+  }
+
+  setTimeout(() => document.getElementById('reply-input').focus(), 180);
+}
+window.openReplyModal = openReplyModal;
+
+async function submitReply() {
+  const postId = document.getElementById('reply-post-id').value;
+  const body   = document.getElementById('reply-input').value.trim();
+  if (!postId || (!body && !_replyPhotoData)) return;
+  const btn = document.getElementById('reply-submit-btn');
+  btn.disabled = true;
+  const fd = new FormData();
+  fd.append('body', body);
+  fd.append('reply_to', postId);
+  if (_replyPhotoData) {
+    fd.append('media_data', _replyPhotoData.dataUrl);
+    fd.append('media_mime', _replyPhotoData.mime);
+  }
+  const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  try {
+    const r = await fetch('/post', {
+      method:  'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+      body:    fd
+    });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('reply-modal');
+      setTimeout(() => showToast('Reply posted!'), 150);
+      // Update reply count on the original post
+      const card = document.querySelector('[data-post-id="' + postId + '"]');
+      if (card) {
+        const cnt = card.querySelector('.reply-btn .action-count');
+        if (cnt) cnt.textContent = (parseInt(cnt.textContent) || 0) + 1;
+      }
+    } else {
+      showToast(d.error || 'Could not post reply.', 'error');
+      btn.disabled = false;
+    }
+  } catch (_) {
+    showToast('Network error', 'error');
+    btn.disabled = false;
+  }
+}
+window.submitReply = submitReply;
+
+// ── Mobile Who-To-Follow slideshow ───────────────────────────────────────
+async function _populateMobileWTF() {
+  const section = document.getElementById('wtf-mobile-section');
+  const scroll  = document.getElementById('wtf-mobile-scroll');
+  if (!scroll) return;
+  try {
+    const r = await fetch('/api/who-to-follow');
+    const users = await r.json();
+    if (!users || !users.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    scroll.innerHTML = users.slice(0, 10).map(function(u) {
+      const av = u.avatar_url
+        ? '<img src="' + u.avatar_url + '" alt="">'
+        : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
+      return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
+        '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
+        '<div class="wtf-mobile-card-name">' + (u.display_name || u.username) + '</div>' +
+        '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
+        '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
+        '</a>';
+    }).join('');
+  } catch (_) { section.style.display = 'none'; }
+}
+
+async function _wtfFollow(username, btn) {
+  const isF = btn.classList.contains('following');
+  const r = await fetch('/user/' + username + '/follow', { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    if (d.following) {
+      btn.classList.add('following'); btn.textContent = 'Following';
+    } else {
+      btn.classList.remove('following'); btn.textContent = 'Follow';
+    }
+  }
+}
+window._wtfFollow = _wtfFollow;
+
+// Auto-populate on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _populateMobileWTF);
+} else {
+  _populateMobileWTF();
+}
 
 </script>
 {% endblock %}

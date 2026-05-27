@@ -64,7 +64,7 @@ def signup():
             'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
             'VALUES (?,?,?,?,?,?)',
             (username, display_name or username, email, hash_password(password),
-             referrer['id'] if referrer else None, secrets.token_hex(5))
+             referrer['id'] if referrer else None, username)
         )
         db.commit()
         user = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
@@ -372,7 +372,7 @@ def complete_profile():
             'INSERT INTO users (username,display_name,email,password,referred_by,referral_code) '
             'VALUES (?,?,?,?,?,?)',
             (username, display_name, email, None,
-             referrer['id'] if referrer else None, secrets.token_hex(5))
+             referrer['id'] if referrer else None, username)
         )
         db.commit()
         user = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()

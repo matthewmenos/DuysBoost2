@@ -217,6 +217,43 @@ def create_post():
     return jsonify({'success': True, 'post': format_post(post, uid, db)})
 
 
+
+@bp.route('/api/post/<int:post_id>/replies')
+@login_required
+@csrf_exempt
+def post_replies_api(post_id):
+    """Return up to 50 latest replies for a post, oldest first."""
+    db  = get_db()
+    rows = db.execute("""
+        SELECT p.id, p.body, p.media_url, p.media_mime, p.created_at,
+               u.username, u.display_name, u.avatar_url, u.is_verified,
+               u.verified_tier
+        FROM posts p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.reply_to = ?
+        ORDER BY p.created_at ASC
+        LIMIT 50
+    """, (post_id,)).fetchall()
+    replies = []
+    for r in rows:
+        d = dict(r)
+        replies.append({
+            'id':          d['id'],
+            'body':        d['body'],
+            'media_url':   d.get('media_url'),
+            'media_mime':  d.get('media_mime'),
+            'created_at':  d['created_at'],
+            'author': {
+                'username':      d['username'],
+                'display_name':  d.get('display_name'),
+                'avatar_url':    d.get('avatar_url'),
+                'is_verified':   d.get('is_verified'),
+                'verified_tier': d.get('verified_tier'),
+            }
+        })
+    return jsonify({'success': True, 'replies': replies})
+
+
 @bp.route('/post/<int:post_id>/delete', methods=['POST'])
 @login_required
 def delete_post(post_id):
@@ -532,6 +569,90 @@ def edit_profile():
 
     user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
     return render_template('edit_profile.html', user=dict(user))
+
+
+
+@bp.route('/profile/change-username', methods=['POST'])
+@login_required
+@csrf_exempt
+def change_username():
+    """
+    Change current user's username.
+    Rules:
+      - 3 changes maximum per account lifetime
+      - 60 days cooldown between changes
+      - Username must be alphanumeric + underscore, 3-30 chars
+      - Must not conflict with an existing username
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    import re as _re
+
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    new_un = (data.get('username') or '').strip().lower()
+
+    # Format check
+    if not _re.match(r'^[a-z0-9_]{3,30}$', new_un):
+        return jsonify({'success': False,
+                       'error': 'Username must be 3–30 letters, numbers, or underscores.'}), 400
+
+    user = db.execute(
+        'SELECT username, username_changes, username_last_changed '
+        'FROM users WHERE id=?', (uid,)
+    ).fetchone()
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found.'}), 404
+
+    if new_un == user['username']:
+        return jsonify({'success': False, 'error': 'This is already your username.'}), 400
+
+    # Lifetime limit (3)
+    changes = user['username_changes'] or 0
+    if changes >= 3:
+        return jsonify({'success': False,
+                       'error': 'You\'ve reached the maximum of 3 username changes.'}), 400
+
+    # 60-day cooldown
+    last = user['username_last_changed']
+    if last:
+        try:
+            last_dt = _dt.fromisoformat(last.replace('Z',''))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=_tz.utc)
+            days_since = (_dt.now(_tz.utc) - last_dt).days
+            if days_since < 60:
+                remaining = 60 - days_since
+                return jsonify({'success': False,
+                               'error': f'You can change your username again in {remaining} day(s).'}), 400
+        except Exception:
+            pass
+
+    # Conflict check
+    taken = db.execute('SELECT 1 FROM users WHERE username=? AND id!=?',
+                       (new_un, uid)).fetchone()
+    if taken:
+        return jsonify({'success': False, 'error': 'Username already taken.'}), 400
+
+    # Apply
+    now = _dt.now(_tz.utc).strftime('%Y-%m-%d %H:%M:%S')
+    db.execute(
+        'UPDATE users SET username=?, username_changes=username_changes+1, '
+        'username_last_changed=? WHERE id=?',
+        (new_un, now, uid)
+    )
+    # Also update referral_code if it equals the old username
+    db.execute(
+        'UPDATE users SET referral_code=? WHERE id=? AND referral_code=?',
+        (new_un, uid, user['username'])
+    )
+    db.commit()
+    return jsonify({
+        'success': True,
+        'username': new_un,
+        'changes_used': changes + 1,
+        'changes_remaining': 3 - (changes + 1)
+    })
 
 
 @bp.route('/account/delete', methods=['POST'])
@@ -1574,21 +1695,33 @@ def channel_create():
             if not db.execute('SELECT 1 FROM channels WHERE slug=?', (slug,)).fetchone():
                 break
             slug = f'{base_slug}-{i}'
+        # Find a unique slug — append timestamp suffix if needed
+        existing = db.execute('SELECT 1 FROM channels WHERE slug=?', (slug,)).fetchone()
+        if existing:
+            import time as _t
+            slug = f'{base_slug}-{int(_t.time()) % 100000}'
         try:
-            db.execute(
+            cur = db.execute(
                 'INSERT INTO channels (name,slug,description,owner_id,is_public,member_count) '
                 'VALUES (?,?,?,?,?,1)',
                 (name, slug, description or None, uid, is_public)
             )
-            ch_id = db.lastrowid
+            ch_id = cur.lastrowid
+            if not ch_id:
+                return jsonify({'success': False, 'error': 'Could not create channel.'}), 500
             db.execute(
-                'INSERT OR IGNORE INTO channel_members (channel_id,user_id,role) VALUES (?,?,?)',
+                'INSERT OR IGNORE INTO channel_members (channel_id,user_id,role) '
+                'VALUES (?,?,?)',
                 (ch_id, uid, 'owner')
             )
             db.commit()
-            return jsonify({'success': True, 'redirect': url_for('social.channel_detail', slug=slug)})
-        except Exception:
-            return jsonify({'success': False, 'error': 'Channel name already taken.'}), 400
+            return jsonify({'success': True,
+                           'redirect': url_for('social.channel_detail', slug=slug)})
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).error('Channel create error: %s', _e)
+            return jsonify({'success': False,
+                           'error': f'Could not create channel: {str(_e)[:80]}'}), 400
     return render_template('channel_create.html')
 
 
@@ -1792,18 +1925,31 @@ def group_create():
             if not db.execute('SELECT 1 FROM groups WHERE slug=?', (slug,)).fetchone():
                 break
             slug = f'{base}-{i}'
+        existing = db.execute('SELECT 1 FROM groups WHERE slug=?', (slug,)).fetchone()
+        if existing:
+            import time as _t
+            slug = f'{base}-{int(_t.time()) % 100000}'
         try:
-            gid = db.execute(
+            cur = db.execute(
                 'INSERT INTO groups (name,slug,description,owner_id,is_public,member_count) '
                 'VALUES (?,?,?,?,?,1)',
                 (name, slug, description or None, uid, is_public)
-            ).fetchone()['id']
-            db.execute('INSERT INTO group_members (group_id,user_id,role) VALUES (?,?,?) ',
-                       (gid, uid, 'owner'))
+            )
+            gid = cur.lastrowid
+            if not gid:
+                return jsonify({'success': False, 'error': 'Could not create group.'}), 500
+            db.execute(
+                'INSERT OR IGNORE INTO group_members (group_id,user_id,role) VALUES (?,?,?)',
+                (gid, uid, 'owner')
+            )
             db.commit()
-            return jsonify({'success': True, 'redirect': url_for('social.group_detail', slug=slug)})
-        except Exception:
-            return jsonify({'success': False, 'error': 'Group name already taken.'}), 400
+            return jsonify({'success': True,
+                           'redirect': url_for('social.group_detail', slug=slug)})
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).error('Group create error: %s', _e)
+            return jsonify({'success': False,
+                           'error': f'Could not create group: {str(_e)[:80]}'}), 400
     return render_template('group_create.html')
 
 

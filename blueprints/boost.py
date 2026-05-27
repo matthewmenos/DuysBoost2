@@ -223,47 +223,98 @@ def submit_task():
 
 @bp.route('/post/<int:post_id>/boost', methods=['POST'])
 @login_required
+@csrf_exempt
 @limiter.limit(LIMIT_BOOST)
 def boost_post(post_id):
+    """
+    Facebook-Ads-style boost with targeting:
+      - target_count:    audience size (1000 = $1)
+      - duration_days:   1-30 days
+      - target_location: free-text country/region
+      - target_age_min / target_age_max
+      - landing_url:     external URL to drive traffic
+      - cta_label:       'Learn More' | 'Visit Site' | 'Sign Up' | 'Shop Now' | 'Contact Us' | 'Download'
+    Pricing: $1 per 1000 audience.
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     db  = get_db()
     uid = session['user_id']
-    WORKER_REWARD_PER_TASK = current_app.config['WORKER_REWARD_PER_TASK']
-    LISTER_COST_PER_TASK   = current_app.config['LISTER_COST_PER_TASK']
 
-    post = db.execute('SELECT * FROM posts WHERE id=? AND user_id=?', (post_id, uid)).fetchone()
+    post = db.execute('SELECT * FROM posts WHERE id=? AND user_id=?',
+                      (post_id, uid)).fetchone()
     if not post:
         return jsonify({'success': False, 'error': 'Post not found or not yours.'}), 404
 
-    engage_type  = (request.form.get('engage_type') or 'like').strip().lower()
-    target_count = safe_int(request.form.get('target_count'), 0)
-    reward_each  = safe_float(request.form.get('reward_each'), WORKER_REWARD_PER_TASK)
+    # Accept JSON or form
+    data = request.get_json(silent=True) or request.form
 
-    if engage_type not in ('like', 'follow', 'comment', 'share'):
-        return jsonify({'success': False, 'error': 'Invalid engagement type.'}), 400
-    if target_count < 1:
-        return jsonify({'success': False, 'error': 'Target must be at least 1.'}), 400
-    if reward_each < 0.01:
-        return jsonify({'success': False, 'error': 'Reward must be at least $0.01.'}), 400
+    target_count   = safe_int(data.get('target_count'), 1000)
+    duration_days  = safe_int(data.get('duration_days'), 7)
+    target_location = (data.get('target_location') or '').strip()[:100] or None
+    target_age_min = safe_int(data.get('target_age_min'), 0)
+    target_age_max = safe_int(data.get('target_age_max'), 0)
+    landing_url    = (data.get('landing_url') or '').strip()[:300] or None
+    cta_label      = (data.get('cta_label') or 'Learn More').strip()[:30]
 
-    budget = round(target_count * LISTER_COST_PER_TASK, 2)
-    user   = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
-    if budget > user['balance']:
-        return jsonify({'success': False,
-                        'error': f'Insufficient balance. Need ${budget:.2f}, have ${user["balance"]:.2f}.'}), 400
+    ALLOWED_CTAS = {'Learn More','Visit Site','Sign Up','Shop Now','Contact Us','Download','Apply Now','Book Now'}
+    if cta_label not in ALLOWED_CTAS:
+        cta_label = 'Learn More'
+
+    if target_count < 100:
+        return jsonify({'success': False, 'error': 'Target must be at least 100.'}), 400
+    if target_count > 1000000:
+        return jsonify({'success': False, 'error': 'Target cannot exceed 1,000,000.'}), 400
+    if duration_days < 1 or duration_days > 30:
+        return jsonify({'success': False, 'error': 'Duration must be 1–30 days.'}), 400
+
+    # Validate landing URL if provided
+    if landing_url and not (landing_url.startswith('http://') or landing_url.startswith('https://')):
+        return jsonify({'success': False, 'error': 'Landing URL must start with http:// or https://'}), 400
+
+    # Pricing: $1 per 1000 audience, regardless of duration (flat audience fee)
+    budget = round(target_count / 1000.0, 2)
+    if budget < 0.01:
+        budget = 0.01
+
+    user_row = db.execute('SELECT balance FROM users WHERE id=?', (uid,)).fetchone()
+    bal = user_row['balance'] if user_row else 0
+    if budget > bal:
+        return jsonify({
+            'success': False,
+            'error': f'Insufficient balance. Need ${budget:.2f}, have ${bal:.2f}.'
+        }), 400
+
+    # Reward per engagement = budget / target_count (lister covers, worker earns)
+    reward_per = budget / max(target_count, 1)
+
+    now_utc = _dt.now(_tz.utc)
+    starts  = now_utc.strftime('%Y-%m-%d %H:%M:%S')
+    ends    = (now_utc + _td(days=duration_days)).strftime('%Y-%m-%d %H:%M:%S')
 
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (budget, uid))
-    boost_id = db.execute(
-        "INSERT INTO post_boosts (post_id, user_id, budget, reward_per_engage, "
-        "engage_type, target_count, status) VALUES (?,?,?,?,?,?,'active')",
-        (post_id, uid, budget, WORKER_REWARD_PER_TASK, engage_type, target_count)
-    ).fetchone()['id']
+    cur = db.execute(
+        "INSERT INTO post_boosts ("
+        "  post_id, user_id, budget, reward_per_engage, engage_type, target_count, "
+        "  target_location, target_age_min, target_age_max, landing_url, cta_label, "
+        "  duration_days, starts_at, ends_at, status"
+        ") VALUES (?,?,?,?,'view',?,?,?,?,?,?,?,?,?,'active')",
+        (post_id, uid, budget, reward_per, target_count,
+         target_location, target_age_min or None, target_age_max or None,
+         landing_url, cta_label, duration_days, starts, ends)
+    )
+    boost_id = cur.lastrowid
     db.execute('UPDATE posts SET is_boosted=1 WHERE id=?', (post_id,))
     add_transaction(db, uid, 'spend', budget,
-                    f'Boost post #{post_id} — {target_count}x {engage_type}')
+                    f'Boost post #{post_id} — {target_count:,} audience x {duration_days}d')
     add_notification(db, uid,
-        f'📣 Your post is now boosted! ${budget:.2f} budget, {target_count} target engagements.')
+        f'📣 Post boosted! ${budget:.2f} for {target_count:,} audience over {duration_days} days.')
     db.commit()
-    return jsonify({'success': True, 'boost_id': boost_id, 'budget': budget})
+    return jsonify({
+        'success':  True,
+        'boost_id': boost_id,
+        'budget':   budget,
+        'ends_at':  ends
+    })
 
 
 @bp.route('/post/<int:post_id>/boost/cancel', methods=['POST'])

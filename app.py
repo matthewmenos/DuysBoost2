@@ -320,7 +320,7 @@ def init_db():
             'INSERT INTO users '
             '(username, email, password, is_admin, balance, referral_code) '
             'VALUES (?, ?, ?, 1, 0, ?)',
-            (admin_username, admin_email, hashed_pw, _sec.token_hex(5))
+            (admin_username, admin_email, hashed_pw, admin_username)
         )
         _logger.info(
             'Admin account created: username=%s email=%s',

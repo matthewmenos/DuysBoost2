@@ -22,7 +22,7 @@
       <div style="flex:1;min-width:0">
         <a href="{{ url_for('social.profile', username=u.username) }}" class="fw-700">
           {{ u.display_name or u.username }}
-          {% if u.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
+          {% if u.is_verified %}<span class="badge-verified blue" title="Verified"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
         </a>
         <div class="text-xs text-muted">@{{ u.username }} · {{ u.follower_count or 0 }} followers</div>
         {% if u.bio %}<div class="text-sm text-muted mt-4">{{ u.bio[:80] }}</div>{% endif %}

@@ -27,7 +27,7 @@
               <a href="{{ url_for('social.profile', username=post.author.username) }}"
                  class="post-display-name" style="font-size:16px">
                 {{ post.author.display_name or post.author.username }}
-                {% if post.author.is_verified %}<span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
+                {% if post.author.is_verified %}{%- set _pdtier = post.author.get("verified_tier", "blue") if post.author.get else "blue" -%}<span class="badge-verified {{ _pdtier }}" title="Verified"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>{% endif %}
               </a>
               <div class="post-username text-muted" style="font-size:14px">@{{ post.author.username }}</div>
             </div>

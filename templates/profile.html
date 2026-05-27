@@ -321,18 +321,63 @@ if(tipForm){tipForm.addEventListener('submit',async e=>{
   }catch(_){err.style.display='block';err.textContent='Network error.';}
   finally{btn.textContent=orig;btn.disabled=false;}
 });}
-async function uploadAvatar(input){
-  const fd=new FormData();fd.append('avatar',input.files[0]);
-  const d=await(await fetch('/profile/upload-photo',{method:'POST',body:fd})).json();
-  if(d.success){showToast('Photo updated!');setTimeout(()=>location.reload(),600);}
-  else showToast(d.error||'Upload failed.','error');
+async function uploadAvatar(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > 8 * 1024 * 1024) { showToast('Image too large (max 8MB)', 'error'); return; }
+  const fd = new FormData();
+  fd.append('photo', f);
+  fd.append('type', 'avatar');
+  showToast('Uploading photo…');
+  try {
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const r = await fetch('/profile/upload-photo', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+      body: fd
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Photo updated!');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Upload failed.', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+  input.value = '';  // reset so same file can be picked again
 }
-async function uploadBanner(input){
-  const fd=new FormData();fd.append('banner',input.files[0]);
-  const d=await(await fetch('/profile/upload-banner',{method:'POST',body:fd})).json();
-  if(d.success){showToast('Banner updated!');setTimeout(()=>location.reload(),600);}
-  else showToast(d.error||'Upload failed.','error');
+window.uploadAvatar = uploadAvatar;
+
+async function uploadBanner(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > 8 * 1024 * 1024) { showToast('Image too large (max 8MB)', 'error'); return; }
+  const fd = new FormData();
+  fd.append('photo', f);
+  fd.append('type', 'banner');
+  showToast('Uploading banner…');
+  try {
+    const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const r = await fetch('/profile/upload-photo', {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN },
+      body: fd
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Banner updated!');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(d.error || 'Upload failed.', 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
+  input.value = '';
 }
+window.uploadBanner = uploadBanner;
 </script>
 {% endblock %}
 
