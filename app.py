@@ -151,6 +151,29 @@ def create_app() -> Flask:
     @app.context_processor
     def inject_user():
         user = get_current_user()
+        # Convert to a plain dict so .get() works in templates
+        # and missing columns don't crash Jinja attribute access
+        if user is not None:
+            try:
+                user = dict(user)
+                # Ensure all expected fields have safe defaults
+                user.setdefault('balance', 0.0)
+                user.setdefault('theme', 'dark')
+                user.setdefault('is_admin', 0)
+                user.setdefault('is_verified', 0)
+                user.setdefault('verified_tier', 'blue')
+                user.setdefault('avatar_url', None)
+                user.setdefault('banner_url', None)
+                user.setdefault('display_name', user.get('username', ''))
+                user.setdefault('bio', '')
+                user.setdefault('follower_count', 0)
+                user.setdefault('following_count', 0)
+                user.setdefault('post_count', 0)
+                user.setdefault('unread_dm_count', 0)
+                user.setdefault('username_changes', 0)
+                user.setdefault('show_online', 1)
+            except Exception:
+                pass
         ctx  = {
             'current_user':  user,
             'CURRENCY_SYMBOL': CURRENCY_SYMBOL,
@@ -213,7 +236,7 @@ def create_app() -> Flask:
         except Exception as _e:
             import logging as _log
             _log.getLogger(__name__).warning(
-                'init_db() failed at startup (DATABASE_URL may not be set yet): ?', _e
+                'init_db() failed at startup: %s', _e
             )
 
     # ── Storage health check ─────────────────────────────────────────────────

@@ -66,6 +66,7 @@ def _run_cleanup(app):
                         pass
                 ids = [r['id'] for r in expired]
                 placeholders = ','.join('?' * len(ids))
+                # media_url already read above — now delete DB rows
                 conn.execute(
                     f'DELETE FROM stories WHERE id IN ({placeholders})', ids
                 )
@@ -412,7 +413,7 @@ def delete_story(story_id):
     try:
         _st.delete_object(row['media_url'])
     except Exception as e:
-        logger.warning('Story R2 delete failed (continuing): ?', e)
+        logger.warning('Story R2 delete failed (continuing): %s', e)
 
     # Hard-delete from DB
     db.execute('DELETE FROM stories WHERE id = ?', (story_id,))

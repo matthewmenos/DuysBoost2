@@ -80,8 +80,7 @@ def feed():
         return jsonify({'posts': posts, 'has_more': has_more})
 
     suggestions = [dict(s) for s in db.execute("""
-        SELECT id, username, display_name, avatar_url, is_verified, verified_tier, follower_count
-        FROM users
+        SELECT * FROM users
         WHERE id != ?
           AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
         ORDER BY follower_count DESC, id DESC LIMIT 5
@@ -98,6 +97,79 @@ def feed():
     return render_template('feed.html', posts=posts, tab=tab,
                            page=page, has_more=has_more,
                            suggestions=suggestions, trending=trending)
+
+
+
+# ── Media / cascade helpers ───────────────────────────────────────────────────
+
+def _delete_post_media(post_row):
+    """
+    Best-effort R2 deletion for a post's media_url.
+    Silently skips if url is None or storage module unavailable.
+    """
+    url = None
+    try:
+        url = post_row['media_url'] if post_row else None
+    except Exception:
+        return
+    if not url:
+        return
+    try:
+        import storage as _st
+        _st.delete_object(url)
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger(__name__).warning('Post R2 media delete failed for %s: %s', url, _e)
+
+
+def _full_delete_post(db, post_id, *, notify_owner=False):
+    """
+    Cascade-delete a single post from all tables AND its R2 media.
+    Call BEFORE the final commit — does not commit itself.
+    """
+    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return
+
+    # 1. Delete R2 media first (while we still have the URL)
+    _delete_post_media(post)
+
+    # 2. Update parent counters
+    if post['reply_to_id']:
+        db.execute('UPDATE posts SET reply_count=MAX(0,reply_count-1) WHERE id=?',
+                   (post['reply_to_id'],))
+    if post['repost_of_id']:
+        db.execute('UPDATE posts SET repost_count=MAX(0,repost_count-1) WHERE id=?',
+                   (post['repost_of_id'],))
+
+    # 3. Delete child rows in dependency order
+    for tbl in ('post_likes', 'bookmarks', 'poll_votes', 'poll_options',
+                'post_hashtags', 'channel_posts', 'post_views',
+                'boost_engagements', 'post_boosts'):
+        try:
+            db.execute(f'DELETE FROM {tbl} WHERE post_id=?', (post_id,))
+        except Exception:
+            pass
+
+    # 4. Delete replies recursively (shallow depth — replies of replies)
+    reply_ids = [r['id'] for r in
+                 db.execute('SELECT id FROM posts WHERE reply_to_id=?', (post_id,)).fetchall()]
+    for rid in reply_ids:
+        _delete_post_media(db.execute('SELECT * FROM posts WHERE id=?', (rid,)).fetchone())
+        for tbl in ('post_likes', 'bookmarks', 'poll_votes', 'poll_options',
+                    'post_hashtags', 'post_views'):
+            try:
+                db.execute(f'DELETE FROM {tbl} WHERE post_id=?', (rid,))
+            except Exception:
+                pass
+        db.execute('DELETE FROM posts WHERE id=?', (rid,))
+
+    # 5. Delete the post itself
+    db.execute('DELETE FROM posts WHERE id=?', (post_id,))
+
+    # 6. Update author post_count
+    db.execute('UPDATE users SET post_count=MAX(0,post_count-1) WHERE id=?',
+               (post['user_id'],))
 
 
 # ── Post CRUD ─────────────────────────────────────────────────────────────────
@@ -263,18 +335,11 @@ def delete_post(post_id):
     if not post:
         return jsonify({'success': False, 'error': 'Not found'}), 404
     user = db.execute('SELECT is_admin FROM users WHERE id=?', (uid,)).fetchone()
-    if post['user_id'] != uid and not user['is_admin']:
+    if post['user_id'] != uid and not (user and user['is_admin']):
         return jsonify({'success': False, 'error': 'Forbidden'}), 403
 
-    if post['reply_to_id']:
-        db.execute('UPDATE posts SET reply_count=MAX(0, reply_count-1) WHERE id=?', (post['reply_to_id'],))
-    if post['repost_of_id']:
-        db.execute('UPDATE posts SET repost_count=MAX(0, repost_count-1) WHERE id=?', (post['repost_of_id'],))
-
-    db.execute('DELETE FROM post_likes WHERE post_id=?', (post_id,))
-    db.execute('DELETE FROM bookmarks  WHERE post_id=?', (post_id,))
-    db.execute('DELETE FROM posts      WHERE id=?', (post_id,))
-    update_counts(db, uid)
+    _full_delete_post(db, post_id)
+    update_counts(db, post['user_id'])
     db.commit()
     return jsonify({'success': True})
 
@@ -423,7 +488,8 @@ def toggle_like(post_id):
             me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
             add_notification(db, post['user_id'], f'❤️ @{me["username"]} liked your post.')
 
-    new_count = db.execute('SELECT like_count FROM posts WHERE id=?', (post_id,)).fetchone()['like_count']
+    _lc_row = db.execute('SELECT like_count FROM posts WHERE id=?', (post_id,)).fetchone()
+    new_count = _lc_row['like_count'] if _lc_row else 0
     recalc_post_score(db, post_id)
     db.commit()
     return jsonify({'success': True, 'liked': liked, 'like_count': new_count})
@@ -489,8 +555,9 @@ def toggle_follow(username):
     update_counts(db, target['id'])
     db.commit()
 
-    new_followers = db.execute('SELECT follower_count FROM users WHERE id=?',
-                               (target['id'],)).fetchone()['follower_count']
+    _fc_row = db.execute('SELECT follower_count FROM users WHERE id=?',
+                         (target['id'],)).fetchone()
+    new_followers = _fc_row['follower_count'] if _fc_row else 0
     return jsonify({'success': True, 'following': following, 'follower_count': new_followers})
 
 
@@ -499,9 +566,18 @@ def toggle_follow(username):
 def profile(username):
     db  = get_db()
     uid = session['user_id']
-    target = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
-    if not target:
-        return render_template('error.html', code=404, message='User not found.'), 404
+    _target_row = db.execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+    if not _target_row:
+        return render_template('error.html', message='User not found'), 404
+    target = dict(_target_row)
+    target.setdefault('is_verified', 0)
+    target.setdefault('verified_tier', 'blue')
+    target.setdefault('balance', 0.0)
+    target.setdefault('bio', '')
+    target.setdefault('follower_count', 0)
+    target.setdefault('following_count', 0)
+    target.setdefault('post_count', 0)
+    target.setdefault('show_online', 1)
 
     tab      = request.args.get('tab', 'posts')
     is_own   = (uid == target['id'])
@@ -694,7 +770,25 @@ def delete_account():
         except Exception: pass
 
     # Delete all user data (cascades via FK where set, manual otherwise)
-    db.execute('DELETE FROM stories          WHERE user_id=?', (uid,))
+    # Delete stories — R2 media AND DB rows
+    story_rows = db.execute('SELECT * FROM stories WHERE user_id=?', (uid,)).fetchall()
+    for sr in story_rows:
+        try:
+            import storage as _st
+            if sr['media_url']:
+                _st.delete_object(sr['media_url'])
+        except Exception:
+            pass
+    # Delete stories — R2 media AND DB rows
+    story_rows = db.execute('SELECT * FROM stories WHERE user_id=?', (uid,)).fetchall()
+    for sr in story_rows:
+        try:
+            import storage as _st
+            if sr['media_url']:
+                _st.delete_object(sr['media_url'])
+        except Exception:
+            pass
+    db.execute('DELETE FROM stories WHERE user_id=?', (uid,))
     db.execute('DELETE FROM notifications    WHERE user_id=?', (uid,))
     db.execute('DELETE FROM transactions     WHERE user_id=?', (uid,))
     db.execute('DELETE FROM withdrawals      WHERE user_id=?', (uid,))
@@ -708,15 +802,18 @@ def delete_account():
     db.execute('DELETE FROM tips             WHERE from_user_id=? OR to_user_id=?', (uid, uid))
     db.execute("DELETE FROM subscriptions    WHERE subscriber_id=? OR creator_id=?", (uid, uid))
     db.execute('DELETE FROM subscription_tiers WHERE creator_id=?', (uid,))
-    # Delete posts (and cascade likes/bookmarks/reposts)
-    post_ids = [r['id'] for r in db.execute('SELECT id FROM posts WHERE user_id=?', (uid,)).fetchall()]
-    for pid in post_ids:
-        db.execute('DELETE FROM post_likes    WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM bookmarks     WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM poll_options  WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM poll_votes    WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM post_hashtags WHERE post_id=?', (pid,))
-        db.execute('DELETE FROM channel_posts WHERE post_id=?', (pid,))
+    # Delete posts — cascade DB rows AND R2 media
+    post_rows = db.execute('SELECT * FROM posts WHERE user_id=?', (uid,)).fetchall()
+    for post_row in post_rows:
+        _delete_post_media(post_row)          # delete R2 file
+        pid = post_row['id']
+        for tbl in ('post_likes', 'bookmarks', 'poll_votes', 'poll_options',
+                    'post_hashtags', 'channel_posts', 'post_views',
+                    'boost_engagements', 'post_boosts'):
+            try:
+                db.execute(f'DELETE FROM {tbl} WHERE post_id=?', (pid,))
+            except Exception:
+                pass
     db.execute('DELETE FROM posts WHERE user_id=?', (uid,))
     # Leave groups/channels (don't delete them)
     db.execute('DELETE FROM channel_members WHERE user_id=?', (uid,))
@@ -1123,8 +1220,9 @@ def poll_edit(post_id):
     if (post['post_type'] if 'post_type' in post.keys() else 'post') != 'poll':
         return jsonify({'success': False, 'error': 'Not a poll.'}), 400
 
-    total_votes = db.execute('SELECT COALESCE(SUM(votes),0) FROM poll_options WHERE post_id=?',
-                              (post_id,)).fetchone()[0]
+    _tv_row = db.execute('SELECT COALESCE(SUM(votes),0) FROM poll_options WHERE post_id=?',
+                         (post_id,)).fetchone()
+    total_votes = _tv_row[0] if _tv_row else 0
     if total_votes > 0:
         return jsonify({'success': False, 'error': 'Cannot edit a poll that already has votes.'}), 400
 
@@ -1226,6 +1324,29 @@ def _get_or_create_conversation(db, uid, other_id):
 
 @bp.route('/messages')
 @login_required
+
+def _format_conversation(row, uid, db):
+    """Enrich a conversations row with the other user\'s profile info."""
+    try:
+        d = dict(row)
+        other_uid = d['user_b'] if d.get('user_a') == uid else d.get('user_a')
+        other = db.execute('SELECT * FROM users WHERE id=?', (other_uid,)).fetchone()
+        if not other:
+            return None
+        od = dict(other)
+        od.setdefault('is_verified', 0)
+        od.setdefault('verified_tier', 'blue')
+        od.setdefault('avatar_url', None)
+        od.setdefault('display_name', od.get('username', ''))
+        d['other'] = od
+        d['unread_count'] = 0  # populated client-side via SSE
+        return d
+    except Exception as _e:
+        import logging
+        logging.getLogger(__name__).warning('_format_conversation error: %s', _e)
+        return None
+
+
 def messages_inbox():
     db  = get_db()      # global
     udb = get_user_db() # personal (conversations, messages)
@@ -1240,7 +1361,7 @@ def messages_inbox():
         'ORDER BY last_msg_at DESC',
         (uid, uid)
     ).fetchall()
-    chats = [_format_conversation(r, uid, db) for r in chat_rows]
+    chats = [c for c in [_format_conversation(r, uid, db) for r in chat_rows] if c is not None]
 
     # ── Groups the user is a member of ───────────────────────────────────────
     group_rows = db.execute("""
@@ -1414,10 +1535,11 @@ def poll_messages(username):
     if rows:
         udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
                    (conv['id'], uid, after))
-        total_unread = db.execute("""
+        _tu_row = db.execute("""
             SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
             WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
-        """, (uid, uid, uid)).fetchone()[0]
+        """, (uid, uid, uid)).fetchone()
+        total_unread = _tu_row[0] if _tu_row else 0
         db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
         db.commit()
 
@@ -1429,7 +1551,8 @@ def poll_messages(username):
 def api_unread_dms():
     db  = get_db()
     uid = session['user_id']
-    count = db.execute('SELECT unread_dm_count FROM users WHERE id=?', (uid,)).fetchone()
+    _dm_row = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+    count = _dm_row
     return jsonify({'count': int((count['unread_dm_count'] or 0)) if count else 0})
 
 
@@ -1783,9 +1906,8 @@ def channel_join(slug):
                (ch['id'], uid, 'member'))
     db.execute('UPDATE channels SET member_count=member_count+1 WHERE id=?', (ch['id'],))
     db.commit()
-    return jsonify({'success': True, 'member_count': db.execute(
-        'SELECT member_count FROM channels WHERE id=?', (ch['id'],)
-    ).fetchone()[0]})
+    _mc_row = db.execute('SELECT member_count FROM channels WHERE id=?', (ch['id'],)).fetchone()
+    return jsonify({'success': True, 'member_count': _mc_row[0] if _mc_row else 0})
 
 
 @bp.route('/channel/<slug>/leave', methods=['POST'])
@@ -1888,7 +2010,10 @@ def _format_group(row, uid, db):
         "AND created_at > COALESCE((SELECT last_read_at FROM group_members "
         "WHERE group_id=? AND user_id=?), '1970-01-01')",
         (row['id'], uid, row['id'], uid)
-    ).fetchone()[0]
+    ).fetchone()
+    unread = _unread_row[0] if (_unread_row := db.execute(
+        "SELECT COUNT(*) FROM group_messages"
+        , (row['id'], uid, row['id'], uid)).fetchone()) else 0
     g['unread'] = unread
     return g
 
@@ -2058,7 +2183,8 @@ def group_send(slug):
         '(group_id,sender_id,body,msg_type,file_url,file_name,file_mime,reply_to_id,created_at) '
         'VALUES (?,?,?,?,?,?,?,?,?)',
         (g['id'], uid, body, msg_type, file_url, file_name, file_mime, reply_to, now)
-    ).fetchone()['id']
+    )
+    new_msg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
     db.execute('UPDATE users SET unread_group_count=unread_group_count+1 WHERE id IN '
                '(SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?)', (g['id'], uid))
     me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()

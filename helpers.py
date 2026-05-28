@@ -231,10 +231,11 @@ def format_post(row, current_uid, db):
     p['reposted'] = bool(db.execute(
         'SELECT 1 FROM posts WHERE user_id=? AND repost_of_id=? LIMIT 1',
         (current_uid, p['id'])).fetchone())
-    author = db.execute(
-        'SELECT id,username,display_name,avatar_url,is_verified,verified_tier FROM users WHERE id=?',
-        (p['user_id'],)).fetchone()
-    p['author'] = dict(author) if author else {}
+    try:
+        author = db.execute('SELECT * FROM users WHERE id=?', (p['user_id'],)).fetchone()
+        p['author'] = dict(author) if author else {}
+    except Exception:
+        p['author'] = {}
 
     if p.get('repost_of_id'):
         orig_row = db.execute('SELECT * FROM posts WHERE id=?', (p['repost_of_id'],)).fetchone()
@@ -251,19 +252,22 @@ def format_post(row, current_uid, db):
     else:
         p['reply_to_username'] = None
 
-    boost = db.execute(
-        """SELECT pb.* FROM post_boosts pb
-           WHERE pb.post_id=? AND pb.status='active'
-             AND pb.budget_spent < pb.budget
-             AND pb.user_id != ?
-             AND NOT EXISTS (
-               SELECT 1 FROM boost_engagements be
-               WHERE be.boost_id=pb.id AND be.worker_id=?
-             )
-           ORDER BY pb.created_at DESC LIMIT 1""",
-        (p['id'], current_uid, current_uid)
-    ).fetchone()
-    p['active_boost'] = dict(boost) if boost else None
+    try:
+        boost = db.execute(
+            """SELECT pb.* FROM post_boosts pb
+               WHERE pb.post_id=? AND pb.status='active'
+                 AND pb.budget_spent < pb.budget
+                 AND pb.user_id != ?
+                 AND NOT EXISTS (
+                   SELECT 1 FROM boost_engagements be
+                   WHERE be.boost_id=pb.id AND be.worker_id=?
+                 )
+               ORDER BY pb.created_at DESC LIMIT 1""",
+            (p['id'], current_uid, current_uid)
+        ).fetchone()
+        p['active_boost'] = dict(boost) if boost else None
+    except Exception:
+        p['active_boost'] = None
 
     if 'media_url' not in p:
         p['media_url'] = None
@@ -276,15 +280,18 @@ def format_post(row, current_uid, db):
         else:
             p['media_mime'] = 'image/jpeg'
 
-    if p.get('is_subscriber_only') and p['user_id'] != current_uid:
-        is_subscribed = bool(db.execute(
-            "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
-            (current_uid, p['user_id'])
-        ).fetchone())
-        viewer = db.execute('SELECT is_admin FROM users WHERE id=?', (current_uid,)).fetchone()
-        is_admin = viewer and viewer['is_admin']
-        p['locked'] = not (is_subscribed or is_admin)
-    else:
+    try:
+        if p.get('is_subscriber_only') and p['user_id'] != current_uid:
+            is_subscribed = bool(db.execute(
+                "SELECT 1 FROM subscriptions WHERE subscriber_id=? AND creator_id=? AND status='active'",
+                (current_uid, p['user_id'])
+            ).fetchone())
+            viewer = db.execute('SELECT is_admin FROM users WHERE id=?', (current_uid,)).fetchone()
+            is_admin = bool(viewer and viewer['is_admin'])
+            p['locked'] = not (is_subscribed or is_admin)
+        else:
+            p['locked'] = False
+    except Exception:
         p['locked'] = False
 
     return p

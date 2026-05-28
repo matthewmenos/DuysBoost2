@@ -653,7 +653,11 @@ def admin_delete_user(user_id):
     _audit(db, 'delete_user', 'user', user_id,
            {'username': user['username'], 'email': user['email']})
 
-    # Cascade delete (same logic as self-delete in social.py)
+    # Cascade delete — stories get R2 cleanup before DB row removal
+    _ustories = db.execute('SELECT * FROM stories WHERE user_id=?', (user_id,)).fetchall()
+    for _us in _ustories:
+        _admin_delete_story_media(_us)
+
     for table, col in [
         ('notifications', 'user_id'), ('transactions', 'user_id'),
         ('withdrawals', 'user_id'), ('task_completions', 'worker_id'),
@@ -665,11 +669,18 @@ def admin_delete_user(user_id):
     ]:
         db.execute(f'DELETE FROM {table} WHERE {col}=?', (user_id,))
 
-    post_ids = [r[0] for r in db.execute('SELECT id FROM posts WHERE user_id=?', (user_id,)).fetchall()]
-    for pid in post_ids:
+    # Delete all user posts — R2 media + cascade tables
+    _uposts = db.execute('SELECT * FROM posts WHERE user_id=?', (user_id,)).fetchall()
+    for _up in _uposts:
+        _admin_delete_post_media(_up)
+        _pid = _up['id']
         for t in ('post_likes', 'bookmarks', 'poll_options', 'poll_votes',
-                  'post_hashtags', 'channel_posts'):
-            db.execute(f'DELETE FROM {t} WHERE post_id=?', (pid,))
+                  'post_hashtags', 'channel_posts', 'post_views',
+                  'boost_engagements', 'post_boosts'):
+            try:
+                db.execute(f'DELETE FROM {t} WHERE post_id=?', (_pid,))
+            except Exception:
+                pass
     db.execute('DELETE FROM posts WHERE user_id=?', (user_id,))
     db.execute('DELETE FROM channel_members WHERE user_id=?', (user_id,))
     db.execute('DELETE FROM group_members WHERE user_id=?', (user_id,))
@@ -694,12 +705,35 @@ def admin_delete_post(post_id):
     if not post:
         return jsonify({'success': False, 'error': 'Post not found'}), 404
 
+    # Delete R2 media first (while URL is still available)
+    _admin_delete_post_media(post)
+
+    # Cascade DB tables
     for t in ('post_likes', 'bookmarks', 'poll_options', 'poll_votes',
-              'post_hashtags', 'channel_posts'):
-        db.execute(f'DELETE FROM {t} WHERE post_id=?', (post_id,))
+              'post_hashtags', 'channel_posts', 'post_views',
+              'boost_engagements', 'post_boosts'):
+        try:
+            db.execute(f'DELETE FROM {t} WHERE post_id=?', (post_id,))
+        except Exception:
+            pass
+
+    # Delete replies to this post (and their media)
+    reply_rows = db.execute('SELECT * FROM posts WHERE reply_to_id=?', (post_id,)).fetchall()
+    for rp in reply_rows:
+        _admin_delete_post_media(rp)
+        for t in ('post_likes', 'bookmarks', 'post_views', 'post_hashtags'):
+            try:
+                db.execute(f'DELETE FROM {t} WHERE post_id=?', (rp['id'],))
+            except Exception:
+                pass
+        db.execute('DELETE FROM posts WHERE id=?', (rp['id'],))
+
     db.execute('DELETE FROM posts WHERE id=?', (post_id,))
+    db.execute('UPDATE users SET post_count=MAX(0,post_count-1) WHERE id=?',
+               (post['user_id'],))
     add_notification(db, post['user_id'],
-        '🗑️ One of your posts was removed by a moderator for violating community guidelines.')
+        'Your post was removed by a moderator for violating community guidelines.',
+        icon='system')
     _audit(db, 'delete_post', 'post', post_id, {'user_id': post['user_id']})
     db.commit()
     return jsonify({'success': True})
@@ -731,6 +765,15 @@ def action_report(report_id):
             for t in ('post_likes', 'bookmarks', 'poll_options', 'poll_votes',
                       'post_hashtags', 'channel_posts'):
                 db.execute(f'DELETE FROM {t} WHERE post_id=?', (report['target_id'],))
+            _rpt_post = db.execute('SELECT * FROM posts WHERE id=?', (report['target_id'],)).fetchone()
+            if _rpt_post:
+                _admin_delete_post_media(_rpt_post)
+                for _t in ('post_likes', 'bookmarks', 'poll_options', 'poll_votes',
+                           'post_hashtags', 'channel_posts', 'post_views'):
+                    try:
+                        db.execute(f'DELETE FROM {_t} WHERE post_id=?', (report['target_id'],))
+                    except Exception:
+                        pass
             db.execute('DELETE FROM posts WHERE id=?', (report['target_id'],))
             add_notification(db, post['user_id'],
                 '🗑️ Your post was removed following a community report.')
