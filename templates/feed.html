@@ -60,11 +60,25 @@
 }
 .wtf-mobile-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .wtf-mobile-card-name {
-  font-weight: 700; font-size: 13.5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  width: 100%; text-align: center;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 3px;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;         /* clip the whole row */
+}
+/* Text part truncates; badge stays visible */
+.wtf-mobile-card-name .wtf-name-text {
+  font-weight: 700;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;             /* allow flex child to shrink below content */
+}
+.wtf-mobile-card-name .badge-verified {
+  flex-shrink: 0;           /* badge never clipped */
 }
 .wtf-mobile-card-handle {
   font-size: 11.5px; color: var(--muted);
@@ -147,7 +161,7 @@
       <a href="{{ url_for('social.feed', tab='following') }}"
          class="feed-tab {% if tab=='following' %}active{% endif %}">Following</a>
       <a href="{{ url_for('social.channels_browse') }}"
-         class="feed-tab {% if request.endpoint=='channels_browse' %}active{% endif %}"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg> Channels</a>
+         class="feed-tab {% if request.endpoint=='channels_browse' %}active{% endif %}">Channels</a>
       <a href="{{ url_for('social.feed', tab='earn') }}"
          class="feed-tab earn-tab {% if tab=='earn' %}active{% endif %}">
         ⚡ Earn
@@ -1428,7 +1442,7 @@ async function _populateMobileWTF() {
         : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
       return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
         '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
-        '<div class="wtf-mobile-card-name">'+(u.display_name||u.username)+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
+        '<div class="wtf-mobile-card-name"><span class="wtf-name-text">'+(u.display_name||u.username)+'</span>'+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
         '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
         '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
         '</a>';
@@ -1503,7 +1517,7 @@ async function _populateMidFeedWTF() {
         : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
       return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
         '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
-        '<div class="wtf-mobile-card-name">'+(u.display_name||u.username)+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
+        '<div class="wtf-mobile-card-name"><span class="wtf-name-text">'+(u.display_name||u.username)+'</span>'+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
         '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
         '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
         '</a>';

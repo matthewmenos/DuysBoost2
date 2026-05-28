@@ -1487,8 +1487,9 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  z-index: 100; min-width: 160px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.25);
+  z-index: 9999;           /* above all post content and overlays */
+  min-width: 180px;
   overflow: hidden;
   animation: modalIn .15s ease;
 }
@@ -1768,7 +1769,8 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .tier-perks-list li { font-size: 13.5px; color: var(--text-dim); }
 
 /* ── Locked post overlay ─────────────────────────────────────────────────── */
-.post-card { position: relative; overflow: hidden; }
+/* overflow stays visible so the options dropdown can escape the card bounds */
+.post-card { position: relative; overflow: visible; }
 .post-locked-overlay {
   position: absolute; inset: 0;
   background: color-mix(in srgb, var(--surface) 85%, transparent);
