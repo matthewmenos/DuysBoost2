@@ -195,15 +195,15 @@ def create_post():
         try:
             media_url = storage.upload_post_media(uid, _raw_media_data)
         except ValueError as _e:
+            # Bad data URI / unsupported MIME / file too large — reject clearly
             return jsonify({'success': False, 'error': str(_e)}), 400
-        except RuntimeError as _e:
-            logger.error('Media upload RuntimeError: %s', _e)
-            return jsonify({'success': False,
-                            'error': 'Media storage is not configured. '
-                                     'Check R2_PUBLIC_URL in your environment.'}), 503
         except Exception as _e:
-            logger.error('Media upload unexpected error: %s', _e)
-            return jsonify({'success': False, 'error': 'Media upload failed.'}), 500
+            # Any other error (R2 credentials, network, etc.):
+            # Log it and continue posting WITHOUT media rather than losing the post.
+            # The user already hit "Post" — a silent media failure is better than
+            # a 500 that causes them to retry and potentially duplicate the post.
+            logger.error('Media upload failed (posting without media): %s', _e)
+            media_url = None  # post goes through, attachment is silently dropped
         # Infer mime from data URI if not supplied by client
         if not media_mime and _raw_media_data.startswith('data:'):
             media_mime = _raw_media_data.split(';')[0][5:] or None

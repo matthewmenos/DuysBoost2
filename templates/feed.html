@@ -524,7 +524,11 @@ if (composeInput) {
       });
       let d;
       try { d = await r.json(); }
-      catch (_) { showToast('Server error — check R2_PUBLIC_URL is set.', 'error'); return; }
+      catch (_) {
+        // Server returned non-JSON (e.g. a 503 HTML page)
+        showToast('Post failed — please try again.', 'error');
+        return;
+      }
       if (d.success) {
         composeInput.value = '';
         composeChars.textContent = 500;

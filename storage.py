@@ -127,34 +127,60 @@ def _public_url_base() -> str:
     Return the base CDN URL used to serve uploaded files publicly.
 
     Priority order:
-      1. R2_PUBLIC_URL env var (recommended — set to your r2.dev or custom domain)
-      2. Constructed from R2_ACCOUNT_ID + R2_BUCKET_NAME as a fallback
-         (only works if public access is enabled on the bucket)
+      1. R2_PUBLIC_URL env var  (recommended — your r2.dev or custom domain)
+      2. Constructed from R2_ACCOUNT_ID + R2_BUCKET_NAME
+      3. Extracted from R2_ENDPOINT_URL (account_id embedded in hostname)
+      4. R2_ENDPOINT_URL itself with bucket name appended
+         (private endpoint — files won't be publicly served but URL is stored)
 
-    Never raises — returns a best-effort URL so media always has a URL stored.
+    Never raises — always returns a best-effort URL so posts are never lost.
     """
+    # 1. Explicit public URL — best option
     url = os.environ.get('R2_PUBLIC_URL', '').strip().rstrip('/')
     if url:
         return url
 
-    # Fallback: construct from account id
-    account_id  = os.environ.get('R2_ACCOUNT_ID', '').strip()
     bucket_name = os.environ.get('R2_BUCKET_NAME', '').strip()
+
+    # 2. Construct from R2_ACCOUNT_ID
+    account_id = os.environ.get('R2_ACCOUNT_ID', '').strip()
     if account_id and bucket_name:
         constructed = f'https://{account_id}.r2.cloudflarestorage.com/{bucket_name}'
         logger.warning(
             'R2_PUBLIC_URL not set — using private endpoint %s. '
-            'Files will not be publicly accessible. '
-            'Set R2_PUBLIC_URL to your r2.dev subdomain or custom domain.',
-            constructed
+            'Files will not be publicly accessible until R2_PUBLIC_URL is configured.',
+            constructed,
         )
         return constructed
 
-    raise RuntimeError(
-        'Cannot construct a media URL: set R2_PUBLIC_URL '
-        '(e.g. https://pub-xxxx.r2.dev) in your environment variables. '
-        'Enable "Public Access" on your R2 media bucket first.'
+    # 3. Extract account_id from R2_ENDPOINT_URL
+    # Render users often set R2_ENDPOINT_URL but forget R2_PUBLIC_URL / R2_ACCOUNT_ID
+    endpoint = os.environ.get('R2_ENDPOINT_URL', '').strip().rstrip('/')
+    if endpoint and bucket_name:
+        # e.g. https://abc123.r2.cloudflarestorage.com  →  abc123
+        import re as _re
+        m = _re.match(r'https?://([^.]+)\.r2\.cloudflarestorage\.com', endpoint)
+        if m:
+            acct = m.group(1)
+            constructed = f'https://{acct}.r2.cloudflarestorage.com/{bucket_name}'
+            logger.warning(
+                'R2_PUBLIC_URL not set — derived URL from R2_ENDPOINT_URL: %s. '
+                'Set R2_PUBLIC_URL to your r2.dev subdomain for public access.',
+                constructed,
+            )
+            return constructed
+        # Fallback: endpoint + bucket_name
+        constructed = f'{endpoint}/{bucket_name}'
+        logger.warning('R2_PUBLIC_URL not set — using endpoint fallback: %s', constructed)
+        return constructed
+
+    # 4. Last resort: return a placeholder so the upload isn't lost
+    logger.error(
+        'R2_PUBLIC_URL is not set and could not be derived. '
+        'Set R2_PUBLIC_URL in your Render environment variables. '
+        'Media will be uploaded but the stored URL may not be publicly accessible.'
     )
+    return 'https://media.placeholder/missing-r2-public-url'  # stored in DB; won't 404 the post
 
 
 def _max_bytes() -> int:
