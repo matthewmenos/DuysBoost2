@@ -812,6 +812,30 @@ async function openReplyModal(postId, authorUsername) {
 }
 window.openReplyModal = openReplyModal;
 
+// ── Subscribe to creator (from locked post cards) ────────────────────────────
+async function subscribeToCreator(username, btn) {
+  const orig = btn.textContent;
+  btn.textContent = 'Subscribing…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/user/' + username + '/subscribe', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      showToast(d.message || 'Subscribed! 🎉');
+      setTimeout(function() { location.reload(); }, 800);
+    } else {
+      showToast(d.error || 'Could not subscribe.', 'error');
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
+  } catch (_) {
+    showToast('Network error.', 'error');
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+window.subscribeToCreator = subscribeToCreator;
+
 // ── Post view tracking (Intersection Observer) — runs on every page ───────────
 (function() {
   if (!('IntersectionObserver' in window)) return;
@@ -855,4 +879,152 @@ window.openReplyModal = openReplyModal;
   }
   // Expose so dynamically added cards can be observed
   window.observeNewPostCards = _observePostCards;
+})();
+
+// ── Compose autocomplete — # hashtags and @ mentions ─────────────────────────
+(function() {
+  var _acTimer  = null;
+  var _acTarget = null;
+  var _acPrefix = null;
+
+  // Create the floating dropdown once and attach to body
+  var _dd = document.createElement('div');
+  _dd.id = 'ac-dropdown';
+  _dd.style.cssText = [
+    'position:fixed;z-index:99999',
+    'background:var(--surface)',
+    'border:1px solid var(--border)',
+    'border-radius:10px',
+    'box-shadow:0 8px 32px rgba(0,0,0,.22)',
+    'min-width:220px;max-width:320px',
+    'overflow:hidden;display:none',
+  ].join(';');
+  document.body.appendChild(_dd);
+
+  function _closeAC() {
+    _dd.style.display = 'none';
+    _dd.classList.remove('open');
+    _acTarget = null;
+    _acPrefix = null;
+    clearTimeout(_acTimer);
+  }
+  window._closeAC = _closeAC;
+
+  function _attachToTextarea(ta) {
+    if (!ta || ta.dataset.acBound) return;
+    ta.dataset.acBound = '1';
+
+    ta.addEventListener('input', function() {
+      var val = ta.value;
+      var pos = ta.selectionStart;
+
+      // Walk backward to find the nearest whitespace or line break
+      var i = pos - 1;
+      while (i > 0 && val[i] !== '@' && val[i] !== '#' && !/[\s\n]/.test(val[i - 1])) i--;
+
+      var ch = val[i];
+      if (ch !== '@' && ch !== '#') { _closeAC(); return; }
+      var word = val.slice(i + 1, pos);
+      if (word.length < 1) { _closeAC(); return; }
+
+      _acTarget = ta;
+      _acPrefix = ch;
+
+      clearTimeout(_acTimer);
+      _acTimer = setTimeout(function() { _fetchAC(word, ch, ta); }, 200);
+    });
+
+    ta.addEventListener('blur', function() {
+      // Slight delay so mousedown on an item fires before blur hides the dropdown
+      setTimeout(_closeAC, 220);
+    });
+  }
+
+  async function _fetchAC(q, prefix, ta) {
+    try {
+      var r = await fetch('/api/search/autocomplete?q=' + encodeURIComponent(q));
+      var d = await r.json();
+      var items = prefix === '@' ? (d.users || []) : (d.tags || []);
+      if (!items.length) { _closeAC(); return; }
+      _showDD(items, prefix, ta);
+    } catch (_) { _closeAC(); }
+  }
+
+  function _showDD(items, prefix, ta) {
+    var rect = ta.getBoundingClientRect();
+
+    _dd.innerHTML = items.slice(0, 6).map(function(item) {
+      if (prefix === '@') {
+        var av = item.avatar_url
+          ? '<img src="' + escapeHtml(item.avatar_url) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+          : '<div style="width:28px;height:28px;border-radius:50%;background:var(--surface-2);flex-shrink:0"></div>';
+        return '<div class="ac-item" data-val="' + escapeHtml(item.username) + '" data-prefix="@"'
+          + ' style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:13.5px">'
+          + av
+          + '<div><div style="font-weight:700">' + escapeHtml(item.display_name || item.username) + '</div>'
+          + '<div style="font-size:11.5px;color:var(--muted)">@' + escapeHtml(item.username) + '</div></div></div>';
+      } else {
+        return '<div class="ac-item" data-val="' + escapeHtml(item.name) + '" data-prefix="#"'
+          + ' style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:13.5px">'
+          + '<div style="width:28px;height:28px;border-radius:50%;background:rgba(29,155,240,.12);'
+          + 'display:flex;align-items:center;justify-content:center;color:#1d9bf0;flex-shrink:0;font-weight:700">#</div>'
+          + '<div><div style="font-weight:700">#' + escapeHtml(item.name) + '</div>'
+          + '<div style="font-size:11.5px;color:var(--muted)">' + (item.cnt || 0) + ' posts</div></div></div>';
+      }
+    }).join('');
+
+    _dd.querySelectorAll('.ac-item').forEach(function(el) {
+      el.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        _insertItem(el.dataset.val, el.dataset.prefix);
+      });
+    });
+
+    _dd.style.display = 'block';
+    _dd.classList.add('open');
+    var ddLeft = Math.min(rect.left, window.innerWidth - 340);
+    var ddTop  = rect.bottom + 4;
+    // If below viewport, show above the textarea instead
+    if (ddTop + 200 > window.innerHeight) ddTop = rect.top - 210;
+    _dd.style.left = Math.max(8, ddLeft) + 'px';
+    _dd.style.top  = ddTop + 'px';
+  }
+
+  function _insertItem(value, prefix) {
+    if (!_acTarget) return;
+    var ta  = _acTarget;
+    var val = ta.value;
+    var pos = ta.selectionStart;
+
+    // Find the start of the current @/# token
+    var i = pos - 1;
+    while (i >= 0 && !/[\s\n]/.test(val[i])) i--;
+    i++; // first char of token
+
+    var before = val.slice(0, i);
+    var after  = val.slice(pos);
+    var insert = prefix + value + ' ';
+    ta.value   = before + insert + after;
+    var newPos = before.length + insert.length;
+    ta.setSelectionRange(newPos, newPos);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    _closeAC();
+    ta.focus();
+  }
+
+  // Attach to any compose-style textarea found now or after modals open
+  function _attachAll() {
+    document.querySelectorAll('#compose-input, #gc-body, #reply-input').forEach(_attachToTextarea);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _attachAll);
+  } else {
+    _attachAll();
+  }
+  // Re-attach when a modal opens (gc-body may not exist at page load)
+  document.addEventListener('focusin', function(e) {
+    var ta = e.target;
+    if (ta && ta.tagName === 'TEXTAREA') _attachToTextarea(ta);
+  });
 })();

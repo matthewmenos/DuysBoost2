@@ -446,6 +446,35 @@ if (composeInput) {
     composeInput.style.height = 'auto';
     composeInput.style.height = composeInput.scrollHeight + 'px';
   });
+
+  // ── Draft auto-save ────────────────────────────────────────────────────
+  const DRAFT_KEY = 'compose_draft';
+  const savedDraft = localStorage.getItem(DRAFT_KEY);
+  if (savedDraft) {
+    const bar = document.createElement('div');
+    bar.id = 'draft-restore-bar';
+    bar.style.cssText = 'background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:8px;font-size:13px;display:flex;align-items:center;gap:10px';
+    bar.innerHTML = '<span style="flex:1">📝 You have an unsaved draft.</span>'
+      + '<button style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12.5px;cursor:pointer" onclick="(function(){document.getElementById(\'compose-input\').value=localStorage.getItem(\'compose_draft\')||\'\';;document.getElementById(\'compose-input\').dispatchEvent(new Event(\'input\'));document.getElementById(\'draft-restore-bar\').remove();})()">'
+      + 'Restore</button>'
+      + '<button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px" onclick="localStorage.removeItem(\'compose_draft\');document.getElementById(\'draft-restore-bar\').remove()">Discard</button>';
+    composeInput.closest('.compose-box').prepend(bar);
+  }
+  // Auto-save draft every 5 seconds while typing
+  let _draftTimer = null;
+  composeInput.addEventListener('input', () => {
+    clearTimeout(_draftTimer);
+    _draftTimer = setTimeout(() => {
+      const val = composeInput.value.trim();
+      if (val) localStorage.setItem(DRAFT_KEY, val);
+      else     localStorage.removeItem(DRAFT_KEY);
+    }, 5000);
+  });
+  // Clear draft on successful post
+  const _origSubmitListener = composeSubmit.onclick;
+  composeSubmit.addEventListener('click', () => {
+    // Draft cleared in the success handler below (after post succeeds)
+  });
   // Subscriber-only toggle
   const subPill = document.getElementById('sub-only-pill');
   const subCheck = document.getElementById('compose-sub-only');
@@ -551,6 +580,9 @@ if (composeInput) {
         composeInput.style.height = 'auto';
         postMediaFiles = []; renderPostPreviews();
         if (isPoll) { pollWrap.style.display='none'; document.getElementById('feed-poll-btn').style.color=''; }
+        localStorage.removeItem('compose_draft');
+        const bar = document.getElementById('draft-restore-bar');
+        if (bar) bar.remove();
         prependPost(d.post);
         showToast('Posted!');
       } else {
@@ -788,6 +820,8 @@ if (loadMoreBtn) {
         loadMoreBtn.dataset.page = parseInt(page) + 1;
         loadMoreBtn.textContent = 'Load more';
         loadMoreBtn.disabled = false;
+        // Re-observe so infinite scroll continues
+        if (window._observeLoadMoreBtn) window._observeLoadMoreBtn(loadMoreBtn);
       } else {
         loadMoreBtn.closest('.load-more-wrap').remove();
       }
@@ -798,9 +832,90 @@ if (loadMoreBtn) {
   });
 }
 
+// ── Infinite scroll — auto-trigger load-more when sentinel enters viewport ────
+(function() {
+  if (!('IntersectionObserver' in window)) return;
+  function _observe(btn) {
+    if (!btn) return;
+    const observer = new IntersectionObserver(function(entries) {
+      if (entries[0].isIntersecting && !btn.disabled) {
+        btn.click();
+      }
+    }, { rootMargin: '320px' });
+    observer.observe(btn);
+  }
+  const btn = document.getElementById('load-more-btn');
+  if (btn) _observe(btn);
+  window._observeLoadMoreBtn = _observe;
+})();
+
 // ── DOM post injection ─────────────────────────────────────────────────────
-function prependPost(post) { location.reload(); }
-function appendPost(post)  { location.reload(); }
+function renderPostCard(p) {
+  const a   = p.author || {};
+  const uid = p.user_id;
+  const av  = a.avatar_url
+    ? '<img src="' + escapeHtml(a.avatar_url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">'
+    : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
+  const body = escapeHtml(p.body || '').replace(/\n/g, '<br>');
+  let media = '';
+  if (p.media_url) {
+    if (p.media_mime && p.media_mime.startsWith('video/')) {
+      media = '<div class="post-media-wrap"><video class="post-media-video" src="' + escapeHtml(p.media_url) + '" controls preload="metadata" playsinline style="max-width:100%;border-radius:var(--radius);max-height:480px"></video></div>';
+    } else {
+      media = '<div class="post-media-wrap"><img class="post-media-img" src="' + escapeHtml(p.media_url) + '" alt="Post image" loading="lazy" onclick="openPostLightbox(' + p.id + ')" style="max-width:100%;border-radius:var(--radius)"></div>';
+    }
+  }
+  return '<article class="post-card" data-post-id="' + p.id + '">' +
+    '<div class="post-inner">' +
+    '<div class="post-avatar-col"><a href="/user/' + escapeHtml(a.username || '') + '"><div class="avatar avatar-md">' + av + '</div></a></div>' +
+    '<div class="post-content-col">' +
+    '<div class="post-header"><div class="post-author-info">' +
+    '<a href="/user/' + escapeHtml(a.username || '') + '" class="post-display-name">' + escapeHtml(a.display_name || a.username || '') + '</a>' +
+    '<a href="/user/' + escapeHtml(a.username || '') + '" class="post-username">@' + escapeHtml(a.username || '') + '</a>' +
+    '<span class="post-dot">·</span>' +
+    '<time class="post-time">' + escapeHtml((p.created_at || '').slice(0, 10)) + '</time>' +
+    '</div>' +
+    '<div class="post-menu-wrap" style="margin-left:auto;position:relative">' +
+    '<button class="btn-ghost-icon post-menu-btn" onclick="togglePostMenu(' + p.id + ',event)">⋯</button>' +
+    '<div class="post-menu-dropdown" id="post-menu-' + p.id + '" style="display:none">' +
+    '<button class="post-menu-item" onclick="copyPostLink(' + p.id + ')">Copy link</button>' +
+    '<button class="post-menu-item" style="color:var(--red,#e53e3e)" onclick="reportPost(' + p.id + ')">Report post</button>' +
+    '</div></div></div>' +
+    (body ? '<div class="post-body" id="post-body-' + p.id + '">' + body + '</div>' : '') +
+    media +
+    '<div class="post-actions">' +
+    '<button class="post-action-btn reply-btn" onclick="openReplyModal(' + p.id + ',\'' + escapeHtml(a.username || '') + '\')" aria-label="Reply"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></span><span class="action-count" id="reply-count-' + p.id + '">' + (p.reply_count || '') + '</span></button>' +
+    '<button class="post-action-btn repost-btn' + (p.reposted ? ' reposted' : '') + '" onclick="openRepostModal(' + p.id + ',' + (p.reposted ? 'true' : 'false') + ')" aria-label="Repost"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span><span class="action-count" id="repost-count-' + p.id + '">' + (p.repost_count || '') + '</span></button>' +
+    '<button class="post-action-btn like-btn' + (p.liked ? ' liked' : '') + '" onclick="toggleLike(' + p.id + ',this)" aria-label="Like" aria-pressed="' + (p.liked ? 'true' : 'false') + '"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="' + (p.liked ? 'currentColor' : 'none') + '"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></span><span class="action-count" id="like-count-' + p.id + '">' + (p.like_count || '') + '</span></button>' +
+    '<button class="post-action-btn views-btn" aria-label="Views" style="cursor:default;pointer-events:none" tabindex="-1"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span class="action-count" id="view-count-' + p.id + '">' + (p.view_count || '') + '</span></button>' +
+    '<button class="post-action-btn bookmark-btn' + (p.bookmarked ? ' bookmarked' : '') + '" onclick="toggleBookmark(' + p.id + ',this)" aria-label="Bookmark" aria-pressed="' + (p.bookmarked ? 'true' : 'false') + '"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="' + (p.bookmarked ? 'currentColor' : 'none') + '"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></span></button>' +
+    '<button class="post-action-btn share-btn" onclick="sharePost(' + p.id + ',' + JSON.stringify(p.body || '') + ')" aria-label="Share"><span class="action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span></button>' +
+    '</div></div></div></article>';
+}
+
+function prependPost(post) {
+  if (!post || !post.id) { location.reload(); return; }
+  const list = document.getElementById('feed-list');
+  if (!list) { location.reload(); return; }
+  const html = renderPostCard(post);
+  list.insertAdjacentHTML('afterbegin', html);
+  if (window.observeNewPostCards) window.observeNewPostCards();
+}
+
+function appendPost(post) {
+  if (!post || !post.id) { location.reload(); return; }
+  const list = document.getElementById('feed-list');
+  if (!list) { location.reload(); return; }
+  // Insert before the load-more wrap if it exists
+  const wrap = list.querySelector('.load-more-wrap');
+  const html  = renderPostCard(post);
+  if (wrap) {
+    wrap.insertAdjacentHTML('beforebegin', html);
+  } else {
+    list.insertAdjacentHTML('beforeend', html);
+  }
+  if (window.observeNewPostCards) window.observeNewPostCards();
+}
 
 // ── Earn engagement ──────────────────────────────────────────────────────────
 async function earnEngagement(postId, engageType, btn) {

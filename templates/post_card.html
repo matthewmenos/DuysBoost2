@@ -131,6 +131,7 @@
       <div class="post-body-locked">🔒 Subscriber-only content.</div>
       {% endif %}
 
+
       {# Quoted repost #}
       {% if p.repost_of %}
       <a href="{{ url_for('social.post_detail', post_id=p.repost_of.id) }}" class="post-quote" style="display:block;overflow:hidden;word-break:break-word">
@@ -269,6 +270,21 @@
           </span>
         </button>
 
+        <!-- Tip (other users' posts only) -->
+        {% if current_user and (current_user.id | int) != (p.user_id | int) %}
+        <button class="post-action-btn tip-btn"
+                onclick="openPostTipModal({{ p.id }}, '{{ a.username | e }}')"
+                aria-label="Tip" title="Send a tip">
+          <span class="action-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="12" y1="1" x2="12" y2="23"/>
+              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+            </svg>
+          </span>
+        </button>
+        {% endif %}
+
         <!-- Boost (owner only, not yet boosted) -->
         {% if current_user and (current_user.id | int) == (p.user_id | int) and not p.is_boosted %}
         <button class="post-action-btn boost-btn"
@@ -292,7 +308,13 @@
       <div class="post-locked-icon">🔒</div>
       <div class="post-locked-title">Subscribers only</div>
       <div class="post-locked-sub">Subscribe to @{{ a.username }} to unlock.</div>
-      <a href="{{ url_for('social.profile', username=a.username) }}" class="btn btn-primary btn-sm">View subscription →</a>
+      <button class="btn btn-primary btn-sm"
+              onclick="subscribeToCreator('{{ a.username | e }}', this)"
+              style="margin-bottom:6px">
+        Subscribe
+      </button>
+      <a href="{{ url_for('social.profile', username=a.username) }}"
+         class="btn btn-ghost btn-sm" style="font-size:12px">View tiers →</a>
     </div>
   </div>
   {% endif %}

@@ -140,23 +140,41 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
                     (user_id, message)
                 )
         else:
-            # Open target user's personal DB, write, upload immediately
-            _conn, _path = _open_personal_db(user_id)
-            try:
+            # Cross-user write — run in background thread to avoid blocking the HTTP request
+            # (synchronous R2 download + upload adds 200–800ms per notification)
+            import threading as _threading
+
+            def _bg_notify(uid, msg, icn, lnk):
                 try:
-                    _conn.execute(
-                        'INSERT INTO notifications (user_id, message, icon, link) VALUES (?,?,?,?)',
-                        (user_id, message, icon, link)
+                    from db import _open_personal_db, _upload_personal_db
+                    _cn, _pt = _open_personal_db(uid)
+                    try:
+                        try:
+                            _cn.execute(
+                                'INSERT INTO notifications (user_id, message, icon, link) '
+                                'VALUES (?,?,?,?)',
+                                (uid, msg, icn, lnk)
+                            )
+                        except Exception:
+                            _cn.execute(
+                                'INSERT INTO notifications (user_id, message) VALUES (?,?)',
+                                (uid, msg)
+                            )
+                        _cn.commit()
+                    finally:
+                        _cn.close()
+                        _upload_personal_db(uid, _pt)
+                except Exception as _e2:
+                    import logging as _l2
+                    _l2.getLogger(__name__).warning(
+                        'bg_notify uid=%s: %s', uid, _e2
                     )
-                except Exception:
-                    _conn.execute(
-                        'INSERT INTO notifications (user_id, message) VALUES (?,?)',
-                        (user_id, message)
-                    )
-                _conn.commit()
-            finally:
-                _conn.close()
-                _upload_personal_db(user_id, _path)
+
+            _threading.Thread(
+                target=_bg_notify,
+                args=(user_id, message, icon, link),
+                daemon=True,
+            ).start()
     except Exception as _e:
         import logging as _log
         _log.getLogger(__name__).warning('add_notification failed uid=%s: %s', user_id, _e)
