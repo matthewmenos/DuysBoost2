@@ -1112,12 +1112,17 @@ def record_post_view(post_id):
     db  = get_db()
     uid = session['user_id']
     try:
-        db.execute('INSERT OR IGNORE INTO post_views (post_id, user_id) VALUES (?,?)', (post_id, uid))
-        db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=? '
-                   'AND NOT EXISTS (SELECT 1 FROM post_views WHERE post_id=? AND user_id=?)',
-                   (post_id, post_id, uid))
-        recalc_post_score(db, post_id)
-        db.commit()
+        # Check if this user already viewed this post
+        already = db.execute(
+            'SELECT 1 FROM post_views WHERE post_id=? AND user_id=?', (post_id, uid)
+        ).fetchone()
+        if not already:
+            # New view: record it and increment counter atomically
+            db.execute('INSERT OR IGNORE INTO post_views (post_id, user_id) VALUES (?,?)',
+                       (post_id, uid))
+            db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=?', (post_id,))
+            recalc_post_score(db, post_id)
+            db.commit()
     except Exception:
         pass
     return jsonify({'ok': True})

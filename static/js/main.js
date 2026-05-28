@@ -545,25 +545,43 @@ window.castVote = castVote;
 async function sharePost(postId, body) {
   const url  = window.location.origin + '/post/' + postId;
   const text = (body || '').slice(0, 100) + (body && body.length > 100 ? '…' : '');
+
+  // Try native share sheet first (mobile)
   if (navigator.share) {
     try {
-      await navigator.share({ title: 'Post on DUYS Boost', text: text, url: url });
+      await navigator.share({ title: 'DUYS Boost', text: text, url: url });
       return;
     } catch (e) {
-      if (e.name === 'AbortError') return; // user cancelled
+      if (e.name === 'AbortError') return; // user cancelled — do nothing
+      // Fall through to clipboard copy on other errors (NotAllowedError etc.)
     }
   }
-  try {
-    await navigator.clipboard.writeText(url);
-  } catch (_) {
-    const ta = document.createElement('textarea');
-    ta.value = url;
-    Object.assign(ta.style, {position:'fixed',opacity:'0'});
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+
+  // Clipboard copy fallback
+  let copied = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(url);
+      copied = true;
+    } catch (_) {}
   }
-  if (typeof showToast === 'function') showToast('Link copied!');
+  if (!copied) {
+    // Final fallback for HTTP or older browsers
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      copied = true;
+    } catch (_) {}
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(copied ? 'Link copied to clipboard!' : 'Could not copy link', copied ? 'success' : 'error');
+  }
 }
 window.sharePost = sharePost;

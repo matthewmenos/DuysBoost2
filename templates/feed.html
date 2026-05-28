@@ -1089,9 +1089,22 @@ window.feedFollowUser = feedFollowUser;
       if (!id || viewed.has(id)) return;
       viewed.add(id);
       observer.unobserve(card);
-      // Fire-and-forget after 1s dwell
+      // Fire-and-forget after 1s dwell; update DOM counter on success
       setTimeout(() => {
-        fetch(`/api/post/${id}/view`, { method: 'POST' }).catch(() => {});
+        fetch(`/api/post/${id}/view`, { method: 'POST' })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d && d.ok) {
+              // Increment displayed view count
+              const vcEl = document.getElementById('view-count-' + id)
+                        || card.querySelector('.views-btn .action-count');
+              if (vcEl) {
+                const cur = parseInt(vcEl.textContent, 10) || 0;
+                vcEl.textContent = cur + 1 || 1;
+              }
+            }
+          })
+          .catch(() => {});
       }, 1000);
     });
   }, { threshold: 0.6 });
