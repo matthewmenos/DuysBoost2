@@ -540,3 +540,30 @@ window.castVote = castVote;
 // ── Group unread badge — now pushed via SSE global stream ───────────────────
 // Handled by the 'group_unread' event in the EventSource above.
 // This block intentionally left empty (polling removed).
+
+// ── Share post (works on all pages) ─────────────────────────────────────────
+async function sharePost(postId, body) {
+  const url  = window.location.origin + '/post/' + postId;
+  const text = (body || '').slice(0, 100) + (body && body.length > 100 ? '…' : '');
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Post on DUYS Boost', text: text, url: url });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // user cancelled
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch (_) {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    Object.assign(ta.style, {position:'fixed',opacity:'0'});
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  if (typeof showToast === 'function') showToast('Link copied!');
+}
+window.sharePost = sharePost;

@@ -80,7 +80,7 @@ def feed():
         return jsonify({'posts': posts, 'has_more': has_more})
 
     suggestions = [dict(s) for s in db.execute("""
-        SELECT id, username, display_name, avatar_url, is_verified, follower_count
+        SELECT id, username, display_name, avatar_url, is_verified, verified_tier, follower_count
         FROM users
         WHERE id != ?
           AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
@@ -850,7 +850,7 @@ def _who_to_follow(db, uid, limit=8):
         existing_ids = [r['id'] for r in rows] + [uid]
         ph    = ','.join(['?'] * len(existing_ids))
         extra = db.execute(
-            f'SELECT id,username,display_name,avatar_url,is_verified,follower_count,bio,'
+            f'SELECT id,username,display_name,avatar_url,is_verified,verified_tier,follower_count,bio,'
             f'subscriber_count, 0 AS mutual_count FROM users WHERE id NOT IN ({ph}) '
             f'AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?) '
             f'ORDER BY follower_count DESC LIMIT ?',
@@ -930,7 +930,7 @@ def search_autocomplete():
         return jsonify({'users': [], 'tags': []})
     like = f'{q}%'
     users = db.execute(
-        'SELECT username, display_name, avatar_url, is_verified, follower_count '
+        'SELECT username, display_name, avatar_url, is_verified, verified_tier, follower_count '
         'FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? '
         'ORDER BY follower_count DESC LIMIT 5', (like, like, uid)
     ).fetchall()
@@ -987,7 +987,7 @@ def record_post_view(post_id):
     db  = get_db()
     uid = session['user_id']
     try:
-        db.execute('INSERT INTO post_views (post_id, user_id) VALUES (?,?) ', (post_id, uid))
+        db.execute('INSERT OR IGNORE INTO post_views (post_id, user_id) VALUES (?,?)', (post_id, uid))
         db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=? '
                    'AND NOT EXISTS (SELECT 1 FROM post_views WHERE post_id=? AND user_id=?)',
                    (post_id, post_id, uid))

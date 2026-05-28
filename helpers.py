@@ -232,7 +232,7 @@ def format_post(row, current_uid, db):
         'SELECT 1 FROM posts WHERE user_id=? AND repost_of_id=? LIMIT 1',
         (current_uid, p['id'])).fetchone())
     author = db.execute(
-        'SELECT id,username,display_name,avatar_url,is_verified FROM users WHERE id=?',
+        'SELECT id,username,display_name,avatar_url,is_verified,verified_tier FROM users WHERE id=?',
         (p['user_id'],)).fetchone()
     p['author'] = dict(author) if author else {}
 

@@ -840,21 +840,7 @@ async function submitReport() {
 }
 window.submitReport = submitReport;
 
-async function sharePost(postId, body) {
-  const url = window.location.origin + '/post/' + postId;
-  const text = (body || '').slice(0, 80) + (body && body.length > 80 ? '…' : '');
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: 'Post on DUYS Boost', text: text, url: url });
-      return;
-    } catch (_) {}
-  }
-  // Fallback: copy link
-  try { await navigator.clipboard.writeText(url); }
-  catch (_) { /* ignore */ }
-  showToast('Link copied to clipboard!');
-}
-window.sharePost = sharePost;
+// sharePost defined in main.js
 
 // ── Edit post ─────────────────────────────────────────────────────────────────
 function openEditPost(postId, body) {
@@ -1047,7 +1033,7 @@ if (boostForm) {
         <div class="suggest-row" id="wtf-${u.id}">
           <a href="/user/${escapeHtml(u.username)}" class="suggest-avatar">${av}</a>
           <div class="suggest-info">
-            <a href="/user/${escapeHtml(u.username)}" class="fw-700 suggest-name">${escapeHtml(u.display_name || u.username)}${u.is_verified ? ' <span class="verified-badge"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}</a>
+            <a href="/user/${escapeHtml(u.username)}" class="fw-700 suggest-name">${escapeHtml(u.display_name || u.username)}${u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':''}</a>
             <div class="text-xs text-muted">@${escapeHtml(u.username)}${mutual}</div>
           </div>
           <button class="btn btn-outline btn-sm" onclick="feedFollowUser('${escapeHtml(u.username)}', this)">Follow</button>
@@ -1161,24 +1147,67 @@ window.onFeedSearch = onFeedSearch;
 
 async function _renderSearchDefault() {
   const el = document.getElementById('feed-search-results');
+  // Show skeleton immediately
+  el.innerHTML = [1,2,3,4,5,6].map(() =>
+    '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;opacity:.35">'
+    +'<div style="width:16px;height:16px;border-radius:50%;background:var(--surface-2)"></div>'
+    +'<div style="height:12px;width:60%;border-radius:6px;background:var(--surface-2)"></div>'
+    +'</div>'
+  ).join('');
+
   try {
     const [tr, th] = await Promise.all([
       fetch('/api/trending/posts').then(r => r.json()).catch(() => []),
       fetch('/api/trending/tags').then(r => r.json()).catch(() => ({tags:[]})),
     ]);
     let html = '';
-    if (th.tags && th.tags.length) {
-      html += '<div class="feed-search-section">Trending tags</div>';
-      html += th.tags.slice(0,6).map(t =>
-        `<a class="feed-search-item" href="/explore?q=${encodeURIComponent('#'+t.name)}">
-          <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
-          <span>#${escapeHtml(t.name)}</span>
-          <span style="margin-left:auto;font-size:12px;color:var(--muted)">${t.cnt} posts</span>
-        </a>`
+
+    // Trending hashtags
+    const tags = Array.isArray(th) ? th : (th.tags || []);
+    if (tags.length) {
+      html += '<div class="feed-search-section" style="display:flex;align-items:center;gap:6px">'
+        + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7v8l11-14h-7l-1-6z"/></svg>'
+        + 'Trending</div>';
+      html += tags.slice(0,8).map(t =>
+        '<a class="feed-search-item" href="/explore?q=' + encodeURIComponent('#'+t.name) + '">'
+        + '<span style="width:32px;height:32px;border-radius:50%;background:rgba(29,155,240,.12);'
+        + 'display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#1d9bf0">'
+        + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>'
+        + '</span>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:700;font-size:13.5px">#' + escapeHtml(t.name) + '</div>'
+        + '<div style="font-size:12px;color:var(--muted)">' + (t.cnt||0) + ' posts</div>'
+        + '</div>'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+        + '</a>'
       ).join('');
     }
-    el.innerHTML = html || '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Start typing to search…</div>';
-  } catch (_) {}
+
+    // Trending posts preview
+    const posts = Array.isArray(tr) ? tr : (tr.posts || []);
+    if (posts.length) {
+      html += '<div class="feed-search-section" style="display:flex;align-items:center;gap:6px">'
+        + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>'
+        + 'Trending posts</div>';
+      html += posts.slice(0,3).map(p =>
+        '<a class="feed-search-item" href="/post/' + p.id + '" style="flex-direction:column;align-items:flex-start;gap:3px">'
+        + '<div style="font-size:13px;line-height:1.4;color:var(--text);max-height:38px;overflow:hidden">'
+        + escapeHtml((p.body||'').slice(0,80)) + (p.body && p.body.length>80?'…':'') + '</div>'
+        + '<div style="font-size:11.5px;color:var(--muted)">'
+        + '@' + escapeHtml(p.username||'') + ' · '
+        + (p.like_count||0) + ' likes · ' + (p.view_count||0) + ' views'
+        + '</div>'
+        + '</a>'
+      ).join('');
+    }
+
+    el.innerHTML = html
+      || '<div style="padding:28px 16px;text-align:center;color:var(--muted);font-size:13px">'
+      + '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 8px;display:block;opacity:.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+      + 'Start typing to search…</div>';
+  } catch (_) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Start typing to search…</div>';
+  }
 }
 
 function _renderSearchResults(data, q) {
@@ -1193,7 +1222,7 @@ function _renderSearchResults(data, q) {
       return `<a class="feed-search-item" href="/user/${encodeURIComponent(u.username)}">
         ${av}
         <div>
-          <div style="font-weight:700;font-size:13.5px">${escapeHtml(u.display_name||u.username)}${u.is_verified?' ✓':''}</div>
+          <div style="font-weight:700;font-size:13.5px">${escapeHtml(u.display_name||u.username)}${u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':''}</div>
           <div style="font-size:12px;color:var(--muted)">@${escapeHtml(u.username)} · ${u.follower_count||0} followers</div>
         </div>
       </a>`;
@@ -1380,7 +1409,7 @@ async function _populateMobileWTF() {
         : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
       return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
         '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
-        '<div class="wtf-mobile-card-name">' + (u.display_name || u.username) + '</div>' +
+        '<div class="wtf-mobile-card-name" style="display:flex;align-items:center;gap:3px">'+(u.display_name||u.username)+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
         '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
         '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
         '</a>';
@@ -1455,7 +1484,7 @@ async function _populateMidFeedWTF() {
         : '<svg viewBox="0 0 24 24" fill="currentColor" style="width:60%;height:60%;color:var(--muted);opacity:.6"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>';
       return '<a class="wtf-mobile-card" href="/user/' + u.username + '">' +
         '<div class="wtf-mobile-card-avatar">' + av + '</div>' +
-        '<div class="wtf-mobile-card-name">' + (u.display_name || u.username) + '</div>' +
+        '<div class="wtf-mobile-card-name" style="display:flex;align-items:center;gap:3px">'+(u.display_name||u.username)+(u.is_verified?'<span class="badge-verified tier-'+(u.verified_tier||'blue')+'" style="margin-left:2px;width:16px;height:16px;vertical-align:middle"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>':'')+'</div>' +
         '<div class="wtf-mobile-card-handle">@' + u.username + '</div>' +
         '<button class="wtf-mobile-follow-btn" onclick="event.preventDefault();event.stopPropagation();_wtfFollow(\'' + u.username + '\', this)">Follow</button>' +
         '</a>';
