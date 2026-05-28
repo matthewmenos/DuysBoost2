@@ -144,7 +144,7 @@
           <span class="fw-700">{{ p.repost_of.author.display_name or p.repost_of.author.username }}</span>
           <span class="text-muted text-xs">@{{ p.repost_of.author.username }}</span>
         </div>
-        <div class="post-quote-body">{{ p.repost_of.body[:120] }}{% if p.repost_of.body|length > 120 %}…{% endif %}</div>
+        {% if p.repost_of.body %}<div class="post-quote-body">{{ p.repost_of.body[:120] }}{% if p.repost_of.body|length > 120 %}…{% endif %}</div>{% elif p.repost_of.media_url %}<div class="post-quote-body" style="color:var(--muted);font-style:italic;font-size:13px">📎 Media attachment</div>{% else %}<div class="post-quote-body" style="color:var(--muted);font-style:italic;font-size:13px">[No content]</div>{% endif %}
       </a>
       {% endif %}
 
