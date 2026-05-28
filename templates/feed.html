@@ -747,32 +747,7 @@ async function submitQuote() {
 }
 window.submitQuote = submitQuote;
 
-// ── Like ─────────────────────────────────────────────────────────────────────
-async function toggleLike(postId, btn) {
-  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
-  const d = await r.json();
-  if (!d.success) return;
-  const icon = btn.querySelector('.action-icon');
-  const cnt  = document.getElementById('like-count-' + postId);
-  icon.textContent = d.liked ? '❤️' : '🤍';
-  btn.classList.toggle('liked', d.liked);
-  btn.setAttribute('aria-pressed', d.liked);
-  if (cnt) cnt.textContent = d.like_count || '';
-}
-window.toggleLike = toggleLike;
-
-// ── Bookmark ─────────────────────────────────────────────────────────────────
-async function toggleBookmark(postId, btn) {
-  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
-  const d = await r.json();
-  if (!d.success) return;
-  const icon = btn.querySelector('.action-icon');
-  icon.textContent = d.saved ? '🔖' : '🏷';
-  btn.classList.toggle('bookmarked', d.saved);
-  btn.setAttribute('aria-pressed', d.saved);
-  showToast(d.saved ? 'Bookmarked!' : 'Removed from bookmarks');
-}
-window.toggleBookmark = toggleBookmark;
+// toggleLike, toggleBookmark — defined globally in main.js
 
 // ── Follow ────────────────────────────────────────────────────────────────────
 async function followUser(username, btn) {
@@ -792,151 +767,8 @@ async function followUser(username, btn) {
 }
 window.followUser = followUser;
 
-// ── Delete ────────────────────────────────────────────────────────────────────
-async function deletePost(postId) {
-  if (!confirm('Delete this post?')) return;
-  const r = await fetch(`/post/${postId}/delete`, { method: 'POST' });
-  const d = await r.json();
-  if (d.success) {
-    const card = document.querySelector(`[data-post-id="${postId}"]`);
-    if (card) { card.style.opacity='0'; setTimeout(()=>card.remove(), 300); }
-    showToast('Post deleted.');
-  } else {
-    showToast(d.error || 'Could not delete.', 'error');
-  }
-}
-window.deletePost = deletePost;
-
-// ── Post menu ─────────────────────────────────────────────────────────────────
-function togglePostMenu(postId, e) {
-  e.stopPropagation();
-  const menu = document.getElementById('post-menu-' + postId);
-  if (!menu) return;
-  const open = menu.style.display !== 'none';
-
-  // Close all open menus first
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    m.style.display = 'none';
-    m.style.position = '';
-    m.style.top = '';
-    m.style.right = '';
-    m.style.left = '';
-    m.style.width = '';
-  });
-
-  if (open) return;
-
-  // Use fixed positioning anchored to the button so it floats above ALL content
-  const btn = e.currentTarget || e.target;
-  const rect = btn.getBoundingClientRect();
-  const vw   = window.innerWidth;
-  const menuW = 200;
-
-  menu.style.display   = 'block';
-  menu.style.position  = 'fixed';
-  menu.style.zIndex    = '99999';
-  menu.style.width     = menuW + 'px';
-  menu.style.top       = (rect.bottom + 4) + 'px';
-
-  // Align right by default; flip left if it would overflow viewport
-  if (rect.right - menuW >= 0) {
-    menu.style.right = (vw - rect.right) + 'px';
-    menu.style.left  = 'auto';
-  } else {
-    menu.style.left  = Math.max(8, rect.left) + 'px';
-    menu.style.right = 'auto';
-  }
-}
-window.togglePostMenu = togglePostMenu;
-
-// Reposition any open menu on scroll (keeps it aligned to its button)
-document.addEventListener('scroll', function() {
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    if (m.style.display !== 'none') {
-      m.style.display = 'none';
-    }
-  });
-}, true);
-
-document.addEventListener('click', function() {
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    m.style.display = 'none';
-  });
-});
-
-function copyPostLink(postId) {
-  navigator.clipboard.writeText(window.location.origin + '/post/' + postId);
-  showToast('Link copied!');
-}
-window.copyPostLink = copyPostLink;
-
-// ── Share post ────────────────────────────────────────────────────────────────
-function reportPost(postId) {
-  document.getElementById('report-target-type').value = 'post';
-  document.getElementById('report-target-id').value   = postId;
-  document.getElementById('report-reason').value      = '';
-  document.getElementById('report-details').value     = '';
-  openModal('report-modal');
-}
-window.reportPost = reportPost;
-
-async function submitReport() {
-  const target_type = document.getElementById('report-target-type').value;
-  const target_id   = parseInt(document.getElementById('report-target-id').value);
-  const reason      = document.getElementById('report-reason').value;
-  const details     = document.getElementById('report-details').value.trim();
-  if (!reason) return showToast('Please select a reason.', 'error');
-  try {
-    const r = await fetch('/api/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_type, target_id, reason, details }),
-    });
-    const d = await r.json();
-    if (d.success) {
-      closeModal('report-modal');
-      showToast('🚩 Report submitted. Thank you.');
-    } else {
-      showToast(d.error || 'Could not submit report.', 'error');
-    }
-  } catch (_) { showToast('Network error.', 'error'); }
-}
-window.submitReport = submitReport;
-
-// sharePost defined in main.js
-
-// ── Edit post ─────────────────────────────────────────────────────────────────
-function openEditPost(postId, body) {
-  const modal = document.getElementById('edit-post-modal');
-  if (!modal) return;
-  document.getElementById('edit-post-id').value   = postId;
-  document.getElementById('edit-post-body').value = body || '';
-  openModal('edit-post-modal');
-}
-window.openEditPost = openEditPost;
-
-async function submitEditPost() {
-  const postId = document.getElementById('edit-post-id').value;
-  const body   = document.getElementById('edit-post-body').value.trim();
-  if (!postId) return;
-  const fd = new FormData();
-  fd.append('body', body);
-  try {
-    const r = await fetch('/post/' + postId + '/edit', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (d.success) {
-      closeModal('edit-post-modal');
-      // Update the post body in the DOM without a reload
-      const bodyEl = document.getElementById('post-body-' + postId);
-      if (bodyEl) bodyEl.innerHTML = escapeHtml(body).replace(/\n/g, '<br>') +
-        ' <span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>';
-      showToast('Post updated!');
-    } else {
-      showToast(d.error || 'Could not update post.', 'error');
-    }
-  } catch (_) { showToast('Network error.', 'error'); }
-}
-window.submitEditPost = submitEditPost;
+// deletePost, togglePostMenu, copyPostLink, reportPost, submitReport,
+// openEditPost, submitEditPost — defined globally in main.js
 
 // ── Load more ──────────────────────────────────────────────────────────────────
 const loadMoreBtn = document.getElementById('load-more-btn');
@@ -1140,40 +972,7 @@ window.feedFollowUser = feedFollowUser;
   } catch(_) {}
 })();
 
-// ── Post view tracking (Intersection Observer) ────────────────────────────────
-(function() {
-  if (!('IntersectionObserver' in window)) return;
-  const viewed = new Set();
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      const card = entry.target;
-      const id   = card.dataset.postId;
-      if (!id || viewed.has(id)) return;
-      viewed.add(id);
-      observer.unobserve(card);
-      // Fire-and-forget after 1s dwell; update DOM counter on success
-      setTimeout(() => {
-        fetch(`/api/post/${id}/view`, { method: 'POST' })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => {
-            if (d && d.ok) {
-              // Increment displayed view count
-              const vcEl = document.getElementById('view-count-' + id)
-                        || card.querySelector('.views-btn .action-count');
-              if (vcEl) {
-                const cur = parseInt(vcEl.textContent, 10) || 0;
-                vcEl.textContent = cur + 1 || 1;
-              }
-            }
-          })
-          .catch(() => {});
-      }, 1000);
-    });
-  }, { threshold: 0.6 });
-
-  document.querySelectorAll('.post-card[data-post-id]').forEach(card => observer.observe(card));
-})();
+// Post view tracking IntersectionObserver — defined globally in main.js
 
 /* ── In-feed search ──────────────────────────────────────────────────────── */
 let _searchTimer = null;

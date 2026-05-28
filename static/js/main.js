@@ -585,3 +585,274 @@ async function sharePost(postId, body) {
   }
 }
 window.sharePost = sharePost;
+
+// ── Post interaction functions (global — work on all pages) ──────────────────
+
+async function toggleLike(postId, btn) {
+  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  const icon = btn.querySelector('.action-icon');
+  const cnt  = document.getElementById('like-count-' + postId);
+  icon.textContent = d.liked ? '❤️' : '🤍';
+  btn.classList.toggle('liked', d.liked);
+  btn.setAttribute('aria-pressed', d.liked);
+  if (cnt) cnt.textContent = d.like_count || '';
+}
+window.toggleLike = toggleLike;
+
+async function toggleBookmark(postId, btn) {
+  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
+  const d = await r.json();
+  if (!d.success) return;
+  const icon = btn.querySelector('.action-icon');
+  icon.textContent = d.saved ? '🔖' : '🏷';
+  btn.classList.toggle('bookmarked', d.saved);
+  btn.setAttribute('aria-pressed', d.saved);
+  showToast(d.saved ? 'Bookmarked!' : 'Removed from bookmarks');
+}
+window.toggleBookmark = toggleBookmark;
+
+async function deletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  const r = await fetch(`/post/${postId}/delete`, { method: 'POST' });
+  const d = await r.json();
+  if (d.success) {
+    const card = document.querySelector(`[data-post-id="${postId}"]`);
+    if (card) { card.style.opacity = '0'; setTimeout(() => card.remove(), 300); }
+    showToast('Post deleted.');
+  } else {
+    showToast(d.error || 'Could not delete.', 'error');
+  }
+}
+window.deletePost = deletePost;
+
+function togglePostMenu(postId, e) {
+  e.stopPropagation();
+  const menu = document.getElementById('post-menu-' + postId);
+  if (!menu) return;
+  const open = menu.style.display !== 'none';
+
+  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
+    m.style.display = 'none';
+    m.style.position = '';
+    m.style.top = '';
+    m.style.right = '';
+    m.style.left = '';
+    m.style.width = '';
+  });
+
+  if (open) return;
+
+  const btn  = e.currentTarget || e.target;
+  const rect = btn.getBoundingClientRect();
+  const vw   = window.innerWidth;
+  const menuW = 200;
+
+  menu.style.display  = 'block';
+  menu.style.position = 'fixed';
+  menu.style.zIndex   = '99999';
+  menu.style.width    = menuW + 'px';
+  menu.style.top      = (rect.bottom + 4) + 'px';
+
+  if (rect.right - menuW >= 0) {
+    menu.style.right = (vw - rect.right) + 'px';
+    menu.style.left  = 'auto';
+  } else {
+    menu.style.left  = Math.max(8, rect.left) + 'px';
+    menu.style.right = 'auto';
+  }
+}
+window.togglePostMenu = togglePostMenu;
+
+document.addEventListener('scroll', function() {
+  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
+    if (m.style.display !== 'none') m.style.display = 'none';
+  });
+}, true);
+
+document.addEventListener('click', function() {
+  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
+    m.style.display = 'none';
+  });
+});
+
+function copyPostLink(postId) {
+  navigator.clipboard.writeText(window.location.origin + '/post/' + postId);
+  showToast('Link copied!');
+}
+window.copyPostLink = copyPostLink;
+
+function reportPost(postId) {
+  document.getElementById('report-target-type').value = 'post';
+  document.getElementById('report-target-id').value   = postId;
+  document.getElementById('report-reason').value      = '';
+  document.getElementById('report-details').value     = '';
+  openModal('report-modal');
+}
+window.reportPost = reportPost;
+
+async function submitReport() {
+  const target_type = document.getElementById('report-target-type').value;
+  const target_id   = parseInt(document.getElementById('report-target-id').value);
+  const reason      = document.getElementById('report-reason').value;
+  const details     = document.getElementById('report-details').value.trim();
+  if (!reason) return showToast('Please select a reason.', 'error');
+  try {
+    const r = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_type, target_id, reason, details }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('report-modal');
+      showToast('🚩 Report submitted. Thank you.');
+    } else {
+      showToast(d.error || 'Could not submit report.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.submitReport = submitReport;
+
+function openEditPost(postId, body) {
+  const modal = document.getElementById('edit-post-modal');
+  if (!modal) return;
+  document.getElementById('edit-post-id').value   = postId;
+  document.getElementById('edit-post-body').value = body || '';
+  openModal('edit-post-modal');
+}
+window.openEditPost = openEditPost;
+
+async function submitEditPost() {
+  const postId = document.getElementById('edit-post-id').value;
+  const body   = document.getElementById('edit-post-body').value.trim();
+  if (!postId) return;
+  const fd = new FormData();
+  fd.append('body', body);
+  try {
+    const r = await fetch('/post/' + postId + '/edit', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      closeModal('edit-post-modal');
+      const bodyEl = document.getElementById('post-body-' + postId);
+      if (bodyEl) bodyEl.innerHTML = escapeHtml(body).replace(/\n/g, '<br>') +
+        ' <span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>';
+      showToast('Post updated!');
+    } else {
+      showToast(d.error || 'Could not update post.', 'error');
+    }
+  } catch (_) { showToast('Network error.', 'error'); }
+}
+window.submitEditPost = submitEditPost;
+
+function openRepostModal(postId, isReposted) {
+  let targetIdEl = document.getElementById('repost-target-id');
+  if (!targetIdEl) return;
+  targetIdEl.value = postId;
+  window._repostTargetId  = postId;
+  window._repostWasActive = !!isReposted;
+  const titleEl   = document.getElementById('repost-modal-title');
+  const actionsEl = document.getElementById('repost-modal-actions');
+  if (isReposted) {
+    if (titleEl) titleEl.textContent = 'You reposted this';
+    if (actionsEl) actionsEl.innerHTML =
+      '<button class="btn btn-outline btn-block" onclick="undoRepost()" style="color:var(--red,#e53e3e)">Undo repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">Quote &amp; comment instead</button>';
+  } else {
+    if (titleEl) titleEl.textContent = 'Repost';
+    if (actionsEl) actionsEl.innerHTML =
+      '<button class="btn btn-outline btn-block" onclick="quickRepost()">Repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">Quote &amp; comment</button>';
+  }
+  openModal('repost-modal');
+}
+window.openRepostModal = openRepostModal;
+
+async function openReplyModal(postId, authorUsername) {
+  const postIdEl = document.getElementById('reply-post-id');
+  if (!postIdEl) return;
+  postIdEl.value = postId;
+  const ctx = document.getElementById('reply-context-card');
+  if (ctx) ctx.innerHTML = '<span style="color:var(--muted)">Replying to</span> <strong>@' + authorUsername + '</strong>';
+  const ta = document.getElementById('reply-input');
+  if (ta) { ta.value = ''; }
+  const charsEl = document.getElementById('reply-chars');
+  if (charsEl) charsEl.textContent = '200';
+  const submitBtn = document.getElementById('reply-submit-btn');
+  if (submitBtn) submitBtn.disabled = true;
+  openModal('reply-modal');
+
+  const listEl = document.getElementById('reply-existing-list');
+  if (listEl) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+    try {
+      const r = await fetch('/api/post/' + postId + '/replies');
+      const d = await r.json();
+      if (d.success && d.replies && d.replies.length) {
+        listEl.innerHTML = d.replies.map(function(rp) {
+          const av = rp.author.avatar_url
+            ? '<img src="' + rp.author.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+            : '<div class="avatar-placeholder" style="width:32px;height:32px;border-radius:50%;flex-shrink:0"></div>';
+          return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            av + '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13.5px">' +
+            (rp.author.display_name || rp.author.username) +
+            ' <span style="color:var(--muted);font-weight:400">@' + rp.author.username + '</span></div>' +
+            '<div style="font-size:14px;margin-top:3px;word-break:break-word">' + (rp.body || '') + '</div></div></div>';
+        }).join('');
+      } else {
+        listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No replies yet — be first!</div>';
+      }
+    } catch (_) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Could not load replies</div>';
+    }
+  }
+
+  setTimeout(function() { if (ta) ta.focus(); }, 180);
+}
+window.openReplyModal = openReplyModal;
+
+// ── Post view tracking (Intersection Observer) — runs on every page ───────────
+(function() {
+  if (!('IntersectionObserver' in window)) return;
+  const viewed = new Set();
+  const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (!entry.isIntersecting) return;
+      const card = entry.target;
+      const id   = card.dataset.postId;
+      if (!id || viewed.has(id)) return;
+      viewed.add(id);
+      observer.unobserve(card);
+      setTimeout(function() {
+        fetch('/api/post/' + id + '/view', { method: 'POST' })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(d) {
+            if (d && d.ok) {
+              const vcEl = document.getElementById('view-count-' + id)
+                        || (card.querySelector('.views-btn .action-count'));
+              if (vcEl) {
+                const cur = parseInt(vcEl.textContent, 10) || 0;
+                vcEl.textContent = cur + 1 || 1;
+              }
+            }
+          })
+          .catch(function() {});
+      }, 1000);
+    });
+  }, { threshold: 0.6 });
+
+  function _observePostCards() {
+    document.querySelectorAll('.post-card[data-post-id]').forEach(function(card) {
+      observer.observe(card);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _observePostCards);
+  } else {
+    _observePostCards();
+  }
+  // Expose so dynamically added cards can be observed
+  window.observeNewPostCards = _observePostCards;
+})();

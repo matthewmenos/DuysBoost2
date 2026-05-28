@@ -225,6 +225,12 @@
 
   {% if posts %}
     {% for post in posts %}{{ render_post(post) }}{% endfor %}
+    {% if has_more %}
+    <div class="load-more-wrap" style="text-align:center;padding:16px">
+      <a href="{{ url_for('social.profile', username=target.username, tab=tab, page=page+1) }}"
+         class="btn btn-outline">Load more</a>
+    </div>
+    {% endif %}
   {% else %}
     <div class="x-empty">
       <div class="x-empty-title">{% if tab=='replies' %}No replies{% elif tab=='likes' %}No likes{% elif tab=='exclusive' %}No exclusive posts{% else %}No posts yet{% endif %}</div>

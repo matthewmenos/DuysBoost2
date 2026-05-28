@@ -47,7 +47,8 @@ def _run_cleanup(app):
     while True:
         time.sleep(600)
         try:
-            db_path = _os.path.join(app.root_path, 'global.db')
+            # Use the configured DB path so it's correct regardless of working directory
+            db_path = app.config.get('DB_PATH') or _os.path.join(app.root_path, 'global.db')
             if not _os.path.exists(db_path):
                 continue
 

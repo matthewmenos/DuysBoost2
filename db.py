@@ -372,7 +372,24 @@ CREATE TABLE IF NOT EXISTS search_history (
     created_at  TEXT    DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS pending_withdrawals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL,
+    personal_wdr_id INTEGER NOT NULL,
+    amount          REAL    NOT NULL,
+    method          TEXT,
+    account         TEXT,
+    network         TEXT,
+    status          TEXT DEFAULT 'pending',
+    failure_reason  TEXT,
+    tx_hash         TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    processed_at    TEXT
+);
+
 -- Global indexes
+CREATE INDEX IF NOT EXISTS idx_pw_user         ON pending_withdrawals(user_id);
+CREATE INDEX IF NOT EXISTS idx_pw_status       ON pending_withdrawals(status);
 CREATE INDEX IF NOT EXISTS idx_posts_user      ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created   ON posts(created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_score     ON posts(score);

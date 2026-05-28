@@ -193,7 +193,7 @@ def create_app() -> Flask:
                     "SELECT COUNT(*) FROM reports WHERE status='open'"
                 ).fetchone()[0]
                 ctx['pending_wdr_count'] = db.execute(
-                    "SELECT COUNT(*) FROM withdrawals WHERE status='pending'"
+                    "SELECT COUNT(*) FROM pending_withdrawals WHERE status='pending'"
                 ).fetchone()[0]
             except Exception:
                 pass

@@ -592,24 +592,34 @@ def profile(username):
     target.setdefault('show_online', 1)
 
     tab      = request.args.get('tab', 'posts')
+    page     = max(1, safe_int(request.args.get('page'), 1))
+    per      = 20
+    offset   = (page - 1) * per
     is_own   = (uid == target['id'])
     is_following = bool(db.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
                                    (uid, target['id'])).fetchone())
 
     if tab == 'replies':
-        rows = db.execute('SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NOT NULL '
-                          'ORDER BY created_at DESC LIMIT 40', (target['id'],)).fetchall()
+        rows = db.execute(
+            'SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NOT NULL '
+            'ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            (target['id'], per, offset)
+        ).fetchall()
     elif tab == 'likes':
-        rows = db.execute('SELECT p.* FROM posts p JOIN post_likes l ON l.post_id=p.id '
-                          'WHERE l.user_id=? ORDER BY l.created_at DESC LIMIT 40',
-                          (target['id'],)).fetchall()
+        rows = db.execute(
+            'SELECT p.* FROM posts p JOIN post_likes l ON l.post_id=p.id '
+            'WHERE l.user_id=? ORDER BY l.created_at DESC LIMIT ? OFFSET ?',
+            (target['id'], per, offset)
+        ).fetchall()
     else:
         rows = db.execute(
             'SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL '
             'AND id NOT IN (SELECT post_id FROM channel_posts) '
-            'ORDER BY created_at DESC LIMIT 40', (target['id'],)
+            'ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            (target['id'], per, offset)
         ).fetchall()
 
+    has_more  = len(rows) == per
     posts     = [format_post(r, uid, db) for r in rows]
     followers = [dict(f) for f in db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified
@@ -631,6 +641,7 @@ def profile(username):
 
     return render_template('profile.html', target=dict(target),
                            posts=posts, tab=tab,
+                           page=page, has_more=has_more,
                            is_following=is_following, is_own=is_own,
                            followers=followers,
                            tier=dict(tier) if tier else None,
@@ -1133,7 +1144,12 @@ def record_post_view(post_id):
             db.execute('INSERT OR IGNORE INTO post_views (post_id, user_id) VALUES (?,?)',
                        (post_id, uid))
             db.execute('UPDATE posts SET view_count=view_count+1 WHERE id=?', (post_id,))
-            recalc_post_score(db, post_id)
+            # Recalculate score every 10th view to avoid per-request overhead
+            new_count = db.execute(
+                'SELECT view_count FROM posts WHERE id=?', (post_id,)
+            ).fetchone()
+            if new_count and new_count['view_count'] % 10 == 0:
+                recalc_post_score(db, post_id)
             db.commit()
     except Exception:
         pass
@@ -2242,12 +2258,6 @@ def group_send(slug):
         'sender_display': me['display_name'], 'sender_avatar': me['avatar_url'],
         'reply_to_id': reply_to, 'created_at': now,
     }})
-
-
-@bp.route('/group/<slug>/poll', methods=['POST'])
-@login_required
-def group_send_message(slug):
-    return group_send(slug)
 
 
 @bp.route('/api/group/<slug>/poll')

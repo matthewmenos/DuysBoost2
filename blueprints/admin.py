@@ -334,26 +334,24 @@ def admin_withdrawals():
     per    = 25
     offset = (page - 1) * per
 
+    # pending_withdrawals mirrors withdrawal data from personal DBs into global DB
     rows = db.execute("""
-        SELECT w.*, u.username, u.crypto_address, u.crypto_network
-        FROM withdrawals w JOIN users u ON w.user_id=u.id
-        WHERE w.status=?
-        ORDER BY w.created_at DESC LIMIT ? OFFSET ?
+        SELECT pw.*, u.username, u.crypto_address, u.crypto_network
+        FROM pending_withdrawals pw JOIN users u ON pw.user_id=u.id
+        WHERE pw.status=?
+        ORDER BY pw.created_at DESC LIMIT ? OFFSET ?
     """, (status, per, offset)).fetchall()
-    total = db.execute('SELECT COUNT(*) FROM withdrawals WHERE status=?', (status,)).fetchone()[0]
+    total = db.execute(
+        'SELECT COUNT(*) FROM pending_withdrawals WHERE status=?', (status,)
+    ).fetchone()[0]
 
-    counts = {s: db.execute('SELECT COUNT(*) FROM withdrawals WHERE status=?', (s,)).fetchone()[0]
-              for s in ('pending', 'approved', 'rejected', 'failed', 'processing')}
-
-    pending_deposits = db.execute("""
-        SELECT cd.*, u.username FROM crypto_deposits cd
-        JOIN users u ON cd.user_id=u.id
-        ORDER BY cd.created_at DESC LIMIT 30
-    """).fetchall()
+    counts = {s: db.execute(
+        'SELECT COUNT(*) FROM pending_withdrawals WHERE status=?', (s,)
+    ).fetchone()[0] for s in ('pending', 'approved', 'rejected', 'failed', 'processing')}
 
     return render_template('admin/withdrawals.html',
         withdrawals=rows, status=status, counts=counts,
-        pending_deposits=pending_deposits, page=page, total=total, per=per,
+        pending_deposits=[], page=page, total=total, per=per,
     )
 
 
@@ -813,31 +811,55 @@ def process_withdrawal(wdr_id, action):
     if action not in ('approve', 'reject'):
         return jsonify({'success': False, 'error': 'Invalid action.'}), 400
 
-    wr = db.execute('SELECT * FROM withdrawals WHERE id=?', (wdr_id,)).fetchone()
+    # Read from the global mirror table
+    wr = db.execute('SELECT * FROM pending_withdrawals WHERE id=?', (wdr_id,)).fetchone()
     if not wr:
         return jsonify({'success': False, 'error': 'Not found.'}), 404
-    if wr['status'] not in ('pending', 'failed'):
+    if wr['status'] not in ('pending', 'failed', 'processing'):
         return jsonify({'success': False, 'error': 'Already processed.'})
 
     now = datetime.now(timezone.utc).isoformat()
-    if action == 'reject':
-        reason = (request.json or {}).get('reason', '')
-        db.execute('UPDATE withdrawals SET status=?, processed_at=?, failure_reason=? WHERE id=?',
-                   ('rejected', now, reason, wdr_id))
-        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (wr['amount'], wr['user_id']))
-        add_notification(db, wr['user_id'],
-            f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} rejected. Amount refunded.'
-            + (f' Reason: {reason}' if reason else ''))
-        _audit(db, 'reject_withdrawal', 'withdrawal', wdr_id,
-               {'amount': wr['amount'], 'reason': reason})
-    else:
-        db.execute('UPDATE withdrawals SET status=?, processed_at=? WHERE id=?',
-                   ('approved', now, wdr_id))
-        add_notification(db, wr['user_id'],
-            f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} approved and sent!')
-        _audit(db, 'approve_withdrawal', 'withdrawal', wdr_id, {'amount': wr['amount']})
 
-    db.commit()
+    # Open the user's personal DB to update the canonical withdrawal record
+    from db import _open_personal_db, _upload_personal_db
+    personal_conn, personal_path = _open_personal_db(wr['user_id'])
+    try:
+        if action == 'reject':
+            reason = (request.json or {}).get('reason', '')
+            db.execute(
+                'UPDATE pending_withdrawals SET status=?, processed_at=?, failure_reason=? WHERE id=?',
+                ('rejected', now, reason, wdr_id)
+            )
+            personal_conn.execute(
+                'UPDATE withdrawals SET status=?, processed_at=?, failure_reason=? WHERE id=?',
+                ('rejected', now, reason, wr['personal_wdr_id'])
+            )
+            personal_conn.commit()
+            db.execute('UPDATE users SET balance=balance+? WHERE id=?', (wr['amount'], wr['user_id']))
+            add_notification(db, wr['user_id'],
+                f'❌ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} rejected. Amount refunded.'
+                + (f' Reason: {reason}' if reason else ''))
+            _audit(db, 'reject_withdrawal', 'withdrawal', wdr_id,
+                   {'amount': wr['amount'], 'reason': reason})
+        else:
+            db.execute(
+                'UPDATE pending_withdrawals SET status=?, processed_at=? WHERE id=?',
+                ('approved', now, wdr_id)
+            )
+            personal_conn.execute(
+                'UPDATE withdrawals SET status=?, processed_at=? WHERE id=?',
+                ('approved', now, wr['personal_wdr_id'])
+            )
+            personal_conn.commit()
+            add_notification(db, wr['user_id'],
+                f'✅ Withdrawal of {CURRENCY_SYMBOL}{wr["amount"]:.2f} approved and sent!')
+            _audit(db, 'approve_withdrawal', 'withdrawal', wdr_id, {'amount': wr['amount']})
+
+        db.commit()
+    finally:
+        personal_conn.close()
+        _upload_personal_db(wr['user_id'], personal_path)
+
     return jsonify({'success': True, 'status': 'approved' if action == 'approve' else 'rejected'})
 
 

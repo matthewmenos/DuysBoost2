@@ -175,6 +175,7 @@ def withdraw():
     """Automatic on-chain withdrawal."""
     from crypto_engine import send_usdt as _chain_send_usdt
     db  = get_db()
+    udb = get_user_db()
     uid = session['user_id']
 
     CRYPTO_NETWORKS = current_app.config['CRYPTO_NETWORKS']
@@ -208,17 +209,31 @@ def withdraw():
                         'error': (f'Automatic withdrawals via {network_label} are temporarily '
                                   'unavailable. Please contact support.')}), 503
 
+    method = f'USDT ({network_label})'
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (amount, uid))
-    wdr_id = udb.execute(
+
+    # Write to user's personal DB (withdrawals lives here)
+    wdr_cur = udb.execute(
         'INSERT INTO withdrawals (user_id,amount,method,account,network,status) '
         'VALUES (?,?,?,?,?,?)',
-        (uid, amount, f'USDT ({network_label})', to_address, network, 'processing')
-    ).fetchone()['id']
-    add_transaction(db, uid, 'withdrawal', amount,
+        (uid, amount, method, to_address, network, 'processing')
+    )
+    wdr_id = wdr_cur.lastrowid
+
+    # Mirror to global DB so admin can see it without opening every personal DB
+    db.execute(
+        'INSERT INTO pending_withdrawals '
+        '(user_id,personal_wdr_id,amount,method,account,network,status) '
+        'VALUES (?,?,?,?,?,?,?)',
+        (uid, wdr_id, amount, method, to_address, network, 'processing')
+    )
+
+    add_transaction(udb, uid, 'withdrawal', amount,
                     f'Withdrawal via USDT {network_label}', status='processing')
     add_notification(db, uid,
         f'⏳ Sending {CURRENCY_SYMBOL}{amount:.2f} USDT via {network_label} to your wallet…')
     db.commit()
+    udb.commit()
 
     result = _chain_send_usdt(
         network=network,
@@ -231,11 +246,16 @@ def withdraw():
 
     if result['ok']:
         tx_hash = result['tx_hash']
-        db.execute(
+        udb.execute(
             'UPDATE withdrawals SET status=?, tx_hash=?, processed_at=? WHERE id=?',
             ('approved', tx_hash, now, wdr_id)
         )
         db.execute(
+            'UPDATE pending_withdrawals SET status=?, tx_hash=?, processed_at=? '
+            'WHERE personal_wdr_id=? AND user_id=?',
+            ('approved', tx_hash, now, wdr_id, uid)
+        )
+        udb.execute(
             "UPDATE transactions SET status='completed' "
             "WHERE user_id=? AND type='withdrawal' AND status='processing' "
             "ORDER BY id DESC LIMIT 1",
@@ -245,6 +265,7 @@ def withdraw():
             f'✅ {CURRENCY_SYMBOL}{amount:.2f} USDT sent on {network_label}! '
             f'TX: {tx_hash[:24]}...')
         db.commit()
+        udb.commit()
 
         updated_balance = db.execute(
             'SELECT balance FROM users WHERE id=?', (uid,)
@@ -256,12 +277,17 @@ def withdraw():
             'balance': updated_balance,
         })
     else:
-        db.execute(
+        udb.execute(
             'UPDATE withdrawals SET status=?, failure_reason=?, processed_at=? WHERE id=?',
             ('failed', result['error'], now, wdr_id)
         )
-        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount, uid))
         db.execute(
+            'UPDATE pending_withdrawals SET status=?, failure_reason=?, processed_at=? '
+            'WHERE personal_wdr_id=? AND user_id=?',
+            ('failed', result['error'], now, wdr_id, uid)
+        )
+        db.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount, uid))
+        udb.execute(
             "UPDATE transactions SET status='failed' "
             "WHERE user_id=? AND type='withdrawal' AND status='processing' "
             "ORDER BY id DESC LIMIT 1",
@@ -271,6 +297,7 @@ def withdraw():
             f'❌ Withdrawal of {CURRENCY_SYMBOL}{amount:.2f} USDT failed: {result["error"][:80]}. '
             f'Your balance has been refunded.')
         db.commit()
+        udb.commit()
         return jsonify({
             'success': False,
             'error': f'On-chain transfer failed: {result["error"]}',
