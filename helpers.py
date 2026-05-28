@@ -100,12 +100,10 @@ def admin_required(f):
 
 def add_notification(db, user_id, message, *, icon=None, link=None):
     """
-    Insert a notification.
-    - message: plain text (emojis allowed but stripped on the client for icon use)
-    - icon:    optional icon key ('like', 'reply', 'follow', 'repost', 'mention',
-               'message', 'tip', 'subscribe', 'verify', 'system', 'wallet', 'channel',
-               'group', 'boost', 'story')
-    - link:    optional URL or relative path to navigate to on click
+    Insert a notification into the target user's personal DB (udb).
+    notifications table lives in the per-user personal DB, NOT in global.db.
+    db arg is kept for backward-compatibility but ignored for the INSERT.
+    We open the target user's personal DB directly for the write.
     """
     # Auto-detect icon from message emoji if not given
     if icon is None:
@@ -121,15 +119,47 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
         elif message.startswith('❌'):                                    icon = 'system'
         else:                                                             icon = 'system'
 
+    # Notifications live in the target user's personal DB
+    # Open their personal DB directly without affecting the current request's udb
     try:
-        db.execute(
-            'INSERT INTO notifications (user_id, message, icon, link) VALUES (?,?,?,?)',
-            (user_id, message, icon, link)
-        )
-    except Exception:
-        # Fallback if columns not yet migrated
-        db.execute('INSERT INTO notifications (user_id, message) VALUES (?,?)',
-                   (user_id, message))
+        from db import _download_personal_db, _upload_personal_db, _open_personal_db
+        from flask import g as _g
+        # If this is the current user's own notification and udb is already open, reuse it
+        udb_conn = _g.get('udb') if hasattr(_g, 'udb') else None
+        udb_uid  = _g.get('udb_uid') if hasattr(_g, 'udb_uid') else None
+        if udb_conn and udb_uid == user_id:
+            # Write to the already-open personal DB
+            try:
+                udb_conn.execute(
+                    'INSERT INTO notifications (user_id, message, icon, link) VALUES (?,?,?,?)',
+                    (user_id, message, icon, link)
+                )
+            except Exception:
+                udb_conn.execute(
+                    'INSERT INTO notifications (user_id, message) VALUES (?,?)',
+                    (user_id, message)
+                )
+        else:
+            # Open target user's personal DB, write, upload immediately
+            _conn, _path = _open_personal_db(user_id)
+            try:
+                try:
+                    _conn.execute(
+                        'INSERT INTO notifications (user_id, message, icon, link) VALUES (?,?,?,?)',
+                        (user_id, message, icon, link)
+                    )
+                except Exception:
+                    _conn.execute(
+                        'INSERT INTO notifications (user_id, message) VALUES (?,?)',
+                        (user_id, message)
+                    )
+                _conn.commit()
+            finally:
+                _conn.close()
+                _upload_personal_db(user_id, _path)
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger(__name__).warning('add_notification failed uid=%s: %s', user_id, _e)
 
 
 def add_transaction(db, user_id, type_, amount, description, status='completed'):

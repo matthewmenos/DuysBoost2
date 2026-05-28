@@ -454,6 +454,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id    INTEGER NOT NULL,
     message    TEXT,
     read       INTEGER DEFAULT 0,
+    link       TEXT,
+    icon       TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS conversations (
@@ -478,6 +480,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reactions       TEXT,
     is_pinned       INTEGER DEFAULT 0,
     deleted_at      TEXT,
+    view_once       INTEGER DEFAULT 0,
+    view_once_opened INTEGER DEFAULT 0,
     created_at      TEXT    DEFAULT (datetime('now'))
 );
 
@@ -641,6 +645,54 @@ def _upload_personal_db(uid: int, path: str) -> None:
         pass
 
 
+
+
+def run_personal_migrations(conn: sqlite3.Connection) -> None:
+    """
+    Idempotent migration for per-user personal DBs.
+    Adds any new columns to existing personal databases downloaded from R2.
+    Called once per personal DB open.
+    """
+    PERSONAL_COLUMNS = [
+        # notifications
+        ('notifications', 'link',              'TEXT'),
+        ('notifications', 'icon',              'TEXT'),
+        # messages
+        ('messages', 'view_once',              'INTEGER DEFAULT 0'),
+        ('messages', 'view_once_opened',       'INTEGER DEFAULT 0'),
+        ('messages', 'reactions',              'TEXT'),
+        ('messages', 'is_pinned',              'INTEGER DEFAULT 0'),
+        ('messages', 'deleted_at',             'TEXT'),
+        ('messages', 'reply_to_id',            'INTEGER'),
+        ('messages', 'edited_at',              'TEXT'),
+        ('messages', 'file_url',               'TEXT'),
+        ('messages', 'file_name',              'TEXT'),
+        ('messages', 'file_mime',              'TEXT'),
+        # conversations
+        ('conversations', 'last_msg_at',       "TEXT DEFAULT (datetime('now'))"),
+        # withdrawals
+        ('withdrawals', 'failure_reason',      'TEXT'),
+        ('withdrawals', 'tx_hash',             'TEXT'),
+        ('withdrawals', 'processed_at',        'TEXT'),
+        # subscription_tiers
+        ('subscription_tiers', 'description',  'TEXT'),
+        ('subscription_tiers', 'perks',        'TEXT'),
+        # tips
+        ('tips', 'message',                    'TEXT'),
+        ('tips', 'post_id',                    'INTEGER'),
+    ]
+    cur = conn.cursor()
+    migrated = 0
+    for table, column, definition in PERSONAL_COLUMNS:
+        try:
+            cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {definition}')
+            migrated += 1
+        except sqlite3.OperationalError:
+            pass  # already exists
+    if migrated:
+        conn.commit()
+
+
 def _open_personal_db(uid: int) -> tuple:
     """Download, open, and schema-init personal DB. Returns (conn, path)."""
     path = _download_personal_db(uid)
@@ -648,6 +700,7 @@ def _open_personal_db(uid: int) -> tuple:
     conn.row_factory = sqlite3.Row
     conn.executescript(PERSONAL_SCHEMA)
     conn.commit()
+    run_personal_migrations(conn)   # add new columns to existing personal DBs
     return conn, path
 
 
@@ -750,6 +803,19 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('groups', 'verified_tier', "TEXT DEFAULT 'gold'"),
         ('notifications', 'link',   'TEXT'),
         ('notifications', 'icon',   'TEXT'),
+        # group_messages extra columns
+        ('group_messages', 'reactions',  'TEXT'),
+        ('group_messages', 'is_pinned',  'INTEGER DEFAULT 0'),
+        # channel post_count
+        ('channels', 'post_count',       'INTEGER DEFAULT 0'),
+        # user_bans lifted columns
+        ('user_bans', 'lifted_at',       'TEXT'),
+        ('user_bans', 'lifted_by',       'INTEGER'),
+        # boost columns completeness
+        ('post_boosts', 'engaged_count', 'INTEGER DEFAULT 0'),
+        ('post_boosts', 'reward_per_engage', 'REAL DEFAULT 0.05'),
+        ('post_boosts', 'engage_type',   "TEXT DEFAULT 'like'"),
+        ('post_boosts', 'target_count',  'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()

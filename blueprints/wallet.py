@@ -297,9 +297,13 @@ def referral():
 def notifications():
     db  = get_db()
     uid = session['user_id']
-    rows = db.execute(
-        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC', (uid,)
-    ).fetchall()
+    try:
+        udb = get_user_db()
+        rows = udb.execute(
+            'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC', (uid,)
+        ).fetchall()
+    except Exception:
+        rows = []
     # Build clean dicts with stripped emoji
     notifs = []
     for n in rows:
@@ -307,8 +311,12 @@ def notifications():
         d['clean_msg'] = _strip_leading_emoji(d.get('message') or '')
         d['icon'] = d.get('icon') or 'system'
         notifs.append(d)
-    db.execute('UPDATE notifications SET read=1 WHERE user_id=?', (uid,))
-    db.commit()
+    try:
+        udb = get_user_db()
+        udb.execute('UPDATE notifications SET read=1 WHERE user_id=?', (uid,))
+        udb.commit()
+    except Exception:
+        pass
     return render_template('notifications.html', notifications=notifs)
 
 
@@ -320,10 +328,14 @@ def unread_count():
     count = db.execute(
         'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
     ).fetchone()[0]
-    recent = db.execute(
-        'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 8',
-        (uid,)
-    ).fetchall()
+    try:
+        udb = get_user_db()
+        recent = udb.execute(
+            'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 8',
+            (uid,)
+        ).fetchall()
+    except Exception:
+        recent = []
     out = []
     for n in recent:
         d = dict(n)
@@ -350,9 +362,13 @@ def _strip_leading_emoji(text):
 def mark_notif_read(notif_id):
     db  = get_db()
     uid = session['user_id']
-    db.execute('UPDATE notifications SET read=1 WHERE id=? AND user_id=?',
-               (notif_id, uid))
-    db.commit()
+    try:
+        udb = get_user_db()
+        udb.execute('UPDATE notifications SET read=1 WHERE id=? AND user_id=?',
+                   (notif_id, uid))
+        udb.commit()
+    except Exception:
+        pass
     return jsonify({'success': True})
 
 
@@ -361,8 +377,12 @@ def mark_notif_read(notif_id):
 def mark_all_notif_read():
     db  = get_db()
     uid = session['user_id']
-    db.execute('UPDATE notifications SET read=1 WHERE user_id=? AND read=0', (uid,))
-    db.commit()
+    try:
+        udb = get_user_db()
+        udb.execute('UPDATE notifications SET read=1 WHERE user_id=? AND read=0', (uid,))
+        udb.commit()
+    except Exception:
+        pass
     return jsonify({'success': True})
 
 

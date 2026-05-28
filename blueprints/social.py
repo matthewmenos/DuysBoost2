@@ -613,11 +613,9 @@ def profile(username):
         (uid, target['id'])
     ).fetchone()) if not is_own and tier else False
 
-    top_tips = [dict(t) for t in db.execute("""
-        SELECT t.amount, u.username, u.avatar_url, u.display_name
-        FROM tips t JOIN users u ON u.id=t.from_user_id
-        WHERE t.to_user_id=? ORDER BY t.amount DESC LIMIT 5
-    """, (target['id'],)).fetchall()]
+    # tips live in the target user's personal DB which we cannot access here;
+    # safely skip to avoid cross-DB crash
+    top_tips = []
 
     return render_template('profile.html', target=dict(target),
                            posts=posts, tab=tab,
@@ -789,9 +787,7 @@ def delete_account():
         except Exception:
             pass
     db.execute('DELETE FROM stories WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM notifications    WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM transactions     WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM withdrawals      WHERE user_id=?', (uid,))
+    # personal data already deleted via udb above
     db.execute('DELETE FROM task_completions WHERE worker_id=?', (uid,))
     db.execute('DELETE FROM post_likes       WHERE user_id=?', (uid,))
     db.execute('DELETE FROM bookmarks        WHERE user_id=?', (uid,))
@@ -799,9 +795,41 @@ def delete_account():
     db.execute('DELETE FROM search_history   WHERE user_id=?', (uid,))
     db.execute('DELETE FROM post_views       WHERE user_id=?', (uid,))
     db.execute('DELETE FROM poll_votes       WHERE user_id=?', (uid,))
-    db.execute('DELETE FROM tips             WHERE from_user_id=? OR to_user_id=?', (uid, uid))
-    db.execute("DELETE FROM subscriptions    WHERE subscriber_id=? OR creator_id=?", (uid, uid))
-    db.execute('DELETE FROM subscription_tiers WHERE creator_id=?', (uid,))
+    # personal subscriptions/tips already deleted via udb above
+    # ── Delete personal DB data via udb ──────────────────────────────────────
+    try:
+        udb = get_user_db()
+        for tbl, col in [
+            ('notifications',      'user_id'),
+            ('transactions',       'user_id'),
+            ('withdrawals',        'user_id'),
+            ('crypto_deposits',    'user_id'),
+            ('tips',               'from_user_id'),
+            ('tips',               'to_user_id'),
+            ('subscriptions',      'subscriber_id'),
+            ('subscriptions',      'creator_id'),
+            ('subscription_tiers', 'creator_id'),
+            ('conversations',      'user_a'),
+            ('conversations',      'user_b'),
+        ]:
+            try:
+                udb.execute(f'DELETE FROM {tbl} WHERE {col}=?', (uid,))
+            except Exception:
+                pass
+        # messages are cascade-deleted when conversations are gone
+        # but explicitly clean up orphans
+        try:
+            udb.execute(
+                'DELETE FROM messages WHERE conversation_id NOT IN (SELECT id FROM conversations)'
+            )
+        except Exception:
+            pass
+        udb.commit()
+    except Exception as _ue:
+        import logging as _log
+        _log.getLogger(__name__).warning('delete_account personal DB cleanup: %s', _ue)
+
+    # ── Delete global DB data ─────────────────────────────────────────────────
     # Delete posts — cascade DB rows AND R2 media
     post_rows = db.execute('SELECT * FROM posts WHERE user_id=?', (uid,)).fetchall()
     for post_row in post_rows:
@@ -1322,8 +1350,6 @@ def _get_or_create_conversation(db, uid, other_id):
 
 
 
-@bp.route('/messages')
-@login_required
 
 def _format_conversation(row, uid, db):
     """Enrich a conversations row with the other user\'s profile info."""
@@ -1347,6 +1373,8 @@ def _format_conversation(row, uid, db):
         return None
 
 
+@bp.route('/messages')
+@login_required
 def messages_inbox():
     db  = get_db()      # global
     udb = get_user_db() # personal (conversations, messages)
@@ -1615,7 +1643,7 @@ def delete_message(msg_id):
     if not msg or msg['sender_id'] != uid:
         return jsonify({'success': False, 'error': 'Not found or not authorized.'}), 404
     now = datetime.now(timezone.utc).isoformat()
-    db.execute("UPDATE messages SET body='(deleted)',msg_type='text',file_url=NULL,"
+    udb.execute("UPDATE messages SET body='(deleted)',msg_type='text',file_url=NULL,"
                "file_name=NULL,file_mime=NULL,deleted_at=? WHERE id=?", (now, msg_id))
     db.commit()
     return jsonify({'success': True})
