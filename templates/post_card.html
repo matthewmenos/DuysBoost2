@@ -34,7 +34,7 @@
         <div class="post-author-info">
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-display-name">
             {{ a.display_name or a.username }}
-            {%- if a.is_verified -%}<span class="badge-verified" title="Verified" aria-label="Verified"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>{%- endif -%}
+            {%- if a.is_verified -%}<span class="badge-verified tier-{{ a.verified_tier or "blue" }}" title="Verified" aria-label="Verified"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>{%- endif -%}
           </a>
           <a href="{{ url_for('social.profile', username=a.username) }}" class="post-username">@{{ a.username }}</a>
           <span class="post-dot" aria-hidden="true">·</span>
@@ -184,48 +184,112 @@
       </a>
       {% endif %}
       <div class="post-actions">
+
+        <!-- Reply -->
         <button class="post-action-btn reply-btn"
                 onclick="openReplyModal({{ p.id }}, '{{ a.username | e }}')" aria-label="Reply">
-          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7
+                       8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8
+                       8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5
+                       a8.48 8.48 0 018 8v.5z"/>
+            </svg>
+          </span>
           <span class="action-count" id="reply-count-{{ p.id }}">{{ p.reply_count or '' }}</span>
         </button>
+
+        <!-- Repost -->
         <button class="post-action-btn repost-btn {% if p.reposted %}reposted{% endif %}"
                 onclick="openRepostModal({{ p.id }}, {{ 'true' if p.reposted else 'false' }})"
                 aria-label="{{ 'Undo repost' if p.reposted else 'Repost' }}"
                 aria-pressed="{{ 'true' if p.reposted else 'false' }}">
-          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></span>
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="17 1 21 5 17 9"/>
+              <path d="M3 11V9a4 4 0 014-4h14"/>
+              <polyline points="7 23 3 19 7 15"/>
+              <path d="M21 13v2a4 4 0 01-4 4H3"/>
+            </svg>
+          </span>
           <span class="action-count" id="repost-count-{{ p.id }}">{{ p.repost_count or '' }}</span>
         </button>
+
+        <!-- Like -->
         <button class="post-action-btn like-btn {% if p.liked %}liked{% endif %}"
                 onclick="toggleLike({{ p.id }}, this)" aria-label="Like"
                 aria-pressed="{{ 'true' if p.liked else 'false' }}">
           <span class="action-icon">
-            {%- if p.liked -%}
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+                 fill="{{ 'currentColor' if p.liked else 'none' }}">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06
+                       a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78
+                       1.06-1.06a5.5 5.5 0 000-7.78z"/>
             </svg>
-            {%- else -%}
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-            </svg>
-            {%- endif -%}
           </span>
           <span class="action-count" id="like-count-{{ p.id }}">{{ p.like_count or '' }}</span>
         </button>
+
+        <!-- View count (analytics — read-only, like X's bar-chart icon) -->
+        <button class="post-action-btn views-btn" aria-label="Views" style="cursor:default"
+                onclick="event.stopPropagation()">
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="20" x2="18" y2="10"/>
+              <line x1="12" y1="20" x2="12" y2="4"/>
+              <line x1="6"  y1="20" x2="6"  y2="14"/>
+            </svg>
+          </span>
+          <span class="action-count">{{ p.view_count or '' }}</span>
+        </button>
+
+        <!-- Bookmark -->
         <button class="post-action-btn bookmark-btn {% if p.bookmarked %}bookmarked{% endif %}"
                 onclick="toggleBookmark({{ p.id }}, this)" aria-label="Bookmark"
                 aria-pressed="{{ 'true' if p.bookmarked else 'false' }}">
-          {%- if p.bookmarked -%}
-          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-          {%- else -%}
-          <svg class="i-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-          {%- endif -%}
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+                 fill="{{ 'currentColor' if p.bookmarked else 'none' }}">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+            </svg>
+          </span>
         </button>
-        {% if current_user and current_user.id == p.user_id %}
-        <button class="post-action-btn" onclick="openBoostModal({{ p.id }})" aria-label="Boost">
-          <span class="action-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></span>
+
+        <!-- Share -->
+        <button class="post-action-btn share-btn"
+                onclick="sharePost({{ p.id }}, {{ (p.body or '') | tojson }})"
+                aria-label="Share">
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5"  r="3"/>
+              <circle cx="6"  cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59"  y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51"  x2="8.59"  y2="10.49"/>
+            </svg>
+          </span>
+        </button>
+
+        <!-- Boost (owner only, hidden once boosted) -->
+        {% if current_user and current_user.id == p.user_id and not p.active_boost %}
+        <button class="post-action-btn boost-btn"
+                onclick="openBoostModal({{ p.id }})" aria-label="Boost this post"
+                title="Boost">
+          <span class="action-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M13 2L3 14h7v8l11-14h-7l-1-6z"/>
+            </svg>
+          </span>
         </button>
         {% endif %}
+
       </div>
     </div>{# /.post-content-col #}
   </div>{# /.post-inner #}

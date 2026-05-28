@@ -516,8 +516,11 @@ def profile(username):
                           'WHERE l.user_id=? ORDER BY l.created_at DESC LIMIT 40',
                           (target['id'],)).fetchall()
     else:
-        rows = db.execute('SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL '
-                          'ORDER BY created_at DESC LIMIT 40', (target['id'],)).fetchall()
+        rows = db.execute(
+            'SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL '
+            'AND id NOT IN (SELECT post_id FROM channel_posts) '
+            'ORDER BY created_at DESC LIMIT 40', (target['id'],)
+        ).fetchall()
 
     posts     = [format_post(r, uid, db) for r in rows]
     followers = [dict(f) for f in db.execute("""
@@ -1232,7 +1235,7 @@ def messages_inbox():
         tab = 'all'
 
     # ── Chats (1-to-1 DMs) ───────────────────────────────────────────────────
-    chat_rows = db.execute(
+    chat_rows = udb.execute(
         'SELECT * FROM conversations WHERE user_a=? OR user_b=? '
         'ORDER BY last_msg_at DESC',
         (uid, uid)
@@ -1295,6 +1298,12 @@ def message_thread(username):
         md.setdefault('is_pinned', 0)
         md.setdefault('reply_to_id', None)
         md.setdefault('deleted_at', None)
+        md.setdefault('view_once', 0)
+        md.setdefault('view_once_opened', 0)
+        md.setdefault('is_read', 1)
+        md.setdefault('file_url', None)
+        md.setdefault('file_mime', None)
+        md.setdefault('file_name', None)
         msgs.append(md)
 
     udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
@@ -1621,7 +1630,7 @@ def search_users_for_dm():
         return jsonify({'users': []})
     like = f'%{q}%'
     rows = db.execute(
-        'SELECT username,display_name,avatar_url,is_verified,follower_count '
+        'SELECT username,display_name,avatar_url,is_verified,verified_tier,follower_count '
         'FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? '
         'ORDER BY follower_count DESC LIMIT 10', (like, like, uid)
     ).fetchall()

@@ -108,7 +108,7 @@
       </a>
       <div class="grp-av-sm" style="width:36px;height:36px;border-radius:10px;font-size:14px">
         {% if g.avatar_url %}<img src="{{ g.avatar_url }}" alt="">
-        {% else %}{{ g.name[0].upper() }}{% endif %}
+        {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
       </div>
       <div style="flex:1;min-width:0">
         <div class="grp-hdr-name">{{ g.name }}</div>
@@ -142,7 +142,7 @@
           {% if not mine %}
           <div class="grp-av-sm">
             {% if m.sender_avatar %}<img src="{{ m.sender_avatar }}" alt="">
-            {% else %}{{ (m.sender_display or m.sender_username or '?')[0].upper() }}{% endif %}
+            {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
           </div>
           {% endif %}
           <div class="grp-col">
@@ -215,7 +215,7 @@
     <div class="grp-mp-item">
       <div class="grp-av-sm" style="width:28px;height:28px;font-size:10px">
         {% if m.avatar_url %}<img src="{{ m.avatar_url }}" alt="">
-        {% else %}{{ (m.display_name or m.username or '?')[0].upper() }}{% endif %}
+        {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
       </div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.display_name or m.username }}</div>
@@ -326,7 +326,7 @@ async function doSend(){
 function buildBubble(msg,mine){
   const dir=mine?'mine':'them';
   const avSrc=msg.sender_avatar?'<img src="'+escapeHtml(msg.sender_avatar)+'" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover">'
-    :'<div class="grp-av-sm">'+escapeHtml((msg.sender_display||msg.sender_username||'?')[0].toUpperCase())+'</div>';
+    :'<div class="grp-av-sm" style="background:var(--surface-2);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
   const senderLine=!mine?'<div class="grp-sender">'+escapeHtml(msg.sender_display||msg.sender_username)+'</div>':'';
   const mt=msg.msg_type||'text';
   let media='';

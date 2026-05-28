@@ -94,7 +94,7 @@
           {% if user.avatar_url %}
             <img src="{{ user.avatar_url }}" alt="{{ user.username }}" id="avatar-preview">
           {% else %}
-            <span id="avatar-initials">{{ (user.display_name or user.username or '?')[0].upper() }}</span>
+            <span id="avatar-initials"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></span>
           {% endif %}
         </div>
         <div class="photo-overlay"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
@@ -234,7 +234,7 @@ document.getElementById('avatar-input').addEventListener('change', async functio
     const wrap    = document.getElementById('avatar-wrap');
     const initials = document.getElementById('avatar-initials');
     let   preview  = document.getElementById('avatar-preview');
-    if (initials) initials.style.display = 'none';
+    if (initials) initials.style.display = 'none'; // avatar uploaded
     if (!preview) {
       preview = document.createElement('img');
       preview.id = 'avatar-preview';

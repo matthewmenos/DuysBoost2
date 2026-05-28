@@ -42,7 +42,7 @@
           <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="nav-group-panel" id="grp-social-panel">
-          <a href="{{ url_for('social.feed') }}" class="nav-sub-item {% if request.endpoint=='feed' and not request.args.get('tab') %}active{% endif %}">
+          <a href="{{ url_for('social.feed') }}" class="nav-sub-item {% if (request.endpoint in ['feed','social.feed']) and not request.args.get('tab') %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 12L12 3l9 9v7a2 2 0 01-2 2H5a2 2 0 01-2-2V12z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             <span class="nav-label">Home</span>
           </a>
@@ -50,7 +50,7 @@
             <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span class="nav-label">Search</span>
           </button>
-          <a href="{{ url_for('social.trending') }}" class="nav-sub-item {% if request.endpoint=='trending' %}active{% endif %}">
+          <a href="{{ url_for('social.trending') }}" class="nav-sub-item {% if request.endpoint in ['trending', 'social.trending', 'boost.trending', 'wallet.trending'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             <span class="nav-label">Trending</span>
           </a>
@@ -59,20 +59,20 @@
             <span class="nav-label">Channels</span>
           </a>
           
-          <a href="{{ url_for('wallet.notifications') }}" class="nav-sub-item {% if request.endpoint=='notifications' %}active{% endif %}">
+          <a href="{{ url_for('wallet.notifications') }}" class="nav-sub-item {% if request.endpoint in ['notifications','wallet.notifications'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span class="nav-label">Notifications</span><span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
           </a>
-          <a href="{{ url_for('social.messages_inbox') }}" class="nav-sub-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}">
+          <a href="{{ url_for('social.messages_inbox') }}" class="nav-sub-item {% if request.endpoint in ['messages_inbox','social.messages_inbox','message_thread','social.message_thread'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
             <span class="nav-label">Messages</span><span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
           </a>
-          <a href="{{ url_for('social.bookmarks') }}" class="nav-sub-item {% if request.endpoint=='bookmarks' %}active{% endif %}">
+          <a href="{{ url_for('social.bookmarks') }}" class="nav-sub-item {% if request.endpoint in ['bookmarks','social.bookmarks'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
             <span class="nav-label">Bookmarks</span>
           </a>
           {% if current_user %}
-                    <a href="{{ url_for('social.profile', username=current_user.username) }}" class="nav-sub-item {% if request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}active{% endif %}">
+                    <a href="{{ url_for('social.profile', username=current_user.username) }}" class="nav-sub-item {% if request.endpoint in ['profile','social.profile'] and request.view_args.get('username')==current_user.username %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span class="nav-label">My Profile</span>
           </a>
@@ -89,23 +89,23 @@
           <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="nav-group-panel" id="grp-boost-panel">
-          <a href="{{ url_for('boost.dashboard') }}" class="nav-sub-item {% if request.endpoint=='dashboard' %}active{% endif %}">
+          <a href="{{ url_for('boost.dashboard') }}" class="nav-sub-item {% if request.endpoint in ['dashboard','social.dashboard'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             <span class="nav-label">Campaign</span>
           </a>
-          <a href="{{ url_for('social.feed', tab='earn') }}" class="nav-sub-item {% if request.endpoint=='feed' and request.args.get('tab')=='earn' %}active{% endif %}">
+          <a href="{{ url_for('social.feed', tab='earn') }}" class="nav-sub-item {% if (request.endpoint in ['feed','social.feed']) and request.args.get('tab')=='earn' %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span class="nav-label">Earn</span>
           </a>
-          <a href="{{ url_for('boost.my_boosts') }}" class="nav-sub-item {% if request.endpoint=='my_boosts' %}active{% endif %}">
+          <a href="{{ url_for('boost.my_boosts') }}" class="nav-sub-item {% if request.endpoint in ['my_boosts', 'social.my_boosts', 'boost.my_boosts', 'wallet.my_boosts'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
             <span class="nav-label">My Boosts</span>
           </a>
-          <a href="{{ url_for('boost.tasks') }}" class="nav-sub-item {% if request.endpoint=='tasks' %}active{% endif %}">
+          <a href="{{ url_for('boost.tasks') }}" class="nav-sub-item {% if request.endpoint in ['tasks', 'social.tasks', 'boost.tasks', 'wallet.tasks'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
             <span class="nav-label">Tasks</span>
           </a>
-          <a href="{{ url_for('boost.analytics') }}" class="nav-sub-item {% if request.endpoint=='analytics' %}active{% endif %}">
+          <a href="{{ url_for('boost.analytics') }}" class="nav-sub-item {% if request.endpoint in ['analytics', 'social.analytics', 'boost.analytics', 'wallet.analytics'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             <span class="nav-label">Analytics</span>
           </a>
@@ -121,11 +121,11 @@
           <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="nav-group-panel" id="grp-creator-panel">
-          <a href="{{ url_for('boost.creator_earnings') }}" class="nav-sub-item {% if request.endpoint=='creator_earnings' %}active{% endif %}">
+          <a href="{{ url_for('boost.creator_earnings') }}" class="nav-sub-item {% if request.endpoint in ['creator_earnings','social.creator_earnings'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M2.7 10.3l9.3 9.3 9.3-9.3L12 2 2.7 10.3z"/></svg>
             <span class="nav-label">Earnings</span>
           </a>
-          <a href="{{ url_for('boost.creator_setup') }}" class="nav-sub-item {% if request.endpoint=='creator_setup' %}active{% endif %}">
+          <a href="{{ url_for('boost.creator_setup') }}" class="nav-sub-item {% if request.endpoint in ['creator_setup','social.creator_setup'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span class="nav-label">My Tier</span>
           </a>
@@ -141,11 +141,11 @@
           <svg class="nav-icon nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="nav-group-panel" id="grp-money-panel">
-          <a href="{{ url_for('wallet.wallet') }}" class="nav-sub-item {% if request.endpoint=='wallet' %}active{% endif %}">
+          <a href="{{ url_for('wallet.wallet') }}" class="nav-sub-item {% if request.endpoint in ['wallet','wallet.wallet'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
             <span class="nav-label">Wallet</span>
           </a>
-          <a href="{{ url_for('wallet.referral') }}" class="nav-sub-item {% if request.endpoint=='referral' %}active{% endif %}">
+          <a href="{{ url_for('wallet.referral') }}" class="nav-sub-item {% if request.endpoint in ['referral', 'social.referral', 'boost.referral', 'wallet.referral'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
             <span class="nav-label">Referrals</span>
           </a>
@@ -174,7 +174,7 @@
     <div class="sidebar-footer">
       {% if current_user %}
       <div class="user-card">
-        <div class="user-avatar" aria-hidden="true">{{ current_user.username[0].upper() }}</div>
+        <div class="user-avatar" aria-hidden="true">{% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">{% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}</div>
         <div class="user-info">
           <div class="user-name">{{ current_user.username }}</div>
           <div class="user-balance">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(current_user.balance or 0) }}</div>
@@ -203,9 +203,10 @@
         </button>
         <div class="notif-dropdown-wrap">
           <button type="button" class="btn-icon" id="notif-btn"
-                  aria-label="Notifications" aria-haspopup="true">
-            <svg class="nav-icon " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-            <span class="notif-dot" id="notif-dot" style="display:none" aria-hidden="true"></span>
+                  aria-label="Notifications" aria-haspopup="true"
+                  style="position:relative">
+            <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-dot" id="notif-dot" style="display:none" aria-label="Unread notifications"></span>
           </button>
           <div class="notif-dropdown" id="notif-dropdown" role="menu">
             <div class="notif-header">
@@ -226,103 +227,125 @@
     </main>
 
     {% if current_user %}
-    <nav class="bottom-nav {% if request.endpoint == 'message_thread' %}force-hidden{% endif %}" aria-label="Bottom navigation" id="bottom-nav">
+    {# ── Determine active tab (supports both raw and Blueprint-prefixed endpoint names) ── #}
+    {%- set _ep = request.endpoint or '' -%}
+    {%- set _is_home     = _ep in ['feed', 'social.feed'] -%}
+    {%- set _is_wallet   = _ep in ['wallet', 'wallet.wallet'] -%}
+    {%- set _is_messages = _ep in ['messages_inbox', 'social.messages_inbox',
+                                    'message_thread', 'social.message_thread'] -%}
+    {%- set _is_profile  = (_ep in ['profile', 'social.profile'])
+                           and current_user
+                           and request.view_args.get('username') == current_user.username -%}
+    {%- set _hide_nav    = _ep in ['message_thread', 'social.message_thread'] -%}
+
+    <nav class="bottom-nav {{ 'force-hidden' if _hide_nav }}"
+         aria-label="Bottom navigation" id="bottom-nav">
 
       {# ── Home ─────────────────────────────────────────────────────────── #}
       <a href="{{ url_for('social.feed') }}"
-         class="bottom-nav-item {% if request.endpoint=='feed' %}active{% endif %}"
-         aria-label="Home">
+         class="bottom-nav-item {{ 'active' if _is_home }}"
+         aria-label="Home" aria-current="{{ 'page' if _is_home }}">
         <div class="bn-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            {% if request.endpoint == 'feed' %}
-            {# Filled house #}
-            <path d="M3 12L12 3l9 9" stroke-width="2"/>
-            <path d="M9 21V12h6v9" fill="currentColor" stroke="var(--accent)"/>
-            <path d="M3 12l9-9 9 9v9a1 1 0 01-1 1H4a1 1 0 01-1-1V12z"
-                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
-            {% else %}
-            {# Outline house #}
-            <path d="M3 12L12 3l9 9v8a1 1 0 01-1 1H4a1 1 0 01-1-1V12z"/>
-            <path d="M9 21V12h6v9"/>
-            {% endif %}
+            {%- if _is_home -%}
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                  fill="rgba(29,155,240,.15)" stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="9 22 9 12 15 12 15 22"
+                      stroke="var(--accent)" stroke-width="1.8"
+                      stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- else -%}
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="9 22 9 12 15 12 15 22"
+                      stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- endif -%}
           </svg>
         </div>
       </a>
 
       {# ── Wallet ───────────────────────────────────────────────────────── #}
       <a href="{{ url_for('wallet.wallet') }}"
-         class="bottom-nav-item {% if request.endpoint=='wallet' %}active{% endif %}"
-         aria-label="Wallet">
+         class="bottom-nav-item {{ 'active' if _is_wallet }}"
+         aria-label="Wallet" aria-current="{{ 'page' if _is_wallet }}">
         <div class="bn-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            {% if request.endpoint == 'wallet' %}
+            {%- if _is_wallet -%}
             <rect x="2" y="6" width="20" height="14" rx="3"
-                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
-            <path d="M2 10h20" stroke="var(--accent)" stroke-width="1.7"/>
+                  fill="rgba(29,155,240,.15)" stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 10h20" stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round"/>
             <circle cx="17" cy="15" r="1.5" fill="var(--accent)" stroke="none"/>
             <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"
-                  stroke="var(--accent)" stroke-width="1.7"/>
-            {% else %}
-            <rect x="2" y="6" width="20" height="14" rx="3"/>
-            <path d="M2 10h20"/>
-            <circle cx="17" cy="15" r="1.5" fill="#7a7a96" stroke="none"/>
-            <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"/>
-            {% endif %}
+                  stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- else -%}
+            <rect x="2" y="6" width="20" height="14" rx="3"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 10h20" stroke-linecap="round"/>
+            <circle cx="17" cy="15" r="1.5" fill="currentColor" stroke="none"/>
+            <path d="M6 6V4a2 2 0 012-2h8a2 2 0 012 2v2"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- endif -%}
           </svg>
         </div>
       </a>
 
-      {# ── Add Post — centre action button ─────────────────────────────── #}
-      <button type="button"
-              class="bn-add-btn"
-              id="bn-add-post"
-              aria-label="Create post"
-              onclick="openBnCompose()">
+      {# ── Compose — centre action button ───────────────────────────────── #}
+      <button type="button" class="bn-add-btn" id="bn-add-post"
+              aria-label="Create post" onclick="openBnCompose()">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 5v14M5 12h14"/>
+          <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
         </svg>
       </button>
 
-      {# ── Chat / Messages ──────────────────────────────────────────────── #}
+      {# ── Messages ─────────────────────────────────────────────────────── #}
       <a href="{{ url_for('social.messages_inbox') }}"
-         class="bottom-nav-item {% if request.endpoint in ['messages_inbox','message_thread'] %}active{% endif %}"
-         aria-label="Messages"
+         class="bottom-nav-item {{ 'active' if _is_messages }}"
+         aria-label="Messages" aria-current="{{ 'page' if _is_messages }}"
          style="position:relative">
         <div class="bn-icon">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            {% if request.endpoint in ['messages_inbox','message_thread'] %}
+            {%- if _is_messages -%}
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                  fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
-            {% else %}
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-            {% endif %}
+                  fill="rgba(29,155,240,.15)" stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            {%- else -%}
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            {%- endif -%}
           </svg>
         </div>
         <span class="bn-badge" id="bottom-dm-badge" style="display:none"></span>
       </a>
 
-      {# ── Profile ─────────────────────────────────────────────────────── #}
-      <a href="{% if current_user %}{{ url_for('social.profile', username=current_user.username) }}{% else %}{{ url_for('auth.login') }}{% endif %}"
-         class="bottom-nav-item {% if request.endpoint=='profile' and current_user and request.view_args.get('username')==current_user.username %}active{% endif %}"
-         aria-label="Profile"
+      {# ── Profile ──────────────────────────────────────────────────────── #}
+      <a href="{{ url_for('social.profile', username=current_user.username) if current_user else url_for('auth.login') }}"
+         class="bottom-nav-item {{ 'active' if _is_profile }}"
+         aria-label="Profile" aria-current="{{ 'page' if _is_profile }}"
          style="position:relative">
         <div class="bn-icon">
           {% if current_user and current_user.avatar_url %}
           <img src="{{ current_user.avatar_url }}"
-               style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid {% if request.endpoint=='profile' %}var(--accent){% else %}var(--border){% endif %};transition:border-color .2s"
+               style="width:26px;height:26px;border-radius:50%;object-fit:cover;
+                      border:2px solid {{ 'var(--accent)' if _is_profile else 'var(--border)' }};
+                      transition:border-color .2s"
                alt="">
           {% else %}
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            {% set is_profile = current_user and request.endpoint=='profile' and request.view_args.get('username')==current_user.username %}
-            {% if is_profile %}
+            {%- if _is_profile -%}
             <circle cx="12" cy="8" r="4"
-                    fill="rgba(127,90,240,.15)" stroke="var(--accent)" stroke-width="1.7"/>
+                    fill="rgba(29,155,240,.15)" stroke="var(--accent)" stroke-width="1.8"
+                    stroke-linecap="round"/>
             <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"
-                  stroke="var(--accent)" stroke-width="1.7" fill="none"/>
-            {% else %}
-            <circle cx="12" cy="8" r="4"/>
-            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-            {% endif %}
+                  stroke="var(--accent)" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- else -%}
+            <circle cx="12" cy="8" r="4" stroke-linecap="round"/>
+            <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"
+                  stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            {%- endif -%}
           </svg>
           {% endif %}
         </div>
@@ -368,7 +391,7 @@
     <div style="display:flex;gap:12px;align-items:flex-start">
       <div class="avatar avatar-sm flex-shrink-0">
         {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
-        {% else %}{{ (current_user.username or 'U')[0].upper() }}{% endif %}
+        {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
       </div>
       <div style="flex:1;min-width:0">
         <textarea id="gc-body" class="compose-input form-input"

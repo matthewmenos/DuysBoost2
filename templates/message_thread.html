@@ -197,32 +197,58 @@
 .ctx-overlay.open { display: flex; animation: fadeIn .15s; }
 
 .ctx-menu {
-  position: fixed; min-width: 220px; max-width: 280px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; box-shadow: var(--shadow-lg);
-  overflow: hidden; padding: 6px 0;
-  animation: modalIn .15s ease;
+  position: fixed;
+  min-width: 230px; max-width: 290px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5);
+  overflow: hidden;
+  padding: 4px 0;
+  z-index: 1000;
+  animation: ctxIn .12s cubic-bezier(.34,1.56,.64,1);
+  transform-origin: top left;
+}
+@keyframes ctxIn {
+  from { opacity: 0; transform: scale(.92); }
+  to   { opacity: 1; transform: scale(1); }
 }
 .ctx-react-row {
-  display: flex; gap: 4px; padding: 8px 10px;
+  display: flex;
+  gap: 0;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  justify-content: space-around;
+  justify-content: space-between;
 }
 .ctx-react-btn {
   font-size: 22px; background: none; border: none;
-  cursor: pointer; padding: 4px 6px; border-radius: 50%;
+  cursor: pointer; padding: 4px;
+  border-radius: 50%; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
   transition: transform .12s, background .12s;
 }
-.ctx-react-btn:hover { transform: scale(1.3); background: var(--surface-2); }
+.ctx-react-btn:hover, .ctx-react-btn:active {
+  transform: scale(1.3); background: var(--surface-2);
+}
+.ctx-react-more svg { width: 18px; height: 18px; color: var(--muted); }
 .ctx-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px;
-  font-size: 14px; cursor: pointer; color: var(--text);
+  display: flex; align-items: center; gap: 14px;
+  padding: 11px 16px;
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; color: var(--text);
+  background: none; border: none; width: 100%;
+  text-align: left;
   transition: background var(--transition);
 }
-.ctx-item:hover { background: var(--surface-2); }
+.ctx-item:hover, .ctx-item:active { background: var(--surface-2); }
 .ctx-item.danger { color: var(--red); }
-.ctx-icon { width: 18px; font-size: 16px; text-align: center; }
+.ctx-icon {
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted);
+}
+.ctx-icon svg { width: 18px; height: 18px; }
+.ctx-item.danger .ctx-icon { color: var(--red); }
 
 /* Edit modal */
 .edit-modal-content {
@@ -242,12 +268,12 @@
     <a href="{{ url_for('social.profile', username=other.username) }}" style="flex-shrink:0">
       <div class="avatar avatar-sm">
         {% if other.avatar_url %}<img src="{{ other.avatar_url }}" alt="">
-        {% else %}{{ (other.display_name or other.username or '?')[0].upper() }}{% endif %}
+        {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
       </div>
     </a>
     <div style="flex:1;min-width:0">
       <div class="chat-other-name">
-        {{ other.display_name or other.username }}{% if other.is_verified %}&nbsp;<span class="badge-verified" title="Verified" aria-label="Verified"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>{% endif %}
+        {{ other.display_name or other.username }}{%- if other.is_verified -%}<span class="badge-verified tier-{{ other.verified_tier or "blue" }}" title="Verified" aria-label="Verified"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>{%- endif -%}
       </div>
       <div class="chat-other-status">
         <span class="dot-offline" id="status-dot"></span>
@@ -277,12 +303,16 @@
            data-mine="{{ 1 if mine else 0 }}"
            data-mt="{{ m.msg_type or 'text' }}"
            data-body="{{ m.body or '' }}"
-           data-file-name="{{ m.file_name or '' }}">
+           data-file-name="{{ m.file_name or '' }}"
+           oncontextmenu="openCtxMenu(event, {{ m.id }}, {{ 1 if mine else 0 }});return false;"
+           ontouchstart="startLongPress(event, {{ m.id }}, {{ 1 if mine else 0 }})"
+           ontouchend="cancelLongPress()"
+           ontouchmove="cancelLongPress()">
         {% if not mine %}
         <div class="msg-av">
           <div class="avatar" style="width:26px;height:26px;font-size:10px">
             {% if m.sender_avatar %}<img src="{{ m.sender_avatar }}" alt="">
-            {% else %}{{ (m.sender_username or '?')[0].upper() }}{% endif %}
+            {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
           </div>
         </div>
         {% endif %}
@@ -314,7 +344,7 @@
     {% endfor %}
 
     <div class="typing-row" id="typing-row" style="display:none">
-      <div class="msg-av"><div class="avatar" style="width:26px;height:26px;font-size:10px">{% if other.avatar_url %}<img src="{{ other.avatar_url }}" alt="">{% else %}{{ (other.display_name or other.username or '?')[0].upper() }}{% endif %}</div></div>
+      <div class="msg-av"><div class="avatar" style="width:26px;height:26px;font-size:10px">{% if other.avatar_url %}<img src="{{ other.avatar_url }}" alt="">{% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}</div></div>
       <div class="typing-bub"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
     </div>
   </div>
@@ -328,6 +358,18 @@
 
   <!-- Attach previews -->
   <div class="attach-strip" id="att-strip"></div>
+
+  <!-- Reply strip (WhatsApp-style, shows when replying to a message) -->
+  <div id="reply-strip" style="display:none;align-items:center;gap:8px;
+       padding:8px 14px;background:var(--surface-2);
+       border-top:1px solid var(--border);border-left:3px solid var(--accent);
+       font-size:13px;flex-shrink:0">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+    <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" id="reply-strip-body"></div>
+    <button onclick="cancelReplyTo()" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:0;flex-shrink:0" aria-label="Cancel reply">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
 
   <!-- Compose bar -->
   <div class="chat-compose">
@@ -360,19 +402,71 @@
 
 <!-- Context menu -->
 <div class="ctx-overlay" id="ctx-overlay" onclick="if(event.target===this)closeCtx()">
-  <div class="ctx-menu" id="ctx-menu">
+  <!-- WhatsApp-style context menu -->
+  <div class="ctx-menu" id="ctx-menu" style="display:none">
+    <!-- Quick reactions row -->
     <div class="ctx-react-row" id="ctx-react-row">
-      <button class="ctx-react-btn" onclick="reactToMsg('👍')">👍</button>
-      <button class="ctx-react-btn" onclick="reactToMsg('❤️')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></button>
-      <button class="ctx-react-btn" onclick="reactToMsg('😂')">😂</button>
-      <button class="ctx-react-btn" onclick="reactToMsg('😮')">😮</button>
-      <button class="ctx-react-btn" onclick="reactToMsg('😢')">😢</button>
-      <button class="ctx-react-btn" onclick="reactToMsg('🙏')">🙏</button>
-      <button class="ctx-react-btn" onclick="openMsgEmojiPicker(event)" style="font-size:13px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;padding:2px 8px;color:var(--muted)">+</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('❤️')" title="Love">❤️</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('😂')" title="Haha">😂</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('😮')" title="Wow">😮</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('😢')" title="Sad">😢</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('👍')" title="Like">👍</button>
+      <button class="ctx-react-btn" onclick="reactToMsg('🙏')" title="Thanks">🙏</button>
+      <button class="ctx-react-btn ctx-react-more" onclick="openMsgEmojiPicker(event)" title="More">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      </button>
     </div>
-    <div id="ctx-actions"></div>
+    <!-- Action items -->
+    <div id="ctx-actions">
+      <button class="ctx-item" id="ctx-reply" onclick="ctxReply()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        </span>
+        <span>Reply</span>
+      </button>
+      <button class="ctx-item" id="ctx-copy" onclick="ctxCopy()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </span>
+        <span>Copy</span>
+      </button>
+      <button class="ctx-item" id="ctx-forward" onclick="ctxForward()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 014-4h12"/></svg>
+        </span>
+        <span>Forward</span>
+      </button>
+      <button class="ctx-item" id="ctx-pin" onclick="ctxPin()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24z"/></svg>
+        </span>
+        <span id="ctx-pin-label">Pin</span>
+      </button>
+      <button class="ctx-item" id="ctx-info" onclick="ctxInfo()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </span>
+        <span>Info</span>
+      </button>
+      <button class="ctx-item" id="ctx-edit" onclick="ctxEdit()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </span>
+        <span>Edit</span>
+      </button>
+      <button class="ctx-item danger" id="ctx-delete" onclick="ctxDelete()">
+        <span class="ctx-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+        </span>
+        <span>Delete</span>
+      </button>
+    </div>
   </div>
 </div>
+
+<!-- Backdrop for context menu -->
+<div id="ctx-backdrop" style="display:none;position:fixed;inset:0;z-index:999" onclick="closeCtxMenu()"></div>
+
 
 <!-- Edit modal -->
 <div class="modal-overlay" id="edit-modal" role="dialog" aria-modal="true">
@@ -961,6 +1055,158 @@ function openMsgEmojiPicker(event) {
   }, 50);
 }
 window.openMsgEmojiPicker = openMsgEmojiPicker;
+
+// ── WhatsApp-style context menu ──────────────────────────────────────────────
+let _ctxMine = false;
+let _ctxBody = '';
+let _lpTimer  = null;
+
+function openCtxMenu(event, msgId, isMine) {
+  event.preventDefault();
+  event.stopPropagation();
+  selectedMsgId = msgId;
+  _ctxMine = !!isMine;
+  const row = document.querySelector('[data-id="' + msgId + '"]');
+  _ctxBody = row ? (row.dataset.body || '') : '';
+
+  const menu = document.getElementById('ctx-menu');
+  const bd   = document.getElementById('ctx-backdrop');
+
+  // Show/hide items based on ownership
+  const editEl  = document.getElementById('ctx-edit');
+  const delEl   = document.getElementById('ctx-delete');
+  const copyEl  = document.getElementById('ctx-copy');
+  if (editEl)  editEl.style.display  = (isMine && _ctxBody) ? '' : 'none';
+  if (delEl)   delEl.style.display   = isMine  ? '' : 'none';
+  if (copyEl)  copyEl.style.display  = _ctxBody ? '' : 'none';
+
+  // Pin label
+  const pinLabel = document.getElementById('ctx-pin-label');
+  if (row && pinLabel) {
+    pinLabel.textContent = row.classList.contains('pinned') ? 'Unpin' : 'Pin';
+  }
+
+  // Position
+  menu.style.display = '';
+  if (bd) bd.style.display = '';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = event.clientX || (event.touches && event.touches[0] ? event.touches[0].clientX : vw/2);
+  let y = event.clientY || (event.touches && event.touches[0] ? event.touches[0].clientY : vh/2);
+  const mw = 270, mh = 380;
+  if (x + mw > vw - 8)  x = vw - mw - 8;
+  if (y + mh > vh - 8)  y = vh - mh - 8;
+  if (x < 8) x = 8;
+  if (y < 8) y = 8;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+
+  // Haptic feedback on mobile
+  if (navigator.vibrate) navigator.vibrate(30);
+
+  // Highlight selected message
+  document.querySelectorAll('.msg-row.selected').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+  if (row) row.classList.add('selected');
+}
+window.openCtxMenu = openCtxMenu;
+
+function closeCtxMenu() {
+  const menu = document.getElementById('ctx-menu');
+  const bd   = document.getElementById('ctx-backdrop');
+  if (menu) menu.style.display = 'none';
+  if (bd)   bd.style.display   = 'none';
+  document.querySelectorAll('.msg-row.selected').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+}
+window.closeCtxMenu = closeCtxMenu;
+
+// Long-press for touch devices
+function startLongPress(event, msgId, isMine) {
+  cancelLongPress();
+  _lpTimer = setTimeout(function() {
+    openCtxMenu(event, msgId, isMine);
+  }, 500);
+}
+function cancelLongPress() {
+  if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+}
+window.startLongPress = startLongPress;
+window.cancelLongPress = cancelLongPress;
+
+function cancelReplyTo() {
+  replyTo = null;
+  const strip = document.getElementById('reply-strip');
+  if (strip) strip.style.display = 'none';
+}
+window.cancelReplyTo = cancelReplyTo;
+
+
+// ── Context menu actions ─────────────────────────────────────────────────────
+function ctxReply() {
+  closeCtxMenu();
+  const row = document.querySelector('[data-id="' + selectedMsgId + '"]');
+  if (!row) return;
+  replyTo = { id: selectedMsgId, name: '', body: row.dataset.body || '' };
+  const strip = document.getElementById('reply-strip');
+  if (strip) {
+    strip.style.display = 'flex';
+    const bodyEl = document.getElementById('reply-strip-body');
+    if (bodyEl) bodyEl.textContent = replyTo.body || 'Media';
+  }
+  txtEl.focus();
+}
+window.ctxReply = ctxReply;
+
+function ctxCopy() {
+  closeCtxMenu();
+  if (!_ctxBody) return;
+  navigator.clipboard.writeText(_ctxBody).then(function() {
+    showToast('Copied to clipboard');
+  }).catch(function() {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = _ctxBody;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copied');
+  });
+}
+window.ctxCopy = ctxCopy;
+
+function ctxForward() {
+  closeCtxMenu();
+  openModal('fwd-modal');
+}
+window.ctxForward = ctxForward;
+
+function ctxPin() {
+  closeCtxMenu();
+  pinMessage(selectedMsgId);
+}
+window.ctxPin = ctxPin;
+
+function ctxInfo() {
+  closeCtxMenu();
+  openMsgInfo(selectedMsgId);
+}
+window.ctxInfo = ctxInfo;
+
+function ctxEdit() {
+  closeCtxMenu();
+  openEditModal(selectedMsgId);
+}
+window.ctxEdit = ctxEdit;
+
+function ctxDelete() {
+  closeCtxMenu();
+  if (!confirm('Delete this message?')) return;
+  deleteMessage(selectedMsgId);
+}
+window.ctxDelete = ctxDelete;
 
 </script>
 {% endblock %}

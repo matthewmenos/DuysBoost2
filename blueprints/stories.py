@@ -40,30 +40,22 @@ _cleanup_lock    = threading.Lock()
 
 
 def _run_cleanup(app):
-    """Delete expired stories every 10 minutes."""
-    import sqlite3
-    
-    import os
+    """Delete expired stories from global SQLite DB every 10 minutes."""
+    import sqlite3 as _sq
+    import os as _os
 
     while True:
-        time.sleep(600)  # 10 minutes
+        time.sleep(600)
         try:
-            dsn = (
-                os.environ.get('DATABASE_URL') or
-                os.environ.get('POSTGRES_URL', '')
-            )
-            if not dsn:
+            db_path = _os.path.join(app.root_path, 'global.db')
+            if not _os.path.exists(db_path):
                 continue
-            if dsn.startswith('postgres://'):
-                dsn = 'postgresql://' + dsn[len('postgres://'):]
 
-            conn = sqlite3.connect(dsn)
-            cur  = conn.cursor()
-
-            cur.execute(
+            conn = _sq.connect(db_path)
+            conn.row_factory = _sq.Row
+            expired = conn.execute(
                 "SELECT id, media_url FROM stories WHERE expires_at < datetime('now')"
-            )
-            expired = cur.fetchall()
+            ).fetchall()
 
             if expired:
                 import storage as _st
@@ -72,18 +64,17 @@ def _run_cleanup(app):
                         _st.delete_object(row['media_url'])
                     except Exception:
                         pass
-
                 ids = [r['id'] for r in expired]
-                cur.execute(
-                    'DELETE FROM stories WHERE id = ANY(?)', (ids,)
+                placeholders = ','.join('?' * len(ids))
+                conn.execute(
+                    f'DELETE FROM stories WHERE id IN ({placeholders})', ids
                 )
                 conn.commit()
                 logger.info('Stories cleanup: deleted %d expired stories', len(expired))
 
-            cur.close()
             conn.close()
         except Exception as e:
-            logger.warning('Stories cleanup error: ?', e)
+            logger.warning('Stories cleanup error: %s', e)
 
 
 def start_cleanup_thread(app):

@@ -7,235 +7,342 @@
 <title>{% block title %}Admin — DUYS Boost{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 <style>
-/* ── Admin shell ─────────────────────────────────────────────────────────── */
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { display: flex; min-height: 100vh; background: var(--bg); color: var(--text);
-       font-family: var(--font-body); }
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{display:flex;min-height:100vh;background:var(--bg);color:var(--text);
+     font-family:var(--font-body);line-height:1.5}
 
-/* Sidebar */
-.adm-sidebar {
-  width: 230px; min-height: 100vh; background: var(--surface);
-  border-right: 1px solid var(--border); display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0;
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+.adm-sidebar{
+  width:240px;min-height:100vh;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0;
+  transition:transform .25s;z-index:50;
 }
-.adm-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
-.adm-logo-text { font-weight: 800; font-size: 17px; letter-spacing: -.02em; }
-.adm-logo-badge { font-size: 10px; background: var(--red,#e53e3e); color: #fff;
-                  padding: 2px 7px; border-radius: 99px; margin-left: 6px;
-                  vertical-align: middle; font-weight: 700; }
-.adm-nav { flex: 1; padding: 10px 0; }
-.adm-nav-section { font-size: 10px; font-weight: 700; letter-spacing: .08em;
-                   text-transform: uppercase; color: var(--muted);
-                   padding: 14px 18px 5px; }
-.adm-nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 18px; color: var(--text-dim); text-decoration: none;
-  font-size: 13.5px; font-weight: 500; border-radius: 0;
-  transition: background var(--transition), color var(--transition);
-  position: relative;
+.adm-logo{
+  padding:22px 20px 18px;border-bottom:1px solid var(--border);
 }
-.adm-nav-item:hover { background: var(--surface-2); color: var(--text); }
-.adm-nav-item.active { background: rgba(127,90,240,.12); color: var(--accent);
-                       font-weight: 700; }
-.adm-nav-item.active::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 3px; background: var(--accent); border-radius: 0 2px 2px 0;
+.adm-logo-wordmark{
+  display:flex;align-items:center;gap:8px;
 }
-.adm-nav-badge {
-  margin-left: auto; background: var(--red,#e53e3e); color: #fff;
-  font-size: 10px; font-weight: 700; padding: 1px 6px;
-  border-radius: 99px; min-width: 18px; text-align: center;
+.adm-logo-icon{
+  width:32px;height:32px;border-radius:10px;
+  background:linear-gradient(135deg,var(--accent),#0f6cbd);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
-.adm-nav-icon { width: 16px; text-align: center; flex-shrink: 0; }
-.adm-footer { padding: 14px 18px; border-top: 1px solid var(--border);
-              font-size: 12px; color: var(--muted); }
-.adm-footer a { color: var(--muted); text-decoration: none; }
-.adm-footer a:hover { color: var(--text); }
+.adm-logo-icon svg{width:18px;height:18px;color:#fff}
+.adm-logo-name{font-weight:800;font-size:16px;letter-spacing:-.03em}
+.adm-logo-tag{
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent,#1d9bf0);margin-top:3px;
+}
+.adm-logo-user{font-size:12px;color:var(--muted);margin-top:4px}
 
-/* Main area */
-.adm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.adm-topbar {
-  height: 56px; background: var(--surface); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; padding: 0 24px; gap: 16px;
-  position: sticky; top: 0; z-index: 20;
+.adm-nav{flex:1;padding:8px 0}
+.adm-nav-section{
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);padding:14px 20px 4px;
 }
-.adm-topbar-title { font-weight: 700; font-size: 16px; flex: 1; }
-.adm-topbar-actions { display: flex; align-items: center; gap: 10px; }
-.adm-content { flex: 1; padding: 24px; overflow: auto; }
-
-/* ── Stat cards ──────────────────────────────────────────────────────────── */
-.adm-stats { display: grid; grid-template-columns: repeat(auto-fill,minmax(170px,1fr));
-             gap: 14px; margin-bottom: 24px; }
-.adm-stat { background: var(--surface); border: 1px solid var(--border);
-            border-radius: var(--radius-lg); padding: 18px 20px;
-            transition: border-color var(--transition); }
-.adm-stat:hover { border-color: var(--accent); }
-.adm-stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase;
-                  letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; }
-.adm-stat-value { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
-.adm-stat-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.adm-stat-value.green { color: var(--green); }
-.adm-stat-value.cyan  { color: var(--accent-light); }
-.adm-stat-value.red   { color: var(--red,#e53e3e); }
-.adm-stat-value.yellow{ color: var(--yellow,#f4c94e); }
-
-/* ── Tables ──────────────────────────────────────────────────────────────── */
-.adm-card { background: var(--surface); border: 1px solid var(--border);
-            border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 20px; }
-.adm-card-header {
-  padding: 14px 20px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+.adm-nav-item{
+  display:flex;align-items:center;gap:11px;
+  padding:9px 20px;color:var(--muted);text-decoration:none;
+  font-size:13.5px;font-weight:500;border-radius:0;position:relative;
+  transition:background var(--transition),color var(--transition);
 }
-.adm-card-title { font-weight: 700; font-size: 14px; }
-.adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.adm-table th { padding: 10px 14px; text-align: left; font-size: 11px;
-                font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-                color: var(--muted); border-bottom: 1px solid var(--border);
-                white-space: nowrap; }
-.adm-table td { padding: 10px 14px; border-bottom: 1px solid var(--border);
-                vertical-align: middle; }
-.adm-table tr:last-child td { border-bottom: none; }
-.adm-table tr:hover td { background: var(--surface-2); }
-.adm-table .actions { display: flex; gap: 6px; }
+.adm-nav-item:hover{background:var(--surface-2);color:var(--text)}
+.adm-nav-item.active{
+  background:rgba(29,155,240,.1);color:var(--accent);font-weight:700;
+}
+.adm-nav-item.active::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;
+  width:3px;background:var(--accent);border-radius:0 3px 3px 0;
+}
+.adm-nav-icon{
+  width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.adm-nav-icon svg{width:17px;height:17px}
+.adm-nav-badge{
+  margin-left:auto;background:var(--red,#e53e3e);color:#fff;
+  font-size:10px;font-weight:700;padding:2px 7px;
+  border-radius:99px;min-width:20px;text-align:center;
+}
+.adm-sidebar-footer{
+  padding:16px 20px;border-top:1px solid var(--border);
+}
+
+/* ── Main area ──────────────────────────────────────────────────────────── */
+.adm-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.adm-topbar{
+  height:58px;background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;gap:14px;
+  position:sticky;top:0;z-index:20;
+}
+.adm-topbar-title{font-weight:700;font-size:17px;letter-spacing:-.02em;flex:1}
+.adm-topbar-actions{display:flex;align-items:center;gap:10px}
+.adm-content{flex:1;padding:24px;overflow:auto}
+
+/* ── Stat cards ─────────────────────────────────────────────────────────── */
+.adm-stats{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+  gap:14px;margin-bottom:24px;
+}
+.adm-stat{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;padding:20px;
+  position:relative;overflow:hidden;
+  transition:border-color .15s,transform .15s,box-shadow .15s;
+  cursor:default;
+}
+.adm-stat:hover{
+  border-color:var(--accent);
+  transform:translateY(-1px);
+  box-shadow:0 4px 20px rgba(0,0,0,.15);
+}
+.adm-stat-icon{
+  width:38px;height:38px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:12px;
+}
+.adm-stat-icon svg{width:20px;height:20px}
+.adm-stat-label{font-size:11.5px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+.adm-stat-value{
+  font-size:30px;font-weight:800;letter-spacing:-.04em;
+  line-height:1;margin-bottom:4px;
+}
+.adm-stat-sub{font-size:12px;color:var(--muted)}
+.adm-stat-value.green{color:var(--green)}
+.adm-stat-value.blue {color:#1d9bf0}
+.adm-stat-value.red  {color:var(--red,#e53e3e)}
+.adm-stat-value.gold {color:#F4B400}
+.adm-stat-value.purple{color:#a855f7}
+/* Icon bg tints */
+.adm-stat-icon.blue  {background:rgba(29,155,240,.12);color:#1d9bf0}
+.adm-stat-icon.green {background:rgba(44,182,125,.12);color:var(--green)}
+.adm-stat-icon.red   {background:rgba(239,69,101,.12);color:var(--red,#e53e3e)}
+.adm-stat-icon.gold  {background:rgba(244,180,0,.12);color:#F4B400}
+.adm-stat-icon.purple{background:rgba(168,85,247,.12);color:#a855f7}
+.adm-stat-icon.muted {background:var(--surface-2);color:var(--muted)}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.adm-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:16px;overflow:hidden;margin-bottom:20px;
+}
+.adm-card-header{
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.adm-card-title{
+  font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;
+}
+.adm-card-title svg{width:16px;height:16px;color:var(--muted)}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.adm-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.adm-table th{
+  padding:10px 16px;text-align:left;font-size:10.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.adm-table td{
+  padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:middle;
+}
+.adm-table tr:last-child td{border-bottom:none}
+.adm-table tr:hover td{background:var(--surface-2)}
+.adm-table .actions{display:flex;gap:6px;flex-wrap:wrap}
 
 /* ── Action buttons ─────────────────────────────────────────────────────── */
-.adm-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px; border-radius: var(--radius); border: 1px solid var(--border);
-  font-size: 12px; font-weight: 600; cursor: pointer;
-  background: var(--surface-2); color: var(--text);
-  text-decoration: none; transition: all var(--transition); white-space: nowrap;
+.adm-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:6px 13px;border-radius:8px;border:1px solid var(--border);
+  font-size:12.5px;font-weight:600;cursor:pointer;
+  background:var(--surface-2);color:var(--text);
+  text-decoration:none;transition:all .15s;white-space:nowrap;
 }
-.adm-btn:hover { background: var(--surface); border-color: var(--accent); }
-.adm-btn.danger { color: var(--red,#e53e3e); border-color: rgba(239,69,101,.3); }
-.adm-btn.danger:hover { background: rgba(239,69,101,.08); }
-.adm-btn.success { color: var(--green); border-color: rgba(44,182,125,.3); }
-.adm-btn.success:hover { background: rgba(44,182,125,.08); }
-.adm-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.adm-btn.primary:hover { opacity: .88; }
+.adm-btn:hover{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.adm-btn svg{width:13px;height:13px}
+.adm-btn.danger{color:var(--red,#e53e3e);border-color:rgba(239,69,101,.3)}
+.adm-btn.danger:hover{background:rgba(239,69,101,.08)}
+.adm-btn.success{color:var(--green);border-color:rgba(44,182,125,.3)}
+.adm-btn.success:hover{background:rgba(44,182,125,.08)}
+.adm-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.adm-btn.primary:hover{opacity:.88}
 
-/* ── Filters bar ─────────────────────────────────────────────────────────── */
-.adm-filters {
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  padding: 14px 20px; border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
+/* ── Filters ────────────────────────────────────────────────────────────── */
+.adm-filters{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  background:var(--surface-2);
 }
-.adm-search { flex: 1; min-width: 200px; max-width: 340px; }
-.adm-search input {
-  width: 100%; padding: 7px 12px; background: var(--surface);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-size: 13px;
+.adm-search{flex:1;min-width:200px;max-width:340px}
+.adm-search input{
+  width:100%;padding:7px 12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-size:13px;outline:none;
+  transition:border-color .15s;
 }
-.adm-tabs { display: flex; gap: 4px; }
-.adm-tab {
-  padding: 6px 14px; border-radius: var(--radius); font-size: 12.5px;
-  font-weight: 600; text-decoration: none; color: var(--muted);
-  border: 1px solid transparent; transition: all var(--transition);
-  display: flex; align-items: center; gap: 5px;
+.adm-search input:focus{border-color:var(--accent)}
+.adm-tabs{display:flex;gap:4px}
+.adm-tab{
+  padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:600;
+  text-decoration:none;color:var(--muted);border:1px solid transparent;
+  transition:all .15s;display:flex;align-items:center;gap:5px;
 }
-.adm-tab:hover { background: var(--surface-2); color: var(--text); }
-.adm-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.adm-tab .cnt { font-size: 11px; opacity: .8; }
+.adm-tab:hover{background:var(--surface-2);color:var(--text)}
+.adm-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.adm-tab .cnt{font-size:11px;opacity:.8}
 
-/* ── User avatar row ─────────────────────────────────────────────────────── */
-.adm-user-cell { display: flex; align-items: center; gap: 10px; }
-.adm-avatar {
-  width: 34px; height: 34px; border-radius: 50%; background: var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; overflow: hidden;
+/* ── User cell ──────────────────────────────────────────────────────────── */
+.adm-user-cell{display:flex;align-items:center;gap:10px}
+.adm-avatar{
+  width:34px;height:34px;border-radius:50%;
+  background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;overflow:hidden;
 }
-.adm-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.adm-user-name { font-weight: 700; font-size: 13.5px; }
-.adm-user-sub  { font-size: 11.5px; color: var(--muted); }
+.adm-avatar svg{width:55%;height:55%;opacity:.6;color:var(--muted)}
+.adm-avatar img{width:100%;height:100%;object-fit:cover}
+.adm-user-name{font-weight:700;font-size:13.5px}
+.adm-user-sub{font-size:11.5px;color:var(--muted)}
 
-/* ── Modal ───────────────────────────────────────────────────────────────── */
-.adm-modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.6);
-  display: none; align-items: center; justify-content: center; z-index: 1000;
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+.adm-modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);
+  backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;z-index:1000;
 }
-.adm-modal-overlay.open { display: flex; }
-.adm-modal {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 24px; width: 100%;
-  max-width: 480px; max-height: 90vh; overflow-y: auto;
+.adm-modal-overlay.open{display:flex}
+.adm-modal{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:18px;padding:28px;width:100%;
+  max-width:480px;max-height:90vh;overflow-y:auto;
+  box-shadow:0 24px 60px rgba(0,0,0,.4);
 }
-.adm-modal-title { font-weight: 800; font-size: 18px; margin-bottom: 16px; }
-.adm-form-group { margin-bottom: 14px; }
-.adm-form-label { font-size: 12px; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: .04em; color: var(--muted); margin-bottom: 5px;
-                  display: block; }
-.adm-form-input {
-  width: 100%; padding: 9px 12px; background: var(--surface-2);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-size: 13.5px;
+.adm-modal-title{font-weight:800;font-size:18px;margin-bottom:18px}
+.adm-form-group{margin-bottom:14px}
+.adm-form-label{
+  font-size:11.5px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);margin-bottom:6px;display:block;
 }
-.adm-form-input:focus { outline: none; border-color: var(--accent); }
-.adm-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.adm-form-input{
+  width:100%;padding:9px 13px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-size:13.5px;outline:none;
+  transition:border-color .15s;
+}
+.adm-form-input:focus{border-color:var(--accent)}
+.adm-modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
 
-/* ── Pagination ──────────────────────────────────────────────────────────── */
-.adm-pagination { display: flex; gap: 6px; align-items: center;
-                  padding: 14px 20px; border-top: 1px solid var(--border); }
-.adm-page-btn {
-  padding: 5px 11px; border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--surface-2); font-size: 12.5px; color: var(--text);
-  text-decoration: none; cursor: pointer;
-  transition: all var(--transition);
+/* ── Pagination ─────────────────────────────────────────────────────────── */
+.adm-pagination{
+  display:flex;gap:6px;align-items:center;
+  padding:14px 20px;border-top:1px solid var(--border);
 }
-.adm-page-btn:hover { border-color: var(--accent); }
-.adm-page-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.adm-page-btn.disabled { opacity: .4; pointer-events: none; }
-
-/* ── Toast ───────────────────────────────────────────────────────────────── */
-#adm-toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 10px 20px; font-size: 13.5px;
-  font-weight: 600; z-index: 9999; display: none;
-  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+.adm-page-btn{
+  padding:5px 12px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface-2);font-size:12.5px;color:var(--text);
+  text-decoration:none;cursor:pointer;transition:all .15s;
 }
-#adm-toast.show { display: block; }
-#adm-toast.success { border-color: var(--green); color: var(--green); }
-#adm-toast.error   { border-color: var(--red,#e53e3e); color: var(--red,#e53e3e); }
+.adm-page-btn:hover{border-color:var(--accent);color:var(--accent)}
+.adm-page-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.adm-page-btn.disabled{opacity:.4;pointer-events:none}
 
-/* Mobile */
-@media (max-width: 768px) {
-  .adm-sidebar { display: none; }
-  .adm-content { padding: 16px; }
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+#adm-toast{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:11px 22px;font-size:13.5px;font-weight:600;
+  z-index:9999;display:none;box-shadow:0 6px 24px rgba(0,0,0,.3);
+  white-space:nowrap;
+}
+#adm-toast.show{display:block;animation:toastIn .25s ease}
+#adm-toast.success{border-color:var(--green);color:var(--green)}
+#adm-toast.error{border-color:var(--red,#e53e3e);color:var(--red,#e53e3e)}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ── Live indicator ─────────────────────────────────────────────────────── */
+.live-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--green);
+  display:inline-block;animation:pulse 2s infinite;flex-shrink:0;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .adm-sidebar{
+    position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);
+  }
+  .adm-sidebar.open{transform:translateX(0)}
+  .adm-content{padding:16px}
+  .adm-stats{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}
 }
 </style>
 {% block head_extra %}{% endblock %}
 </head>
 <body>
 
-<!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
-<aside class="adm-sidebar">
+<!-- ── Sidebar ───────────────────────────────────────────────────────────── -->
+<aside class="adm-sidebar" id="adm-sidebar">
   <div class="adm-logo">
-    <div class="adm-logo-text">DUYS Boost</div>
-    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent,#1d9bf0);margin-top:2px">Admin Dashboard</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:3px">
-      {{ current_user.username if current_user }}
+    <div class="adm-logo-wordmark">
+      <div class="adm-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+      <div>
+        <div class="adm-logo-name">DUYS Boost</div>
+        <div class="adm-logo-tag">Admin</div>
+      </div>
     </div>
+    <div class="adm-logo-user">{{ current_user.username if current_user }}</div>
   </div>
 
   <nav class="adm-nav">
-    <div class="adm-nav-section">Main</div>
+    <div class="adm-nav-section">Dashboard</div>
     <a href="{{ url_for('admin.admin') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin' %}active{% endif %}">
-      <span class="adm-nav-icon">📊</span> Overview
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+      </span>
+      Overview
     </a>
 
     <div class="adm-nav-section">Management</div>
     <a href="{{ url_for('admin.admin_users') }}"
        class="adm-nav-item {% if 'admin_user' in request.endpoint %}active{% endif %}">
-      <span class="adm-nav-icon">👥</span> Users
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+      </span>
+      Users
     </a>
     <a href="{{ url_for('admin.admin_posts') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin_posts' %}active{% endif %}">
-      <span class="adm-nav-icon">📝</span> Posts
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
+      </span>
+      Posts
     </a>
     <a href="{{ url_for('admin.admin_reports') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin_reports' %}active{% endif %}">
-      <span class="adm-nav-icon">🚩</span> Reports
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+          <line x1="4" y1="22" x2="4" y2="15"/>
+        </svg>
+      </span>
+      Reports
       {% set rc = open_report_count|default(0) %}
       {% if rc %}<span class="adm-nav-badge">{{ rc }}</span>{% endif %}
     </a>
@@ -243,7 +350,13 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
     <div class="adm-nav-section">Finance</div>
     <a href="{{ url_for('admin.admin_withdrawals') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin_withdrawals' %}active{% endif %}">
-      <span class="adm-nav-icon">💸</span> Withdrawals
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23"/>
+          <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+        </svg>
+      </span>
+      Withdrawals
       {% set wc = pending_wdr_count|default(0) %}
       {% if wc %}<span class="adm-nav-badge">{{ wc }}</span>{% endif %}
     </a>
@@ -251,19 +364,36 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
     <div class="adm-nav-section">Community</div>
     <a href="{{ url_for('admin.admin_reviews') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin_reviews' %}active{% endif %}">
-      <span class="adm-nav-icon">⭐</span> Reviews
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      </span>
+      Reviews
     </a>
     <a href="{{ url_for('admin.admin_audit') }}"
        class="adm-nav-item {% if request.endpoint=='admin.admin_audit' %}active{% endif %}">
-      <span class="adm-nav-icon">📋</span> Audit Log
+      <span class="adm-nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+      </span>
+      Audit Log
     </a>
   </nav>
 
-  <div class="adm-footer" style="padding:14px 18px;border-top:1px solid var(--border)">
-    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Signed in as admin</div>
+  <div class="adm-sidebar-footer">
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+      <span class="live-dot"></span>
+      <span>Live dashboard</span>
+    </div>
     <a href="{{ url_for('auth.logout') }}"
-       style="display:flex;align-items:center;gap:7px;font-size:12.5px;
-              color:rgba(239,69,101,.7);text-decoration:none;font-weight:600">
+       style="display:flex;align-items:center;gap:8px;font-size:12.5px;
+              color:rgba(239,69,101,.75);text-decoration:none;font-weight:600">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
@@ -275,13 +405,32 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
   </div>
 </aside>
 
-<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<!-- ── Main ──────────────────────────────────────────────────────────────── -->
 <main class="adm-main">
   <div class="adm-topbar">
+    <!-- Mobile menu button -->
+    <button onclick="document.getElementById('adm-sidebar').classList.toggle('open')"
+            style="display:none;@media(max-width:768px){display:flex};background:none;border:none;cursor:pointer;color:var(--text);padding:4px;border-radius:8px"
+            aria-label="Menu" id="adm-menu-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
     <div class="adm-topbar-title">{% block page_title %}Dashboard{% endblock %}</div>
     <div class="adm-topbar-actions">
-      <button class="adm-btn primary" onclick="openBroadcast()">📢 Broadcast</button>
-      <a href="{{ url_for('social.feed') }}" class="adm-btn">← App</a>
+      <button class="adm-btn primary" onclick="openBroadcast()" style="gap:6px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+        </svg>
+        Broadcast
+      </button>
+      <a href="{{ url_for('social.feed') }}" class="adm-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+        App
+      </a>
     </div>
   </div>
   <div class="adm-content">
@@ -289,73 +438,206 @@ body { display: flex; min-height: 100vh; background: var(--bg); color: var(--tex
   </div>
 </main>
 
-<!-- ── Broadcast modal ────────────────────────────────────────────────── -->
+<!-- ── Toast ─────────────────────────────────────────────────────────────── -->
+<div id="adm-toast"></div>
+
+<!-- ── Broadcast modal ───────────────────────────────────────────────────── -->
 <div class="adm-modal-overlay" id="broadcast-modal">
   <div class="adm-modal">
-    <div class="adm-modal-title">📢 Broadcast Notification</div>
+    <div class="adm-modal-title" style="display:flex;align-items:center;gap:10px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
+      </svg>
+      Broadcast Notification
+    </div>
     <div class="adm-form-group">
-      <label class="adm-form-label">Audience</label>
-      <select class="adm-form-input" id="bc-segment">
+      <label class="adm-form-label">Target audience</label>
+      <select class="adm-form-input" id="bc-target">
         <option value="all">All users</option>
-        <option value="active">Active users only</option>
-        <option value="banned">Banned users</option>
+        <option value="active">Active this week</option>
       </select>
     </div>
     <div class="adm-form-group">
       <label class="adm-form-label">Message</label>
-      <textarea class="adm-form-input" id="bc-message" rows="4"
-                placeholder="Enter your announcement…" maxlength="500"></textarea>
+      <textarea class="adm-form-input" id="bc-message" rows="3"
+                placeholder="Write your announcement…" maxlength="280"></textarea>
+      <div style="text-align:right;font-size:11px;color:var(--muted);margin-top:4px">
+        <span id="bc-chars">280</span> chars left
+      </div>
     </div>
     <div class="adm-modal-actions">
-      <button class="adm-btn" onclick="closeModal('broadcast-modal')">Cancel</button>
-      <button class="adm-btn primary" onclick="submitBroadcast()">Send</button>
+      <button class="adm-btn" onclick="closeBroadcast()">Cancel</button>
+      <button class="adm-btn primary" onclick="sendBroadcast()" id="bc-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+        Send
+      </button>
     </div>
   </div>
 </div>
 
-<div id="adm-toast"></div>
+<!-- ── Deposit modal ─────────────────────────────────────────────────────── -->
+<div class="adm-modal-overlay" id="deposit-modal">
+  <div class="adm-modal">
+    <div class="adm-modal-title">Add Balance</div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Username</label>
+      <input class="adm-form-input" id="dep-username" type="text" placeholder="@username">
+    </div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Amount ($)</label>
+      <input class="adm-form-input" id="dep-amount" type="number" min="0.01" step="0.01" placeholder="0.00">
+    </div>
+    <div class="adm-form-group">
+      <label class="adm-form-label">Note (optional)</label>
+      <input class="adm-form-input" id="dep-note" type="text" placeholder="Admin credit">
+    </div>
+    <div class="adm-modal-actions">
+      <button class="adm-btn" onclick="closeDeposit()">Cancel</button>
+      <button class="adm-btn success" onclick="sendDeposit()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+        </svg>
+        Deposit
+      </button>
+    </div>
+  </div>
+</div>
 
 <script>
-/* ── CSRF + fetch wrapper ────────────────────────────────────────────────── */
-const _csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-async function api(url, data) {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrf },
-    body: JSON.stringify(data),
-  });
-  return r.json();
+/* ── Admin shared JS ─────────────────────────────────────────────────────── */
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+function showToast(msg, type = 'success', duration = 3000) {
+  const el = document.getElementById('adm-toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, duration);
 }
 
-/* ── Toast ───────────────────────────────────────────────────────────────── */
-function showToast(msg, type='success') {
-  const t = document.getElementById('adm-toast');
-  t.textContent = msg;
-  t.className   = `show ${type}`;
-  setTimeout(() => t.className = '', 3000);
-}
-
-/* ── Modal helpers ───────────────────────────────────────────────────────── */
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-function openBroadcast(){ openModal('broadcast-modal'); }
-
-async function submitBroadcast() {
-  const msg     = document.getElementById('bc-message').value.trim();
-  const segment = document.getElementById('bc-segment').value;
-  if (!msg) return showToast('Message is required.', 'error');
-  const d = await api('/admin/broadcast', { message: msg, segment });
-  if (d.success) {
-    showToast(`✅ Sent to ${d.sent_to} users`);
-    closeModal('broadcast-modal');
-    document.getElementById('bc-message').value = '';
-  } else {
-    showToast(d.error || 'Failed.', 'error');
+async function api(url, body = {}) {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+      body: JSON.stringify(body),
+    });
+    return await r.json();
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 }
 
-/* ── Confirm helper ─────────────────────────────────────────────────────── */
-function confirmAction(msg) { return window.confirm(msg); }
+/* ── Broadcast ────────────────────────────────────────────────────────────── */
+function openBroadcast() {
+  document.getElementById('broadcast-modal').classList.add('open');
+  document.getElementById('bc-message').focus();
+}
+function closeBroadcast() {
+  document.getElementById('broadcast-modal').classList.remove('open');
+}
+document.getElementById('broadcast-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeBroadcast();
+});
+document.getElementById('bc-message').addEventListener('input', function() {
+  document.getElementById('bc-chars').textContent = 280 - this.value.length;
+});
+async function sendBroadcast() {
+  const msg    = document.getElementById('bc-message').value.trim();
+  const target = document.getElementById('bc-target').value;
+  const btn    = document.getElementById('bc-btn');
+  if (!msg) { showToast('Enter a message', 'error'); return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const fd = new FormData();
+  fd.append('message', msg);
+  fd.append('target',  target);
+  const d = await api('/admin/send_notification', { message: msg, target });
+  closeBroadcast();
+  if (d.success) {
+    showToast(`Sent to ${d.sent_to || 'users'}`, 'success');
+    document.getElementById('bc-message').value = '';
+  } else {
+    showToast(d.error || 'Failed', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Send';
+}
+
+/* ── Deposit ─────────────────────────────────────────────────────────────── */
+function openDeposit(username) {
+  document.getElementById('deposit-modal').classList.add('open');
+  if (username) document.getElementById('dep-username').value = username;
+  document.getElementById('dep-amount').focus();
+}
+function closeDeposit() {
+  document.getElementById('deposit-modal').classList.remove('open');
+}
+document.getElementById('deposit-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDeposit();
+});
+async function sendDeposit() {
+  const username = document.getElementById('dep-username').value.trim();
+  const amount   = parseFloat(document.getElementById('dep-amount').value);
+  const note     = document.getElementById('dep-note').value.trim();
+  if (!username || !amount || amount < 0.01) {
+    showToast('Enter username and valid amount', 'error'); return;
+  }
+  const fd = new FormData();
+  fd.append('username', username);
+  fd.append('amount',   amount);
+  if (note) fd.append('note', note);
+  const r  = await fetch('/admin/deposit_user', { method: 'POST', body: fd });
+  const d  = await r.json();
+  closeDeposit();
+  if (d.success) {
+    showToast(`$${amount.toFixed(2)} added to @${username}`, 'success');
+    setTimeout(() => location.reload(), 900);
+  } else {
+    showToast(d.error || 'Deposit failed', 'error');
+  }
+}
+
+/* ── User action helpers ─────────────────────────────────────────────────── */
+async function toggleBan(userId, action) {
+  const reason = action === 'ban' ? prompt('Reason for ban:') : null;
+  if (action === 'ban' && reason === null) return;
+  const d = await api(`/admin/user/${userId}/ban`, { action, reason });
+  if (d.success) { showToast(action === 'ban' ? 'User banned' : 'Ban lifted'); setTimeout(() => location.reload(), 700); }
+  else showToast(d.error || 'Failed', 'error');
+}
+
+async function deleteUser(userId) {
+  if (!confirm('Permanently delete this user and ALL their data? This cannot be undone.')) return;
+  const d = await api(`/admin/user/${userId}/delete`);
+  if (d.success) { showToast('User deleted'); setTimeout(() => window.location.href = '/admin/users', 700); }
+  else showToast(d.error || 'Failed', 'error');
+}
+
+async function deletePost(postId) {
+  if (!confirm('Delete this post?')) return;
+  const d = await api(`/admin/post/${postId}/delete`);
+  if (d.success) { showToast('Post deleted'); setTimeout(() => location.reload(), 700); }
+  else showToast(d.error || 'Failed', 'error');
+}
+
+async function handleWithdrawal(id, action) {
+  const d = await api(`/admin/withdrawal/${id}/${action}`);
+  if (d.success) { showToast(action === 'approve' ? 'Approved' : 'Rejected'); setTimeout(() => location.reload(), 700); }
+  else showToast(d.error || 'Failed', 'error');
+}
+
+/* ── Mobile sidebar ──────────────────────────────────────────────────────── */
+document.addEventListener('click', function(e) {
+  const sidebar = document.getElementById('adm-sidebar');
+  const btn     = document.getElementById('adm-menu-btn');
+  if (sidebar && btn && !sidebar.contains(e.target) && !btn.contains(e.target)) {
+    sidebar.classList.remove('open');
+  }
+});
 </script>
 
 {% block scripts %}{% endblock %}

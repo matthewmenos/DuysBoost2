@@ -100,7 +100,7 @@
           {% if current_user.avatar_url %}
             <img src="{{ current_user.avatar_url }}" alt="">
           {% else %}
-            {{ current_user.username[0].upper() }}
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>
           {% endif %}
         </div>
         <div class="compose-right">
@@ -544,15 +544,47 @@ if (composeInput) {
 }
 
 // ── Reply ───────────────────────────────────────────────────────────────────
-// (handled by updateReplyChars));
-}
 
-function openReplyModal(postId, username) {
-  document.getElementById('reply-post-id').value = postId;
-  document.getElementById('reply-context').textContent = 'Replying to @' + username;
-  document.getElementById('reply-input').value = '';
+async function openReplyModal(postId, authorUsername) {
+  const postIdEl = document.getElementById('reply-post-id');
+  if (!postIdEl) return;
+  postIdEl.value = postId;
+  const ctx = document.getElementById('reply-context-card');
+  if (ctx) ctx.innerHTML = '<span style="color:var(--muted)">Replying to</span> <strong>@' + authorUsername + '</strong>';
+  const ta = document.getElementById('reply-input');
+  if (ta) { ta.value = ''; document.getElementById('reply-chars').textContent = '200'; }
+  document.getElementById('reply-submit-btn').disabled = true;
+  clearReplyPhoto && clearReplyPhoto();
   openModal('reply-modal');
-  setTimeout(() => document.getElementById('reply-input').focus(), 200);
+
+  // Load existing replies
+  const listEl = document.getElementById('reply-existing-list');
+  if (listEl) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+    try {
+      const r = await fetch('/api/post/' + postId + '/replies');
+      const d = await r.json();
+      if (d.success && d.replies && d.replies.length) {
+        listEl.innerHTML = d.replies.map(function(rp) {
+          const av = rp.author.avatar_url
+            ? '<img src="' + rp.author.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+            : '<div class="avatar-placeholder" style="width:32px;height:32px;border-radius:50%;flex-shrink:0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
+          return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
+            av +
+            '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13.5px">' +
+            (rp.author.display_name || rp.author.username) +
+            ' <span style="color:var(--muted);font-weight:400">@' + rp.author.username + '</span></div>' +
+            '<div style="font-size:14px;margin-top:3px;word-break:break-word">' + (rp.body || '') + '</div></div></div>';
+        }).join('');
+      } else {
+        listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No replies yet — be first!</div>';
+      }
+    } catch (_) {
+      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Could not load replies</div>';
+    }
+  }
+
+  setTimeout(function() { if (ta) ta.focus(); }, 180);
 }
 window.openReplyModal = openReplyModal;
 

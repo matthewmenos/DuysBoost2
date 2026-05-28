@@ -11,7 +11,7 @@
       <div style="padding:20px;text-align:center;border-bottom:1px solid var(--border)">
         <div class="adm-avatar" style="width:72px;height:72px;font-size:28px;margin:0 auto 12px">
           {% if user.avatar_url %}<img src="{{ user.avatar_url }}" alt="">
-          {% else %}{{ (user.display_name or user.username or '?')[0].upper() }}{% endif %}
+          {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
         </div>
         <div style="font-weight:800;font-size:17px">{{ user.display_name or user.username }}</div>
         <div style="color:var(--muted);font-size:13px">@{{ user.username }}</div>

@@ -59,7 +59,7 @@
       <div style="display:flex; align-items:flex-start; gap:14px">
         <div class="ch-hero-av">
           {% if ch.avatar_url %}<img src="{{ ch.avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover">
-          {% else %}{{ ch.name[0].upper() }}{% endif %}
+          {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
         </div>
         <div style="flex:1;min-width:0">
           <div class="ch-hero-title">{{ ch.name }}</div>
@@ -104,7 +104,7 @@
       <div class="compose-inner">
         <div class="avatar avatar-md flex-shrink-0">
           {% if current_user.avatar_url %}<img src="{{ current_user.avatar_url }}" alt="">
-          {% else %}{{ current_user.username[0].upper() }}{% endif %}
+          {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
         </div>
         <div class="compose-right">
           <textarea class="compose-input" id="ch-compose-input" placeholder="Broadcast to {{ ch.member_count or 0 }} subscribers…" maxlength="500" rows="1"></textarea>
@@ -158,7 +158,7 @@
         <a href="{{ url_for('social.profile', username=m.username) }}">
           <div class="avatar avatar-xs">
             {% if m.avatar_url %}<img src="{{ m.avatar_url }}" alt="">
-            {% else %}{{ (m.display_name or m.username or '?')[0].upper() }}{% endif %}
+            {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
           </div>
         </a>
         <div style="flex:1;min-width:0">

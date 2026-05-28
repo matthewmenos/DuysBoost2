@@ -275,10 +275,15 @@ function escapeHtml(s) {
         const bottomBadge   = document.getElementById('bottom-notif-badge');
 
         const hasUnread = d.count > 0;
-        if (dot) dot.style.display = hasUnread ? 'block' : 'none';
+        const countLabel = d.count > 99 ? '99+' : String(d.count);
+        // Notification bell badge (header)
+        if (dot) {
+          dot.textContent = hasUnread ? countLabel : '';
+          dot.style.display = hasUnread ? 'inline-flex' : 'none';
+        }
         [sidebarBadge, bottomBadge].forEach(function (el) {
           if (!el) return;
-          el.textContent = d.count;
+          el.textContent = countLabel;
           el.style.display = hasUnread ? 'inline-block' : 'none';
         });
 
@@ -306,10 +311,14 @@ function escapeHtml(s) {
         const sidebarBadge = document.getElementById('sidebar-notif-count');
         const bottomBadge  = document.getElementById('bottom-notif-badge');
         const hasUnread = d.count > 0;
-        if (dot) dot.style.display = hasUnread ? 'block' : 'none';
+        const countLabel = d.count > 99 ? '99+' : String(d.count);
+        if (dot) {
+          dot.textContent = hasUnread ? countLabel : '';
+          dot.style.display = hasUnread ? 'inline-flex' : 'none';
+        }
         [sidebarBadge, bottomBadge].forEach(function(el) {
           if (!el) return;
-          el.textContent = d.count;
+          el.textContent = countLabel;
           el.style.display = hasUnread ? 'inline-block' : 'none';
         });
         const list = document.getElementById('notif-list');
@@ -325,10 +334,11 @@ function escapeHtml(s) {
       _globalSrc.addEventListener('dm_unread', function(e) {
         const d = JSON.parse(e.data);
         const cnt = d.count || 0;
+        const dmLabel = cnt > 99 ? '99+' : String(cnt);
         ['bottom-dm-badge','sidebar-dm-badge'].forEach(function(id) {
           const el = document.getElementById(id);
           if (!el) return;
-          el.textContent = cnt;
+          el.textContent = dmLabel;
           el.style.display = cnt > 0 ? 'inline-flex' : 'none';
         });
       });
