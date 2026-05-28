@@ -285,8 +285,20 @@ def create_post():
     recalc_post_score(db, post_id)
     db.commit()
 
-    post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
-    return jsonify({'success': True, 'post': format_post(post, uid, db)})
+    try:
+        post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
+        return jsonify({'success': True, 'post': format_post(post, uid, db)})
+    except Exception as _fe:
+        # The post was saved — just return success without the enriched data
+        logger.warning('format_post failed after create_post (post saved): %s', _fe)
+        return jsonify({'success': True, 'post': {
+            'id': post_id, 'body': body or '', 'user_id': uid,
+            'created_at': now, 'like_count': 0, 'reply_count': 0,
+            'repost_count': 0, 'view_count': 0, 'is_boosted': 0,
+            'media_url': media_url, 'media_mime': media_mime,
+            'author': {}, 'liked': False, 'bookmarked': False,
+            'reposted': False, 'active_boost': None, 'locked': False,
+        }})
 
 
 

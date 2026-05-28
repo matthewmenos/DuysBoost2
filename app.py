@@ -251,16 +251,39 @@ def create_app() -> Flask:
         return _j(_st.check_connection())
 
     # ── Error handlers ────────────────────────────────────────────────────────
+    # JSON-returning paths: /api/*, /post, /post/*, /user/*/follow, etc.
+    _JSON_PREFIXES = ('/api/', '/post', '/user/', '/auth/')
+
+    def _wants_json():
+        p = request.path
+        # Explicit POST-only routes that always return JSON
+        if request.method == 'POST' and p in ('/post',):
+            return True
+        for prefix in _JSON_PREFIXES:
+            if p.startswith(prefix):
+                return True
+        if request.headers.get('X-Requested-With') == 'fetch':
+            return True
+        return False
+
     @app.errorhandler(404)
     def _not_found(_e):
-        if request.path.startswith('/api/'):
+        if _wants_json():
             return jsonify({'success': False, 'error': 'Not found'}), 404
         return render_template('error.html', code=404, message='Page not found.'), 404
 
+    @app.errorhandler(429)
+    def _rate_limited(_e):
+        """Flask-Limiter returns 429 — always JSON so the toast shows the real message."""
+        return jsonify({
+            'success': False,
+            'error': 'Too many posts. Please wait a moment and try again.'
+        }), 429
+
     @app.errorhandler(500)
     def _server_error(_e):
-        if request.path.startswith('/api/'):
-            return jsonify({'success': False, 'error': 'Server error'}), 500
+        if _wants_json():
+            return jsonify({'success': False, 'error': 'Server error — please try again.'}), 500
         return render_template('error.html', code=500,
                                message='Something went wrong on our end.'), 500
 
