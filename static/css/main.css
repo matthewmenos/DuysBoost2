@@ -1371,38 +1371,88 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 
 /* Action bar */
 .post-actions {
-  display: flex; align-items: center;
-  gap: 0;                    /* buttons space themselves */
-  margin-top: 8px;
-  margin-left: -8px;         /* bleed left so first icon aligns with content */
-}
-.post-action-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: 2px;
+  margin-top: 6px;
+  margin-left: -6px;   /* align first icon to content edge */
+}
+
+/* ── Base button — every action icon is identical ────────────────── */
+.post-action-btn {
+  display:     inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap:         5px;
+  height:      34px;        /* fixed height — every button same */
+  padding:     0 8px;
   border-radius: 99px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 13px;
+  border:      none;
+  background:  none;
+  cursor:      pointer;
+  color:       var(--muted);
+  font-size:   12.5px;
   font-weight: 500;
-  transition: color .15s, background .15s;
+  line-height: 1;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
-  min-width: 0;
+  transition:  color .15s, background .15s;
+  flex-shrink: 0;
 }
-.post-action-btn:hover { background: rgba(127,90,240,.1); color: var(--accent-light); transform: scale(1.05); }
-.post-action-btn:active { transform: scale(.96); }
-.post-action-btn.like-btn:hover { background: rgba(239,69,101,.1); color: var(--red); }
-.post-action-btn.like-btn.liked { color: var(--red); }
-.post-action-btn.bookmark-btn.bookmarked { color: var(--accent-light); }
-.post-action-btn.repost-btn:hover { background: rgba(44,182,125,.1); color: var(--green); }
-.post-action-btn.repost-btn.reposted { color: var(--green, #2cb67d); }
-.post-action-btn.repost-btn.reposted .action-icon { transform: rotate(0deg); }
 
-.action-icon { font-size: 16px; line-height: 1; }
+/* ── Icon container — fixed 18×18, flex-centred ──────────────────── */
+.action-icon {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  width:           18px;
+  height:          18px;
+  flex-shrink:     0;
+  flex-grow:       0;
+}
+
+/* ── SVGs always exactly 18×18, never default 300×150 ───────────── */
+.post-action-btn .action-icon svg,
+.post-action-btn .action-icon svg * {
+  width:      18px !important;
+  height:     18px !important;
+  flex-shrink: 0;
+  display:    block;
+  overflow:   visible;
+}
+
+/* ── Count label ─────────────────────────────────────────────────── */
+.action-count {
+  font-size: 12.5px;
+  line-height: 1;
+  min-width:   10px;
+  text-align:  left;
+}
+
+/* ── Hover / active states ───────────────────────────────────────── */
+.post-action-btn:hover  { background: rgba(29,155,240,.08); color: var(--accent); }
+.post-action-btn:active { opacity: .7; }
+
+/* ── Per-button colour overrides ─────────────────────────────────── */
+.post-action-btn.like-btn:hover      { background: rgba(249,24,128,.10); color: #f91880; }
+.post-action-btn.like-btn.liked      { color: #f91880; }
+.post-action-btn.like-btn.liked .action-icon svg { fill: #f91880; stroke: #f91880; }
+.post-action-btn.like-btn.liked .action-count    { color: #f91880; }
+
+.post-action-btn.repost-btn:hover    { background: rgba(0,186,124,.10); color: #00ba7c; }
+.post-action-btn.repost-btn.reposted { color: #00ba7c; }
+.post-action-btn.repost-btn.reposted .action-count { color: #00ba7c; }
+
+.post-action-btn.bookmark-btn:hover      { background: rgba(29,155,240,.10); color: #1d9bf0; }
+.post-action-btn.bookmark-btn.bookmarked { color: #1d9bf0; }
+.post-action-btn.bookmark-btn.bookmarked .action-icon svg { fill: #1d9bf0; stroke: #1d9bf0; }
+
+.post-action-btn.share-btn:hover   { background: rgba(29,155,240,.10); color: #1d9bf0; }
+.post-action-btn.boost-btn:hover   { background: rgba(168,85,247,.10); color: #a855f7; }
+.post-action-btn.views-btn         { cursor: default !important; pointer-events: none; }
+
+.post-action-btn.reply-btn:hover   { background: rgba(29,155,240,.10); color: #1d9bf0; }
+.post-action-btn.reply-btn:hover .action-count { color: #1d9bf0; }
 .action-count { font-size: 12.5px; min-width: 14px; }
 
 .post-stats-row {
@@ -2045,7 +2095,7 @@ button .i-icon, a .i-icon { opacity: 0.7; }
 button:hover .i-icon, a:hover .i-icon,
 .active .i-icon { opacity: 1; }
 /* Action buttons in post cards */
-.post-action-btn .i-icon, .post-action-btn .action-icon svg { width:18px; height:18px; flex-shrink:0; display:block; }
+/* .post-action-btn icon sizes handled in .post-actions block */
 .post-action-btn.liked   .i-icon { stroke: var(--red, #e53e3e); opacity: 1; }
 .post-action-btn.reposted .i-icon { stroke: var(--green, #2cb67d); opacity: 1; }
 .post-action-btn.bookmarked .i-icon { stroke: var(--accent); opacity: 1; }
@@ -2411,42 +2461,9 @@ body:has(.bottom-nav.force-hidden) .toast-container {
 .verified-badge { display:inline-flex; align-items:center; justify-content:center;
   position:relative; width:20px; height:20px; vertical-align:middle; margin-left:3px; }
 /* Like button */
-.like-btn.liked .action-icon svg { color:#f91880; fill:#f91880; stroke:#f91880; }
-.like-btn .action-icon { display:inline-flex; align-items:center; }
+/* like-btn active state handled in .post-actions block */
 
-/* ── Post action bar — X-style ──────────────────────────────────────────── */
-/* SVG icon size consolidated above */
-.post-action-btn .action-count    { font-size: 12.5px; color: var(--muted); min-width: 12px; }
-
-/* Reply */
-.post-action-btn.reply-btn:hover  { color: #1d9bf0; background: rgba(29,155,240,.10); }
-.post-action-btn.reply-btn:hover .action-count { color: #1d9bf0; }
-
-/* Repost */
-.post-action-btn.repost-btn:hover  { color: #00ba7c; background: rgba(0,186,124,.10); }
-.post-action-btn.repost-btn.reposted { color: #00ba7c; }
-.post-action-btn.repost-btn.reposted .action-count { color: #00ba7c; }
-
-/* Like */
-.post-action-btn.like-btn:hover   { color: #f91880; background: rgba(249,24,128,.10); }
-.post-action-btn.like-btn.liked   { color: #f91880; }
-.post-action-btn.like-btn.liked .action-count { color: #f91880; }
-.post-action-btn.like-btn.liked svg { fill: #f91880; stroke: #f91880; }
-
-/* Views (bar chart) */
-.post-action-btn.views-btn        { cursor: default !important; pointer-events: none; }
-.post-action-btn.views-btn:hover  { color: #1d9bf0; background: rgba(29,155,240,.10); pointer-events: auto; cursor: default; }
-
-/* Bookmark */
-.post-action-btn.bookmark-btn:hover      { color: #1d9bf0; background: rgba(29,155,240,.10); }
-.post-action-btn.bookmark-btn.bookmarked { color: #1d9bf0; }
-.post-action-btn.bookmark-btn.bookmarked svg { fill: #1d9bf0; stroke: #1d9bf0; }
-
-/* Share */
-.post-action-btn.share-btn:hover { color: #1d9bf0; background: rgba(29,155,240,.10); }
-
-/* Boost */
-.post-action-btn.boost-btn:hover { color: #a855f7; background: rgba(168,85,247,.10); }
+/* post-action-btn rules consolidated into .post-actions block above */
 
 /* ── Badge display fix — works for both dot and number ─────────────────── */
 .notif-dot { display: none; }   /* JS overrides */
