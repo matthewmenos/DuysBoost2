@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: duys-boost
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m gunicorn 'app:create_app()' --workers 1 --timeout 120 --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: FLASK_ENV
+        value: production

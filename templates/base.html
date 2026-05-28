@@ -63,7 +63,7 @@
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span class="nav-label">Notifications</span><span class="nav-badge" id="sidebar-notif-count" style="display:none"></span>
           </a>
-          <a href="{{ url_for('social.messages_inbox') }}" class="nav-sub-item {% if request.endpoint in ['messages_inbox','social.messages_inbox','message_thread','social.message_thread'] %}active{% endif %}">
+          <a href="{{ '/messages' }}" class="nav-sub-item {% if request.endpoint in ['messages_inbox','social.messages_inbox','message_thread','social.message_thread'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
             <span class="nav-label">Messages</span><span class="nav-badge" id="sidebar-dm-badge" style="display:none"></span>
           </a>
@@ -301,7 +301,7 @@
       </button>
 
       {# ── Messages ─────────────────────────────────────────────────────── #}
-      <a href="{{ url_for('social.messages_inbox') }}"
+      <a href="{{ '/messages' }}"
          class="bottom-nav-item {{ 'active' if _is_messages }}"
          aria-label="Messages" aria-current="{{ 'page' if _is_messages }}"
          style="position:relative">
