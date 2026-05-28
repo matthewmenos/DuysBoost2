@@ -972,7 +972,7 @@ def _trending_hashtags(db, hours=48, limit=15):
 def _who_to_follow(db, uid, limit=8):
     rows = db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url,
-               u.is_verified, u.follower_count, u.bio, u.subscriber_count,
+               u.is_verified, u.verified_tier, u.follower_count, u.bio, u.subscriber_count,
                COUNT(DISTINCT f2.follower_id) AS mutual_count
         FROM users u
         JOIN follows f1 ON f1.following_id=u.id

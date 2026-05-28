@@ -1383,9 +1383,9 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   display:     inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap:         5px;
+  gap:         4px;
   height:      34px;        /* fixed height — every button same */
-  padding:     0 8px;
+  padding:     0 6px;
   border-radius: 99px;
   border:      none;
   background:  none;
@@ -1397,7 +1397,17 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
   transition:  color .15s, background .15s;
-  flex-shrink: 0;
+  flex-shrink: 1;       /* allow shrinking on narrow screens */
+  min-width:   0;       /* allow flex children to shrink below content size */
+}
+/* On small mobile (<400px) reduce padding further */
+@media (max-width: 400px) {
+  .post-action-btn { padding: 0 4px; gap: 3px; }
+  .action-count { font-size: 11px; }
+}
+/* On very small screens (<340px) compress to icon-only for non-count buttons */
+@media (max-width: 340px) {
+  .post-action-btn { padding: 0 3px; }
 }
 
 /* ── Icon container — fixed 18×18, flex-centred ──────────────────── */

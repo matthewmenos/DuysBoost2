@@ -323,18 +323,22 @@ def notifications():
 @bp.route('/api/notifications/unread')
 @login_required
 def unread_count():
-    db  = get_db()
     uid = session['user_id']
-    count = db.execute(
-        'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
-    ).fetchone()[0]
+    # notifications live in the personal DB (udb), NOT in global db
+    count  = 0
+    recent = []
     try:
         udb = get_user_db()
+        _c = udb.execute(
+            'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
+        ).fetchone()
+        count = _c[0] if _c else 0
         recent = udb.execute(
             'SELECT * FROM notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 8',
             (uid,)
         ).fetchall()
     except Exception:
+        count  = 0
         recent = []
     out = []
     for n in recent:

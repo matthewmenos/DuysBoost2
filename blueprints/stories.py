@@ -183,11 +183,12 @@ def stories_feed():
 
     rows = db.execute("""
         SELECT s.*,
-               u.id       AS author_id,
-               u.username AS author_username,
+               u.id           AS author_id,
+               u.username     AS author_username,
                u.display_name AS author_display,
                u.avatar_url   AS author_avatar,
-               u.is_verified  AS author_verified
+               u.is_verified  AS author_verified,
+               u.verified_tier AS author_verified_tier
         FROM stories s
         JOIN users u ON u.id = s.user_id
         WHERE s.expires_at > datetime('now')
@@ -210,6 +211,7 @@ def stories_feed():
                 'display_name':   row['author_display'],
                 'avatar_url':     row['author_avatar'],
                 'is_verified':    row['author_verified'],
+                'verified_tier':  row['author_verified_tier'] or 'blue',
                 'is_own':         author == uid,
                 'stories':        [],
                 'has_unseen':     False,
@@ -324,15 +326,18 @@ def story_viewers(story_id):
     viewers = []
     for viewer_uid in viewed_list:
         u = db.execute(
-            'SELECT id, username, display_name, avatar_url FROM users WHERE id=?',
+            'SELECT id, username, display_name, avatar_url, is_verified, verified_tier '
+            'FROM users WHERE id=?',
             (viewer_uid,)
         ).fetchone()
         if u:
             viewers.append({
-                'id':           u['id'],
-                'username':     u['username'],
-                'display_name': u['display_name'],
-                'avatar_url':   u['avatar_url'],
+                'id':            u['id'],
+                'username':      u['username'],
+                'display_name':  u['display_name'],
+                'avatar_url':    u['avatar_url'],
+                'is_verified':   bool(u['is_verified']),
+                'verified_tier': u['verified_tier'] or 'blue',
             })
 
     # Parse reactions
