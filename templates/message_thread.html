@@ -690,6 +690,7 @@ async function doSend() {
 
     if (bodyTxt) {
       const payload = {body: bodyTxt, msg_type: 'text', view_once: viewOnceActive ? 1 : 0};
+      if (replyTo) payload.reply_to_id = replyTo.id;
       const r = await fetch('/messages/' + OTHER.username + '/send', {
         method:  'POST',
         headers: {'Content-Type': 'application/json'},
@@ -747,7 +748,8 @@ function buildBubble(msg, seq) {
     media = '<a class="msg-file" href="' + escapeHtml(msg.file_url) + '" download="' + escapeHtml(msg.file_name || 'file') + '" target="_blank"><span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">' + escapeHtml(msg.file_name || 'file') + '</div><div class="msg-fsub">Tap to download</div></div></a>';
   }
   const body = msg.body ? '<div class="msg-bub">' + escapeHtml(msg.body || '').replace(/\n/g, '<br>') + '</div>' : '';
-  const meta = seq ? '' : '<div class="msg-meta"><span class="msg-time">' + (msg.created_at || '').substring(11, 16) + '</span>' + (mine && msg.is_read ? '<span class="msg-read">✓✓</span>' : '') + '</div>';
+  const tick = mine ? '<span class="msg-tick ' + (msg.is_read ? 'msg-tick-read' : 'msg-tick-sent') + '">' + (msg.is_read ? '✓✓' : '✓') + '</span>' : '';
+  const meta = seq ? '' : '<div class="msg-meta"><span class="msg-time">' + (msg.created_at || '').substring(11, 16) + '</span>' + tick + '</div>';
   return '<div class="msg-row ' + dir + (seq ? ' seq' : '') + '" data-id="' + msg.id + '" data-mine="' + (mine ? 1 : 0) + '" data-mt="' + (msg.msg_type || 'text') + '" data-body="' + escapeHtml(msg.body || '') + '" data-file-name="' + escapeHtml(msg.file_name || '') + '">' +
     (!mine ? '<div class="msg-av">' + av + '</div>' : '') +
     '<div class="msg-col">' + media + body + meta + '</div>' +
@@ -1159,6 +1161,8 @@ function cancelReplyTo() {
   if (strip) strip.style.display = 'none';
 }
 window.cancelReplyTo = cancelReplyTo;
+var clearReply = cancelReplyTo;
+window.clearReply = cancelReplyTo;
 
 
 // ── Context menu actions ─────────────────────────────────────────────────────
@@ -1240,6 +1244,146 @@ fetch('/api/messages/' + CONV_ID + '/read', { method: 'POST' }).catch(function()
     var tick = row.querySelector('.msg-tick');
     if (tick) tick.title = isRead ? 'Read' : 'Sent';
   });
+})();
+
+/* ── Missing JS: CSRF / lightbox / voice / reactions / message actions ── */
+const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+function closeCtx() { closeCtxMenu(); }
+window.closeCtx = closeCtx;
+
+function lbOpen(src) {
+  var lb = document.getElementById('lb');
+  var img = document.getElementById('lb-img');
+  if (lb && img) { img.src = src; lb.classList.add('open'); document.body.classList.add('no-scroll'); }
+}
+function lbClose() {
+  var lb = document.getElementById('lb');
+  if (lb) { lb.classList.remove('open'); document.body.classList.remove('no-scroll'); }
+}
+(function(){ var lb=document.getElementById('lb'); if(lb)lb.addEventListener('click',function(e){if(e.target===lb)lbClose();}); })();
+window.lbOpen = lbOpen; window.lbClose = lbClose;
+
+var curAudio = null;
+function vPlay(btn) {
+  var wrap = btn.closest('.msg-voice');
+  if (!wrap) return;
+  var src = wrap.dataset.src;
+  if (!src) return;
+  if (curAudio && !curAudio.paused) {
+    curAudio.pause();
+    document.querySelectorAll('.vbtn').forEach(function(b){b.textContent='▶';});
+    if (curAudio._btn === btn) { curAudio=null; return; }
+  }
+  curAudio = new Audio(src); curAudio._btn = btn; btn.textContent = '⏸';
+  curAudio.play().catch(function(){btn.textContent='▶';});
+  curAudio.onended = function(){btn.textContent='▶'; curAudio=null;};
+  curAudio.onerror = function(){btn.textContent='▶'; curAudio=null; showToast('Cannot play audio.','error');};
+}
+window.vPlay = vPlay;
+
+function renderReactions(msgId, reactions) {
+  if (!reactions || typeof reactions !== 'object') return;
+  var strip = document.getElementById('rx-' + msgId);
+  if (!strip) {
+    var col = document.querySelector('[data-id="'+msgId+'"] .msg-col');
+    if (col) { strip = document.createElement('div'); strip.id='rx-'+msgId; strip.className='reactions-strip'; col.appendChild(strip); }
+  }
+  if (!strip) return;
+  var entries = Object.entries(reactions).filter(function(e){return e[1]&&e[1].length;});
+  strip.innerHTML = entries.map(function(e){
+    return '<span class="rx-pill" style="font-size:14px;padding:2px 6px;background:var(--surface-2);border:1px solid var(--border);border-radius:99px;cursor:pointer;display:inline-flex;align-items:center;gap:3px" onclick="selectedMsgId='+msgId+';reactToMsg(\''+e[0]+'\')">'
+      + e[0]+'<span style="font-size:11px;color:var(--muted)">'+e[1].length+'</span></span>';
+  }).join(' ');
+}
+window.renderReactions = renderReactions;
+
+function reactToMsg(emoji) {
+  closeCtxMenu();
+  if (!selectedMsgId) return;
+  fetch('/api/messages/react/'+selectedMsgId, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji:emoji})})
+    .then(function(r){return r.json();}).then(function(d){if(d.success)renderReactions(selectedMsgId,d.reactions);}).catch(function(){});
+}
+window.reactToMsg = reactToMsg;
+function reactMsg(msgId,emoji){selectedMsgId=msgId; reactToMsg(emoji);}
+window.reactMsg = reactMsg;
+
+async function deleteMessage(msgId) {
+  const d = await fetch('/api/messages/delete/'+msgId,{method:'POST'}).then(r=>r.json()).catch(()=>null);
+  if (d && d.success) {
+    const row = document.querySelector('[data-id="'+msgId+'"]');
+    if (row) { const b=row.querySelector('.msg-bub'); if(b)b.innerHTML='<em style="color:var(--muted)">(deleted)</em>'; const m=row.querySelector('.msg-img,.msg-vid,.msg-voice,.msg-file'); if(m)m.remove(); }
+    showToast('Deleted.');
+  } else { showToast((d&&d.error)||'Could not delete.','error'); }
+}
+window.deleteMessage = deleteMessage;
+
+async function pinMessage(msgId) {
+  const d = await fetch('/api/messages/pin/'+msgId,{method:'POST'}).then(r=>r.json()).catch(()=>null);
+  if (d && d.success) {
+    const row=document.querySelector('[data-id="'+msgId+'"]');
+    if (row) { row.classList.toggle('pinned',d.pinned); const b=row.querySelector('.msg-bub'); if(b){const bd=b.querySelector('.msg-pinned-badge'); if(d.pinned&&!bd)b.insertAdjacentHTML('afterbegin','<span class="msg-pinned-badge">📌</span>'); else if(!d.pinned&&bd)bd.remove();} }
+    const lbl=document.getElementById('ctx-pin-label'); if(lbl)lbl.textContent=d.pinned?'Unpin':'Pin';
+    showToast(d.pinned?'📌 Pinned':'Unpinned');
+  } else { showToast((d&&d.error)||'Could not pin.','error'); }
+}
+window.pinMessage = pinMessage;
+
+async function openMsgInfo(msgId) {
+  const d = await fetch('/api/messages/info/'+msgId).then(r=>r.json()).catch(()=>({}));
+  const body=document.getElementById('info-body');
+  if(body) body.innerHTML='<div style="margin-bottom:6px"><strong>Sent:</strong> '+((d.created_at||'—').replace('T',' ').slice(0,16))+' UTC</div>'+(d.read_at?'<div><strong>Read:</strong> '+d.read_at.replace('T',' ').slice(0,16)+' UTC</div>':'<div style="color:var(--muted)">Not yet read</div>');
+  openModal('info-modal');
+}
+window.openMsgInfo = openMsgInfo;
+
+function openEditModal(msgId) {
+  const row=document.querySelector('[data-id="'+msgId+'"]');
+  const body=row?(row.dataset.body||''):'';
+  const inp=document.getElementById('edit-input'); const err=document.getElementById('edit-error');
+  if(inp){inp.value=body; inp.dataset.msgId=String(msgId);}
+  if(err)err.style.display='none';
+  openModal('edit-modal');
+  setTimeout(function(){if(inp){inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length);}},100);
+}
+window.openEditModal = openEditModal;
+
+async function saveEdit() {
+  const inp=document.getElementById('edit-input'); const err=document.getElementById('edit-error'); const btn=document.getElementById('edit-save-btn');
+  if(!inp||!inp.dataset.msgId) return;
+  const msgId=inp.dataset.msgId; const body=inp.value.trim();
+  if(!body){if(err){err.style.display='block';err.textContent='Cannot be empty.';} return;}
+  if(btn){btn.disabled=true; btn.textContent='Saving…';}
+  if(err)err.style.display='none';
+  try {
+    const d=await fetch('/api/messages/edit/'+msgId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:body})}).then(r=>r.json()).catch(()=>null);
+    if(d&&d.success){const row=document.querySelector('[data-id="'+msgId+'"]'); if(row){const b=row.querySelector('.msg-bub'); if(b)b.innerHTML=escapeHtml(d.body)+'<span class="msg-edited"> (edited)</span>'; row.dataset.body=d.body;} closeModal('edit-modal'); showToast('Updated.');}
+    else{if(err){err.style.display='block'; err.textContent=(d&&d.error)||'Could not save.';}}
+  } catch(_){if(err){err.style.display='block'; err.textContent='Network error.';}}
+  finally{if(btn){btn.disabled=false; btn.textContent='Save';}}
+}
+window.saveEdit = saveEdit;
+
+/* ── SSE: real-time DM messages ─────────────────────────────────────────── */
+(function() {
+  var _src=null, _attempt=0;
+  function openDmSSE() {
+    if(_src){try{_src.close();}catch(_){}}
+    _src=new EventSource('/api/messages/'+encodeURIComponent(OTHER.username)+'/stream?after='+lastId);
+    _src.addEventListener('open',function(){_attempt=0;});
+    _src.addEventListener('messages',function(e){
+      try{
+        var msgs=(JSON.parse(e.data).messages||[]);
+        msgs.forEach(function(m){
+          if(m.id<=lastId)return; lastId=m.id; appendMsg(m);
+          if(m.reactions){try{renderReactions(m.id,typeof m.reactions==='string'?JSON.parse(m.reactions):m.reactions);}catch(_){}}
+        });
+        if(msgs.length){scrollBot(true); fetch('/api/messages/'+CONV_ID+'/read',{method:'POST'}).catch(function(){});}
+      }catch(_){}
+    });
+    _src.onerror=function(){try{_src.close();}catch(_){} _attempt++; var delay=Math.min(30000,1000*Math.pow(1.8,_attempt-1))+Math.random()*4000; setTimeout(openDmSSE,delay);};
+  }
+  openDmSSE();
+  window.addEventListener('pagehide',function(){if(_src){try{_src.close();}catch(_){}_src=null;} if(curAudio){curAudio.pause();curAudio=null;}});
 })();
 
 // ── Online presence indicator ────────────────────────────────────────────

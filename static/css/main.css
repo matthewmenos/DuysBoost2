@@ -1551,8 +1551,22 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 }
 .compose-input::placeholder { color: var(--muted-2); font-size: 16px; }
 .compose-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  padding-top: 10px; border-top: 1px solid var(--border); margin-top: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding-top: 8px; border-top: 1px solid var(--border); margin-top: 6px;
+  flex-wrap: wrap;
+}
+.compose-footer-actions {
+  display: flex; align-items: center; gap: 2px;
+  flex-wrap: wrap; flex: 1; min-width: 0;
+}
+.compose-footer-right {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+/* On mobile, reduce compose icon button hit area to fit the row */
+@media (max-width: 480px) {
+  .compose-icon-btn { width: 36px; height: 36px; border-radius: 8px; }
+  .compose-footer-actions { gap: 0; }
+  .sub-only-pill { display: none; } /* hide audience toggle on very small screens */
 }
 .compose-chars { font-size: 13px; color: var(--muted); font-weight: 600; }
 
