@@ -159,7 +159,7 @@
 <div class="feed-col profile-wrap">
 
   <div class="x-banner" {% if is_own %}onclick="document.getElementById('banner-input').click()"{% endif %}>
-    {% if target.banner_url %}<img src="{{ target.banner_url }}" alt="">{% endif %}
+    {% if target.banner_url %}<img src="{{ target.banner_url }}" alt="" loading="lazy" decoding="async">{% endif %}
     {% if is_own %}
     <div class="x-banner-edit">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -173,7 +173,7 @@
   <div class="x-avatar-row">
     <div class="x-avatar-wrap" style="position:relative;display:inline-block">
     <div class="x-avatar" {% if is_own %}onclick="document.getElementById('avatar-input').click()" title="Change photo"{% endif %}>
-      {% if target.avatar_url %}<img src="{{ target.avatar_url }}" alt="{{ target.username }}">
+      {% if target.avatar_url %}<img src="{{ target.avatar_url }}" alt="{{ target.username }}" loading="eager" decoding="async">
       {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
     </div>
     {% if target_online %}

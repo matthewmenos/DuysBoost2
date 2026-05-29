@@ -55,6 +55,17 @@ WITHDRAWAL_KEYS = {
 def create_app() -> Flask:
     app = Flask(__name__)
 
+    # Response compression
+    try:
+        from flask_compress import Compress
+        app.config['COMPRESS_MIMETYPES'] = [
+            'text/html', 'text/css', 'application/javascript', 'application/json'
+        ]
+        app.config['COMPRESS_MIN_SIZE'] = 500
+        Compress(app)
+    except ImportError:
+        pass
+
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     if os.environ.get('OAUTHLIB_INSECURE_TRANSPORT', '0') == '1':
@@ -373,6 +384,20 @@ def create_app() -> Flask:
         resp.headers['Service-Worker-Allowed'] = '/'
         resp.headers['Cache-Control'] = 'no-cache'
         return resp
+
+    # ── Health check (for Render zero-downtime deploys) ──────────────────────
+    @app.route('/health')
+    def health():
+        from db import _global_synced
+        return jsonify({'ok': True, 'db_synced': bool(_global_synced)}), 200
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options']  = 'nosniff'
+        response.headers['X-Frame-Options']          = 'DENY'
+        response.headers['Referrer-Policy']          = 'strict-origin-when-cross-origin'
+        return response
 
     # ── Storage health check ─────────────────────────────────────────────────
     @app.route('/api/admin/storage-check')

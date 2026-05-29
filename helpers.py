@@ -105,6 +105,21 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
     db arg is kept for backward-compatibility but ignored for the INSERT.
     We open the target user's personal DB directly for the write.
     """
+    # Check notification preferences before inserting
+    try:
+        import json as _json
+        _pref_row = db.execute('SELECT notif_prefs FROM users WHERE id=?', (user_id,)).fetchone()
+        if _pref_row and _pref_row['notif_prefs']:
+            _prefs = _json.loads(_pref_row['notif_prefs'] or '{}')
+            # Map icon to pref key
+            _ICON_MAP = {'like': 'likes', 'follow': 'follows', 'mention': 'mentions',
+                         'message': 'dms', 'boost': 'boosts', 'tip': 'tips'}
+            _pref_key = _ICON_MAP.get(icon or '', 'system')
+            if not _prefs.get(_pref_key, True):
+                return  # user has disabled this notification type
+    except Exception:
+        pass
+
     # Auto-detect icon from message emoji if not given
     if icon is None:
         if message.startswith('❤️') or 'liked' in message.lower():       icon = 'like'

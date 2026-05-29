@@ -303,80 +303,88 @@ function escapeHtml(s) {
       // Do an immediate fetch for first paint, then SSE takes over
       loadNotifications();
 
-      const _globalSrc = new EventSource('/api/stream');
+      var _sseAttempt = 0;
+      var _globalSrc;
 
-      _globalSrc.addEventListener('notifications', function(e) {
-        const d = JSON.parse(e.data);
-        const dot          = document.getElementById('notif-dot');
-        const sidebarBadge = document.getElementById('sidebar-notif-count');
-        const bottomBadge  = document.getElementById('bottom-notif-badge');
-        const hasUnread = d.count > 0;
-        const countLabel = d.count > 99 ? '99+' : String(d.count);
-        if (dot) {
-          dot.textContent = hasUnread ? countLabel : '';
-          dot.style.display = hasUnread ? 'inline-flex' : 'none';
-        }
-        [sidebarBadge, bottomBadge].forEach(function(el) {
-          if (!el) return;
-          el.textContent = countLabel;
-          el.style.display = hasUnread ? 'inline-block' : 'none';
+      function _openSSE() {
+        _globalSrc = new EventSource('/api/stream');
+
+        _globalSrc.addEventListener('open', function() {
+          _sseAttempt = 0;  // reset backoff on successful connection
         });
-        const list = document.getElementById('notif-list');
-        if (list && d.recent) {
-          if (!d.recent.length) {
-            list.innerHTML = '<div class="notif-item text-muted text-center" style="padding:24px 18px">No new notifications</div>';
-          } else {
-            list.innerHTML = d.recent.map(function (n) { return renderNotifItem(n); }).join('');
-          }
-        }
-      });
 
-      _globalSrc.addEventListener('dm_unread', function(e) {
-        const d = JSON.parse(e.data);
-        const cnt = d.count || 0;
-        const dmLabel = cnt > 99 ? '99+' : String(cnt);
-        ['bottom-dm-badge','sidebar-dm-badge'].forEach(function(id) {
-          const el = document.getElementById(id);
-          if (!el) return;
-          el.textContent = dmLabel;
-          el.style.display = cnt > 0 ? 'inline-flex' : 'none';
-        });
-      });
+        _globalSrc.onerror = function() {
+          _globalSrc.close();
+          _sseAttempt++;
+          // Jittered exponential backoff: 1s base, capped at 30s, +up-to-4s jitter
+          var delay = Math.min(30000, 1000 * Math.pow(1.8, _sseAttempt - 1)) + Math.random() * 4000;
+          setTimeout(_openSSE, delay);
+        };
 
-      _globalSrc.addEventListener('group_unread', function(e) {
-        const d = JSON.parse(e.data);
-        const cnt = d.count || 0;
-        const badge = document.getElementById('sidebar-grp-badge');
-        if (badge) {
-          badge.textContent = cnt;
-          badge.style.display = cnt > 0 ? 'inline-flex' : 'none';
-        }
-      });
+        _bindSSEHandlers(_globalSrc);
+      }
 
-      _globalSrc.addEventListener('activity', function(e) {
-        const d = JSON.parse(e.data);
-        // Update dashboard activity feed if it exists on this page
-        const feed = document.getElementById('activity-feed');
-        if (feed && d.items && d.items.length) {
-          d.items.forEach(function(item) {
-            const row = document.createElement('div');
-            row.className = 'activity-row';
-            row.innerHTML = '<span class="act-worker">@' + escapeHtml(item.worker) +
-              '</span> completed <span class="act-ad">' + escapeHtml(item.ad) +
-              '</span> <span class="act-reward">+$' + item.reward.toFixed(2) +
-              '</span> <span class="act-time">' + escapeHtml(item.time) + '</span>';
-            feed.insertBefore(row, feed.firstChild);
-            // Keep max 10 rows
-            while (feed.children.length > 10) feed.removeChild(feed.lastChild);
+      function _bindSSEHandlers(src) {
+        src.addEventListener('notifications', function(e) {
+          var d = JSON.parse(e.data);
+          var dot          = document.getElementById('notif-dot');
+          var sidebarBadge = document.getElementById('sidebar-notif-count');
+          var bottomBadge  = document.getElementById('bottom-notif-badge');
+          var hasUnread    = d.count > 0;
+          var countLabel   = d.count > 99 ? '99+' : String(d.count);
+          if (dot) { dot.textContent = hasUnread ? countLabel : ''; dot.style.display = hasUnread ? 'inline-flex' : 'none'; }
+          [sidebarBadge, bottomBadge].forEach(function(el) {
+            if (!el) return;
+            el.textContent = countLabel;
+            el.style.display = hasUnread ? 'inline-block' : 'none';
           });
-        }
-      });
+          var list = document.getElementById('notif-list');
+          if (list && d.recent) {
+            list.innerHTML = d.recent.length
+              ? d.recent.map(function(n) { return renderNotifItem(n); }).join('')
+              : '<div class="notif-item text-muted text-center" style="padding:24px 18px">No new notifications</div>';
+          }
+        });
 
-      _globalSrc.onerror = function() {
-        // Browser auto-reconnects — no manual retry needed
-      };
+        src.addEventListener('dm_unread', function(e) {
+          var d = JSON.parse(e.data);
+          var cnt = d.count || 0;
+          var dmLabel = cnt > 99 ? '99+' : String(cnt);
+          ['bottom-dm-badge','sidebar-dm-badge'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = dmLabel;
+            el.style.display = cnt > 0 ? 'inline-flex' : 'none';
+          });
+        });
 
-      window.addEventListener('beforeunload', function() { _globalSrc.close(); });
+        src.addEventListener('group_unread', function(e) {
+          var d = JSON.parse(e.data);
+          var cnt = d.count || 0;
+          var badge = document.getElementById('sidebar-grp-badge');
+          if (badge) { badge.textContent = cnt; badge.style.display = cnt > 0 ? 'inline-flex' : 'none'; }
+        });
+
+        src.addEventListener('activity', function(e) {
+          var d = JSON.parse(e.data);
+          var feed = document.getElementById('activity-feed');
+          if (feed && d.items && d.items.length) {
+            d.items.forEach(function(item) {
+              var row = document.createElement('div');
+              row.className = 'activity-row';
+              row.innerHTML = '<span class="act-worker">@' + escapeHtml(item.worker) +
+                '</span> completed <span class="act-ad">' + escapeHtml(item.ad) +
+                '</span> <span class="act-reward">+$' + item.reward.toFixed(2) +
+                '</span> <span class="act-time">' + escapeHtml(item.time) + '</span>';
+              feed.insertBefore(row, feed.firstChild);
+              while (feed.children.length > 10) feed.removeChild(feed.lastChild);
+            });
+          }
+        });
+      }  // end _bindSSEHandlers
+
+      _openSSE();
+      window.addEventListener('beforeunload', function() { if (_globalSrc) _globalSrc.close(); });
     }
 
     // ── Modal helpers ───────────────────────────────────────────────────
@@ -940,101 +948,294 @@ async function submitReport() {
 window.submitReport = submitReport;
 
 function openEditPost(postId, body) {
-  const modal = document.getElementById('edit-post-modal');
-  if (!modal) return;
-  document.getElementById('edit-post-id').value   = postId;
-  document.getElementById('edit-post-body').value = body || '';
+  // Use base.html's canonical edit modal (ep-* IDs)
+  var postIdEl = document.getElementById('ep-post-id');
+  var bodyEl   = document.getElementById('ep-body');
+  if (!postIdEl || !bodyEl) return;
+  postIdEl.value = postId;
+  bodyEl.value   = body || '';
+  var charsEl = document.getElementById('ep-chars');
+  if (charsEl) charsEl.textContent = 500 - (body || '').length;
   openModal('edit-post-modal');
 }
 window.openEditPost = openEditPost;
 
-async function submitEditPost() {
-  const postId = document.getElementById('edit-post-id').value;
-  const body   = document.getElementById('edit-post-body').value.trim();
-  if (!postId) return;
-  const fd = new FormData();
-  fd.append('body', body);
-  try {
-    const r = await fetch('/post/' + postId + '/edit', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (d.success) {
-      closeModal('edit-post-modal');
-      const bodyEl = document.getElementById('post-body-' + postId);
-      if (bodyEl) bodyEl.innerHTML = escapeHtml(body).replace(/\n/g, '<br>') +
-        ' <span style="font-size:11px;color:var(--muted);font-style:italic">(edited)</span>';
-      showToast('Post updated!');
-    } else {
-      showToast(d.error || 'Could not update post.', 'error');
-    }
-  } catch (_) { showToast('Network error.', 'error'); }
+// submitEditPost is an alias for saveEditPost which lives in base.html
+function submitEditPost() {
+  if (typeof saveEditPost === 'function') saveEditPost();
 }
 window.submitEditPost = submitEditPost;
 
+async function pinPost(postId, btn) {
+  var r = await fetch('/post/' + postId + '/pin', { method: 'POST' });
+  var d = await r.json();
+  if (d.success) {
+    showToast(d.pinned ? '📌 Pinned to profile!' : 'Unpinned.');
+    // Update button text without full reload
+    var item = btn.closest('.post-menu-item');
+    if (item) item.innerHTML = item.innerHTML.replace(
+      d.pinned ? 'Pin to profile' : 'Unpin post',
+      d.pinned ? 'Unpin post' : 'Pin to profile'
+    );
+  } else {
+    showToast(d.error || 'Could not pin post.', 'error');
+  }
+}
+window.pinPost = pinPost;
+
+// ── Repost / Quote ────────────────────────────────────────────────────────────
+var _repostTargetId  = null;
+var _repostWasActive = false;
+
 function openRepostModal(postId, isReposted) {
-  let targetIdEl = document.getElementById('repost-target-id');
+  var targetIdEl = document.getElementById('repost-target-id');
   if (!targetIdEl) return;
-  targetIdEl.value = postId;
-  window._repostTargetId  = postId;
-  window._repostWasActive = !!isReposted;
-  const titleEl   = document.getElementById('repost-modal-title');
-  const actionsEl = document.getElementById('repost-modal-actions');
+  targetIdEl.value   = postId;
+  _repostTargetId    = postId;
+  window._repostTargetId = postId;
+  _repostWasActive   = !!isReposted;
+  var titleEl   = document.getElementById('repost-modal-title');
+  var actionsEl = document.getElementById('repost-modal-actions');
+  var REPOST_SVG = '<svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg> ';
+  var QUOTE_SVG  = '<svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> ';
+  var UNDO_SVG   = '<svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg> ';
   if (isReposted) {
     if (titleEl) titleEl.textContent = 'You reposted this';
     if (actionsEl) actionsEl.innerHTML =
-      '<button class="btn btn-outline btn-block" onclick="undoRepost()" style="color:var(--red,#e53e3e)">Undo repost</button>' +
-      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">Quote &amp; comment instead</button>';
+      '<button class="btn btn-outline btn-block" onclick="undoRepost()" style="color:var(--red,#e53e3e)">' + UNDO_SVG + 'Undo repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">' + QUOTE_SVG + 'Quote &amp; comment instead</button>';
   } else {
     if (titleEl) titleEl.textContent = 'Repost';
     if (actionsEl) actionsEl.innerHTML =
-      '<button class="btn btn-outline btn-block" onclick="quickRepost()">Repost</button>' +
-      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">Quote &amp; comment</button>';
+      '<button class="btn btn-outline btn-block" onclick="quickRepost()">' + REPOST_SVG + 'Repost</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="openQuoteModal()">' + QUOTE_SVG + 'Quote &amp; comment</button>';
   }
   openModal('repost-modal');
 }
 window.openRepostModal = openRepostModal;
 
+async function quickRepost() {
+  var fd = new FormData();
+  fd.append('repost_of_id', _repostTargetId);
+  fd.append('body', '');
+  var d = null;
+  try {
+    var r = await fetch('/post', { method: 'POST', body: fd });
+    d = await r.json();
+  } catch (_) {
+    closeModal('repost-modal');
+    showToast('Network error', 'error');
+    return;
+  }
+  closeModal('repost-modal');
+  setTimeout(function() {
+    if (d && d.success) {
+      _updateRepostButton(_repostTargetId, true, 1);
+      showToast('Reposted! ♻️');
+    } else {
+      showToast((d && d.error) ? d.error : 'Could not repost.', 'error');
+    }
+  }, 180);
+}
+window.quickRepost = quickRepost;
+
+async function undoRepost() {
+  var d = null;
+  try {
+    var r = await fetch('/post/' + _repostTargetId + '/unrepost', { method: 'POST' });
+    d = await r.json();
+  } catch (_) {
+    closeModal('repost-modal');
+    showToast('Network error', 'error');
+    return;
+  }
+  closeModal('repost-modal');
+  setTimeout(function() {
+    if (d && d.success) {
+      _updateRepostButton(_repostTargetId, false, -(d.removed || 1));
+      showToast('Repost removed.');
+    } else {
+      showToast((d && d.error) ? d.error : 'Could not remove repost.', 'error');
+    }
+  }, 180);
+}
+window.undoRepost = undoRepost;
+
+function _updateRepostButton(postId, isReposted, delta) {
+  var cnt = document.getElementById('repost-count-' + postId);
+  if (cnt) {
+    var next = Math.max(0, parseInt(cnt.textContent || '0') + delta);
+    cnt.textContent = next || '';
+  }
+  document.querySelectorAll('[data-post-id="' + postId + '"] .repost-btn').forEach(function(btn) {
+    btn.classList.toggle('reposted', isReposted);
+    btn.setAttribute('aria-pressed', isReposted ? 'true' : 'false');
+    btn.setAttribute('onclick', 'openRepostModal(' + postId + ',' + isReposted + ')');
+  });
+}
+
+function openQuoteModal() {
+  closeModal('repost-modal');
+  openModal('quote-modal');
+}
+window.openQuoteModal = openQuoteModal;
+
+async function submitQuote() {
+  var postId = document.getElementById('repost-target-id').value;
+  var body   = document.getElementById('quote-input').value.trim();
+  var fd     = new FormData();
+  fd.append('repost_of_id', postId);
+  fd.append('body', body);
+  var r = await fetch('/post', { method: 'POST', body: fd });
+  var d = await r.json();
+  closeModal('quote-modal');
+  if (d.success) {
+    if (typeof prependPost === 'function') prependPost(d.post);
+    showToast('Quoted!');
+  } else { showToast(d.error || 'Error.', 'error'); }
+}
+window.submitQuote = submitQuote;
+
+// ── Reply ─────────────────────────────────────────────────────────────────────
+var _replyPhotoData = null;
+
+function updateReplyChars(el) {
+  var c = 200 - el.value.length;
+  var charsEl = document.getElementById('reply-chars');
+  var submitBtn = document.getElementById('reply-submit-btn');
+  if (charsEl) charsEl.textContent = c;
+  if (submitBtn) submitBtn.disabled = (el.value.trim().length === 0 && !_replyPhotoData);
+  el.style.height = 'auto';
+  el.style.height = Math.min(120, el.scrollHeight) + 'px';
+}
+window.updateReplyChars = updateReplyChars;
+
+function handleReplyPhoto(input) {
+  var f = input.files && input.files[0];
+  if (!f) return;
+  if (f.size > 5 * 1024 * 1024) { showToast('Image too large (max 5MB)', 'error'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    _replyPhotoData = { dataUrl: e.target.result, mime: f.type };
+    var img = document.getElementById('reply-photo-img');
+    var preview = document.getElementById('reply-photo-preview');
+    var btn = document.getElementById('reply-submit-btn');
+    if (img) img.src = e.target.result;
+    if (preview) preview.style.display = 'block';
+    if (btn) btn.disabled = false;
+  };
+  reader.readAsDataURL(f);
+}
+window.handleReplyPhoto = handleReplyPhoto;
+
+function clearReplyPhoto() {
+  _replyPhotoData = null;
+  var inp = document.getElementById('reply-photo-input');
+  var preview = document.getElementById('reply-photo-preview');
+  var ta = document.getElementById('reply-input');
+  var btn = document.getElementById('reply-submit-btn');
+  if (inp) inp.value = '';
+  if (preview) preview.style.display = 'none';
+  if (btn) btn.disabled = !ta || ta.value.trim().length === 0;
+}
+window.clearReplyPhoto = clearReplyPhoto;
+
 async function openReplyModal(postId, authorUsername) {
-  const postIdEl = document.getElementById('reply-post-id');
+  var postIdEl = document.getElementById('reply-post-id');
   if (!postIdEl) return;
   postIdEl.value = postId;
-  const ctx = document.getElementById('reply-context-card');
+  var ctx = document.getElementById('reply-context-card');
   if (ctx) ctx.innerHTML = '<span style="color:var(--muted)">Replying to</span> <strong>@' + authorUsername + '</strong>';
-  const ta = document.getElementById('reply-input');
-  if (ta) { ta.value = ''; }
-  const charsEl = document.getElementById('reply-chars');
+  var ta = document.getElementById('reply-input');
+  if (ta) ta.value = '';
+  var charsEl = document.getElementById('reply-chars');
   if (charsEl) charsEl.textContent = '200';
-  const submitBtn = document.getElementById('reply-submit-btn');
+  var submitBtn = document.getElementById('reply-submit-btn');
   if (submitBtn) submitBtn.disabled = true;
+  if (typeof clearReplyPhoto === 'function') clearReplyPhoto();
   openModal('reply-modal');
 
-  const listEl = document.getElementById('reply-existing-list');
+  var listEl = document.getElementById('reply-existing-list');
   if (listEl) {
-    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading…</div>';
+    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Loading replies…</div>';
     try {
-      const r = await fetch('/api/post/' + postId + '/replies');
-      const d = await r.json();
+      var r = await fetch('/api/post/' + postId + '/replies');
+      var d = await r.json();
       if (d.success && d.replies && d.replies.length) {
         listEl.innerHTML = d.replies.map(function(rp) {
-          const av = rp.author.avatar_url
+          var av = rp.author.avatar_url
             ? '<img src="' + rp.author.avatar_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">'
-            : '<div class="avatar-placeholder" style="width:32px;height:32px;border-radius:50%;flex-shrink:0"></div>';
+            : '<div class="avatar-placeholder" style="width:32px;height:32px;border-radius:50%;flex-shrink:0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
+          var mediaHtml = rp.media_url
+            ? '<img src="' + rp.media_url + '" style="max-width:100%;border-radius:10px;margin-top:6px">'
+            : '';
           return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">' +
-            av + '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13.5px">' +
-            (rp.author.display_name || rp.author.username) +
+            av + '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:700;font-size:13.5px">' + (rp.author.display_name || rp.author.username) +
             ' <span style="color:var(--muted);font-weight:400">@' + rp.author.username + '</span></div>' +
-            '<div style="font-size:14px;margin-top:3px;word-break:break-word">' + (rp.body || '') + '</div></div></div>';
+            '<div style="font-size:14px;margin-top:2px;word-wrap:break-word">' + (rp.body || '') + '</div>' +
+            mediaHtml + '</div></div>';
         }).join('');
       } else {
-        listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No replies yet — be first!</div>';
+        listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No replies yet. Be the first!</div>';
       }
     } catch (_) {
-      listEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Could not load replies</div>';
+      listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Could not load replies</div>';
     }
   }
-
   setTimeout(function() { if (ta) ta.focus(); }, 180);
 }
 window.openReplyModal = openReplyModal;
+
+async function submitReply() {
+  var postId = document.getElementById('reply-post-id').value;
+  var ta = document.getElementById('reply-input');
+  var body = ta ? ta.value.trim() : '';
+  if (!postId || (!body && !_replyPhotoData)) return;
+  var btn = document.getElementById('reply-submit-btn');
+  if (btn) btn.disabled = true;
+  var fd = new FormData();
+  fd.append('body', body);
+  fd.append('reply_to_id', postId);
+  if (_replyPhotoData) {
+    fd.append('media_data', _replyPhotoData.dataUrl);
+    fd.append('media_mime', _replyPhotoData.mime);
+  }
+  try {
+    var r = await fetch('/post', { method: 'POST', body: fd });
+    var d = await r.json();
+    if (d.success) {
+      closeModal('reply-modal');
+      setTimeout(function() { showToast('Reply posted!'); }, 150);
+      var card = document.querySelector('[data-post-id="' + postId + '"]');
+      if (card) {
+        var cnt = card.querySelector('.reply-btn .action-count');
+        if (cnt) cnt.textContent = (parseInt(cnt.textContent) || 0) + 1;
+      }
+    } else {
+      showToast(d.error || 'Could not post reply.', 'error');
+      if (btn) btn.disabled = false;
+    }
+  } catch (_) {
+    showToast('Network error', 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+window.submitReply = submitReply;
+
+// ── Follow user ───────────────────────────────────────────────────────────────
+async function followUser(username, btn) {
+  btn.disabled = true;
+  var r = await fetch('/user/' + username + '/follow', { method: 'POST' });
+  var d = await r.json();
+  if (d.success) {
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.classList.toggle('btn-outline', !d.following);
+    btn.classList.toggle('btn-ghost',   d.following);
+  }
+  btn.disabled = false;
+}
+window.followUser = followUser;
 
 // ── Subscribe to creator (from locked post cards) ────────────────────────────
 async function subscribeToCreator(username, btn) {

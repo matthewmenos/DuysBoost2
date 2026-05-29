@@ -293,11 +293,64 @@ def create_post():
                 continue
             target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
             if target and target['id'] != uid:
-                add_notification(db, target['id'], f'🔔 @{me_name} mentioned you in a post.')
+                add_notification(db, target['id'],
+                    f'🔔 @{me_name} mentioned you in a post.',
+                    icon='mention', link=f'/post/{post_id}')
 
     update_counts(db, uid)
     recalc_post_score(db, post_id)
     db.commit()
+
+    # Background: fetch Open Graph tags for any URL in the post body
+    if body:
+        _urls = re.findall(r'https?://[^\s<>"]+', body)
+        if _urls:
+            _fetch_url = _urls[0]
+
+            def _fetch_og(app_ctx, pid, url):
+                try:
+                    import requests as _req
+                    from html.parser import HTMLParser as _HP
+                    import sqlite3 as _sq3
+
+                    class _OGParser(_HP):
+                        def __init__(self):
+                            super().__init__()
+                            self.og = {}
+                        def handle_starttag(self, tag, attrs):
+                            if tag == 'meta':
+                                ad = dict(attrs)
+                                prop = ad.get('property', '') or ad.get('name', '')
+                                if prop in ('og:title','og:description','og:image','og:url'):
+                                    self.og[prop] = ad.get('content', '')[:500]
+
+                    r = _req.get(url, timeout=5, headers={'User-Agent': 'DUYSBoostBot/1.0'}, allow_redirects=True)
+                    parser = _OGParser()
+                    parser.feed(r.text[:40000])
+                    og = parser.og
+                    if og:
+                        with app_ctx:
+                            from db import get_db as _gdb_og
+                            _db_og = _gdb_og()
+                            _db_og.execute(
+                                'UPDATE posts SET og_url=?,og_title=?,og_description=?,og_image=? WHERE id=?',
+                                (og.get('og:url', url)[:500],
+                                 og.get('og:title', '')[:200] or None,
+                                 og.get('og:description', '')[:400] or None,
+                                 og.get('og:image', '')[:500] or None,
+                                 pid)
+                            )
+                            _db_og.commit()
+                except Exception:
+                    pass
+
+            import threading as _ogth
+            from flask import current_app as _ca_og
+            _ogth.Thread(
+                target=_fetch_og,
+                args=(_ca_og.app_context(), post_id, _fetch_url),
+                daemon=True
+            ).start()
 
     if post_status == 'scheduled':
         return jsonify({'success': True, 'scheduled': True,
@@ -476,6 +529,32 @@ def edit_post(post_id):
 
     updated = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
     return jsonify({'success': True, 'post': format_post(updated, uid, db)})
+
+
+@bp.route('/post/<int:post_id>/pin', methods=['POST'])
+@login_required
+@csrf_exempt
+def pin_post(post_id):
+    """Toggle pin on a post. Only the owner can pin; only one post pinned at a time."""
+    db  = get_db()
+    uid = session['user_id']
+    post = db.execute('SELECT user_id, is_pinned FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Post not found.'}), 404
+    if post['user_id'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'}), 403
+
+    currently_pinned = bool(post['is_pinned'])
+    if currently_pinned:
+        db.execute('UPDATE posts SET is_pinned=0 WHERE id=?', (post_id,))
+        db.commit()
+        return jsonify({'success': True, 'pinned': False})
+    else:
+        # Unpin any existing pinned post for this user
+        db.execute('UPDATE posts SET is_pinned=0 WHERE user_id=? AND is_pinned=1', (uid,))
+        db.execute('UPDATE posts SET is_pinned=1 WHERE id=?', (post_id,))
+        db.commit()
+        return jsonify({'success': True, 'pinned': True})
 
 
 @bp.route('/post/<int:post_id>')
@@ -711,7 +790,18 @@ def profile(username):
         ).fetchall()
 
     has_more  = len(rows) == per
-    posts     = [format_post(r, uid, db) for r in rows]
+    posts     = [format_post_with_poll(r, uid, db) for r in rows]
+
+    # Prepend pinned post on page 1 (posts tab only)
+    if tab == 'posts' and page == 1:
+        pinned_row = db.execute(
+            'SELECT * FROM posts WHERE user_id=? AND is_pinned=1 LIMIT 1', (target['id'],)
+        ).fetchone()
+        if pinned_row:
+            pinned = format_post_with_poll(pinned_row, uid, db)
+            pinned['_is_pinned_header'] = True
+            posts = [p for p in posts if p['id'] != pinned_row['id']]
+            posts.insert(0, pinned)
     followers = [dict(f) for f in db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified
         FROM follows f JOIN users u ON u.id=f.follower_id
@@ -1462,6 +1552,30 @@ def check_online(username):
 
 # ── Web Push subscriptions ────────────────────────────────────────────────────
 
+@bp.route('/api/settings/notifications', methods=['GET', 'POST'])
+@login_required
+@csrf_exempt
+def notification_settings():
+    db  = get_db()
+    uid = session['user_id']
+    DEFAULTS = {'likes': True, 'follows': True, 'mentions': True,
+                'dms': True, 'boosts': True, 'tips': True, 'system': True}
+    if request.method == 'GET':
+        row = db.execute('SELECT notif_prefs FROM users WHERE id=?', (uid,)).fetchone()
+        try:
+            prefs = json.loads((row['notif_prefs'] or '{}') if row else '{}')
+        except Exception:
+            prefs = {}
+        return jsonify({**DEFAULTS, **prefs})
+
+    data = request.get_json(silent=True) or {}
+    # Only allow valid keys
+    valid = {k: bool(data[k]) for k in DEFAULTS if k in data}
+    db.execute('UPDATE users SET notif_prefs=? WHERE id=?', (json.dumps(valid), uid))
+    db.commit()
+    return jsonify({'success': True})
+
+
 @bp.route('/api/push/subscribe', methods=['POST'])
 @login_required
 @csrf_exempt
@@ -1525,8 +1639,8 @@ def _get_or_create_conversation(db, uid, other_id):
 
 
 
-def _format_conversation(row, uid, db):
-    """Enrich a conversations row with the other user\'s profile info."""
+def _format_conversation(row, uid, db, udb=None):
+    """Enrich a conversations row with the other user's profile info, last message and unread count."""
     try:
         d = dict(row)
         other_uid = d['user_b'] if d.get('user_a') == uid else d.get('user_a')
@@ -1539,7 +1653,29 @@ def _format_conversation(row, uid, db):
         od.setdefault('avatar_url', None)
         od.setdefault('display_name', od.get('username', ''))
         d['other'] = od
-        d['unread_count'] = 0  # populated client-side via SSE
+
+        # Fetch last message and unread count from personal DB
+        d['last_msg']  = None
+        d['unread']    = 0
+        if udb is not None:
+            try:
+                last = udb.execute(
+                    'SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1',
+                    (d['id'],)
+                ).fetchone()
+                if last:
+                    ld = dict(last)
+                    ld.setdefault('msg_type', 'text')
+                    ld.setdefault('file_name', None)
+                    ld.setdefault('body', None)
+                    d['last_msg'] = ld
+                unread_row = udb.execute(
+                    'SELECT COUNT(*) FROM messages WHERE conversation_id=? AND sender_id!=? AND is_read=0',
+                    (d['id'], uid)
+                ).fetchone()
+                d['unread'] = unread_row[0] if unread_row else 0
+            except Exception:
+                pass
         return d
     except Exception as _e:
         import logging
@@ -1563,7 +1699,7 @@ def messages_inbox():
         'ORDER BY last_msg_at DESC',
         (uid, uid)
     ).fetchall()
-    chats = [c for c in [_format_conversation(r, uid, db) for r in chat_rows] if c is not None]
+    chats = [c for c in [_format_conversation(r, uid, db, udb) for r in chat_rows] if c is not None]
 
     # ── Groups the user is a member of ───────────────────────────────────────
     group_rows = db.execute("""
@@ -1748,6 +1884,34 @@ def poll_messages(username):
     return jsonify({'messages': [dict(r) for r in rows]})
 
 
+@bp.route('/api/messages/<int:conv_id>/read', methods=['POST'])
+@login_required
+@csrf_exempt
+def mark_conversation_read(conv_id):
+    """Mark all messages in a conversation as read by the current user."""
+    udb = get_user_db()
+    db  = get_db()
+    uid = session['user_id']
+    udb.execute(
+        'UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
+        (conv_id, uid)
+    )
+    udb.commit()
+    # Recalculate total unread
+    try:
+        unread_rows = udb.execute(
+            "SELECT COUNT(*) FROM messages m "
+            "JOIN conversations c ON c.id=m.conversation_id "
+            "WHERE m.sender_id!=? AND m.is_read=0", (uid,)
+        ).fetchone()
+        total_unread = unread_rows[0] if unread_rows else 0
+        db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
+        db.commit()
+    except Exception:
+        pass
+    return jsonify({'ok': True})
+
+
 @bp.route('/api/messages/unread')
 @login_required
 def api_unread_dms():
@@ -1765,6 +1929,15 @@ def api_unread_dms():
 def set_typing(username):
     uid = session['user_id']
     _typing_state[(uid, username)] = datetime.now(timezone.utc).timestamp()
+    return jsonify({'ok': True})
+
+
+@bp.route('/api/messages/<username>/typing/stop', methods=['POST'])
+@login_required
+@csrf_exempt
+def stop_typing(username):
+    uid = session['user_id']
+    _typing_state.pop((uid, username), None)
     return jsonify({'ok': True})
 
 
@@ -2207,16 +2380,16 @@ def _format_group(row, uid, db):
                       'JOIN users u ON u.id=gm.sender_id '
                       'WHERE gm.group_id=? ORDER BY gm.created_at DESC LIMIT 1', (row['id'],)).fetchone()
     g['last_msg'] = dict(last) if last else None
-    unread = db.execute(
-        "SELECT COUNT(*) FROM group_messages WHERE group_id=? AND sender_id!=? "
-        "AND created_at > COALESCE((SELECT last_read_at FROM group_members "
-        "WHERE group_id=? AND user_id=?), '1970-01-01')",
-        (row['id'], uid, row['id'], uid)
-    ).fetchone()
-    unread = _unread_row[0] if (_unread_row := db.execute(
-        "SELECT COUNT(*) FROM group_messages"
-        , (row['id'], uid, row['id'], uid)).fetchone()) else 0
-    g['unread'] = unread
+    try:
+        unread_row = db.execute(
+            "SELECT COUNT(*) FROM group_messages WHERE group_id=? AND sender_id!=? "
+            "AND created_at > COALESCE((SELECT last_read_at FROM group_members "
+            "WHERE group_id=? AND user_id=?), '1970-01-01')",
+            (row['id'], uid, row['id'], uid)
+        ).fetchone()
+        g['unread'] = unread_row[0] if unread_row else 0
+    except Exception:
+        g['unread'] = 0
     return g
 
 

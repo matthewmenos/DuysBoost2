@@ -179,6 +179,14 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="submit" class="btn btn-primary">Save changes</button>
 
+    <!-- Notification preferences -->
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
+      <div style="font-weight:700;font-size:15px;margin-bottom:14px">🔔 Notification preferences</div>
+      <div id="notif-prefs-wrap" style="display:flex;flex-direction:column;gap:10px">
+        <div style="color:var(--muted);font-size:13px">Loading…</div>
+      </div>
+    </div>
+
     <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
       <div style="font-weight:700;color:var(--red,#e53e3e);margin-bottom:8px;font-size:14px">⚠️ Danger zone</div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
@@ -199,6 +207,47 @@
 
 {% block scripts %}
 <script>
+/* ── Notification preferences ─────────────────────────────────────────── */
+(async function() {
+  const wrap = document.getElementById('notif-prefs-wrap');
+  if (!wrap) return;
+  const LABELS = {
+    likes:    '❤️ Likes on your posts',
+    follows:  '👤 New followers',
+    mentions: '🔔 Mentions in posts',
+    dms:      '💬 Direct messages',
+    boosts:   '📣 Boost activity',
+    tips:     '💰 Tips received',
+    system:   '🔔 System notifications',
+  };
+  try {
+    const r = await fetch('/api/settings/notifications');
+    const prefs = await r.json();
+    wrap.innerHTML = Object.entries(LABELS).map(([k, label]) => `
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:6px 0">
+        <span style="font-size:14px">${label}</span>
+        <input type="checkbox" class="notif-toggle" data-key="${k}"
+               ${prefs[k] !== false ? 'checked' : ''}
+               style="width:18px;height:18px;cursor:pointer;accent-color:var(--accent)">
+      </label>`).join('');
+
+    wrap.querySelectorAll('.notif-toggle').forEach(cb => {
+      cb.addEventListener('change', async () => {
+        const key = cb.dataset.key;
+        const current = {};
+        wrap.querySelectorAll('.notif-toggle').forEach(c => { current[c.dataset.key] = c.checked; });
+        await fetch('/api/settings/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(current)
+        });
+      });
+    });
+  } catch (_) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px">Could not load preferences.</div>';
+  }
+})();
+
 /* ── Photo upload helper ───────────────────────────────────────────────── */
 async function uploadPhoto(file, type) {
   const prog = document.getElementById(type + '-progress');

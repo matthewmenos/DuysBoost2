@@ -369,6 +369,102 @@
 {% block modals %}{% endblock %}
 
 {% if current_user %}
+<!-- ── Reply modal ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="reply-modal" role="dialog" aria-modal="true" aria-label="Reply">
+  <div class="modal reply-tray" style="max-width:600px;border-radius:16px 16px 0 0;max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-header" style="flex-shrink:0">
+      <div class="modal-title">Reply</div>
+      <button class="modal-close" onclick="closeModal('reply-modal')" aria-label="Close">
+        <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="reply-context-card" id="reply-context-card"
+         style="flex-shrink:0;padding:12px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:13.5px"></div>
+    <div id="reply-existing-list" style="flex:1;min-height:0;overflow-y:auto;padding:8px 14px"></div>
+    <div style="flex-shrink:0;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface)">
+      <input type="hidden" id="reply-post-id" value="">
+      <div id="reply-photo-preview" style="display:none;position:relative;margin-bottom:8px;border-radius:10px;overflow:hidden;max-height:160px">
+        <img id="reply-photo-img" style="width:100%;display:block;max-height:160px;object-fit:contain;background:var(--surface-2)">
+        <button onclick="clearReplyPhoto()" type="button"
+                style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);border:none;color:#fff;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button type="button" onclick="document.getElementById('reply-photo-input').click()" title="Add photo" aria-label="Add photo"
+                style="background:none;border:none;cursor:pointer;color:var(--accent);padding:6px;border-radius:50%;flex-shrink:0">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+        <input type="file" id="reply-photo-input" accept="image/*" style="display:none" onchange="handleReplyPhoto(this)">
+        <textarea id="reply-input" rows="1" maxlength="200" placeholder="Post your reply…"
+                  style="flex:1;border:1px solid var(--border);border-radius:18px;padding:8px 14px;background:var(--surface-2);color:var(--text);resize:none;font-family:inherit;font-size:14.5px;min-height:38px;max-height:120px;overflow-y:auto"
+                  oninput="updateReplyChars(this)"></textarea>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+          <span id="reply-chars" style="font-size:11px;color:var(--muted)">200</span>
+          <button onclick="submitReply()" id="reply-submit-btn"
+                  style="background:var(--accent);color:#fff;border:none;border-radius:50%;width:38px;height:38px;cursor:pointer;display:flex;align-items:center;justify-content:center" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Repost modal ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="repost-modal" role="dialog" aria-modal="true" aria-label="Repost">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="repost-modal-title">Repost</div>
+      <button class="modal-close" onclick="closeModal('repost-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px" id="repost-modal-actions"></div>
+  </div>
+</div>
+
+<!-- ── Quote modal ──────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="quote-modal" role="dialog" aria-modal="true" aria-label="Quote post">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Quote Post</div>
+      <button class="modal-close" onclick="closeModal('quote-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <textarea class="compose-input form-input" id="quote-input" placeholder="Add a comment…" maxlength="500" rows="3" style="margin-bottom:12px"></textarea>
+    <input type="hidden" id="repost-target-id" value="">
+    <button class="btn btn-primary btn-block" onclick="submitQuote()">Post</button>
+  </div>
+</div>
+
+<!-- ── Report modal ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="report-modal" role="dialog" aria-modal="true">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report content</div>
+      <button class="modal-close" onclick="closeModal('report-modal')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <input type="hidden" id="report-target-type">
+    <input type="hidden" id="report-target-id">
+    <div class="form-group">
+      <label class="form-label">Reason</label>
+      <select class="form-input" id="report-reason">
+        <option value="">Select a reason…</option>
+        <option value="spam">Spam or advertising</option>
+        <option value="harassment">Harassment or bullying</option>
+        <option value="hate_speech">Hate speech</option>
+        <option value="misinformation">Misinformation</option>
+        <option value="adult_content">Inappropriate / adult content</option>
+        <option value="scam">Scam or fraud</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Details <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <textarea class="form-input" id="report-details" rows="3" maxlength="300" placeholder="Any additional context…"></textarea>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="submitReport()">Submit report</button>
+  </div>
+</div>
+{% endif %}
+
+{% if current_user %}
 <!-- Global edit post modal -->
 <div class="modal-overlay" id="edit-post-modal" role="dialog" aria-modal="true" aria-label="Edit post">
   <div class="modal">

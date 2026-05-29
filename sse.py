@@ -233,6 +233,7 @@ def global_stream():
             'Cache-Control':    'no-cache',
             'X-Accel-Buffering':'no',     # disable nginx buffering
             'Connection':       'keep-alive',
+            'retry':            '15000',  # client retry hint (ms)
         },
     )
 

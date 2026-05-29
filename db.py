@@ -851,12 +851,21 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         # post scheduling
         ('posts', 'scheduled_at',        'TEXT'),
         ('posts', 'status',              "TEXT DEFAULT 'published'"),
+        # pinned posts
+        ('posts', 'is_pinned',           'INTEGER DEFAULT 0'),
+        # link previews (Open Graph)
+        ('posts', 'og_url',              'TEXT'),
+        ('posts', 'og_title',            'TEXT'),
+        ('posts', 'og_description',      'TEXT'),
+        ('posts', 'og_image',            'TEXT'),
         # report moderation notes
         ('reports', 'notes',             'TEXT'),
         ('reports', 'reviewed_by',       'INTEGER'),
         ('reports', 'reviewed_at',       'TEXT'),
         # referral click tracking
         ('users', 'referral_click_count', 'INTEGER DEFAULT 0'),
+        # notification preferences (JSON dict)
+        ('users', 'notif_prefs',          "TEXT DEFAULT '{}'"),
     ]
 
     cur = conn.cursor()

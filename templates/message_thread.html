@@ -73,6 +73,9 @@
 .msg-row.seq.them .msg-bub { border-bottom-left-radius:  18px; }
 
 .msg-edited { font-size: 10px; opacity: .7; margin-left: 6px; font-style: italic; }
+.msg-tick      { font-size: 11px; margin-left: 4px; }
+.msg-tick-sent { color: rgba(255,255,255,.55); }
+.msg-tick-read { color: #50c8f4; }
 .msg-pinned-badge { font-size: 11px; color: var(--accent-light); margin-right: 4px; }
 
 .msg-img { max-width: 240px; max-height: 280px; border-radius: 14px; cursor: zoom-in; display: block; object-fit: cover; }
@@ -338,7 +341,7 @@
           {% if m.reactions %}
             <div class="reactions-strip" id="rx-{{ m.id }}"></div>
           {% endif %}
-          {% if not seq %}<div class="msg-meta"><span class="msg-time">{{ m.created_at[11:16] }}</span>{% if mine and m.is_read %}<span class="msg-read">✓✓</span>{% endif %}</div>{% endif %}
+          {% if not seq %}<div class="msg-meta"><span class="msg-time">{{ m.created_at[11:16] }}</span>{% if mine %}<span class="msg-tick {% if m.is_read %}msg-tick-read{% else %}msg-tick-sent{% endif %}">{% if m.is_read %}✓✓{% else %}✓{% endif %}</span>{% endif %}</div>{% endif %}
         </div>
       </div>
     {% endfor %}
@@ -510,9 +513,10 @@
 
 {% block scripts %}
 <script>
-const ME    = {{ current_user.id }};
-const OTHER = {{ other | tojson }};
-let lastId  = {{ messages[-1].id if messages else 0 }};
+const ME      = {{ current_user.id }};
+const OTHER   = {{ other | tojson }};
+const CONV_ID = {{ conv_id }};
+let lastId    = {{ messages[-1].id if messages else 0 }};
 let sending = false;
 let pendingFiles = [];
 let mediaRec = null, audioChunks = [], isRec = false;
@@ -589,6 +593,15 @@ function sendTypingSignal() {
   lastTypeSent = now;
   fetch('/api/messages/' + OTHER.username + '/typing', {method: 'POST'}).catch(function(){});
 }
+
+function stopTypingSignal() {
+  lastTypeSent = 0;
+  fetch('/api/messages/' + OTHER.username + '/typing/stop', {method: 'POST'}).catch(function(){});
+}
+
+// Clear typing on blur and page close
+txtEl.addEventListener('blur', stopTypingSignal);
+window.addEventListener('beforeunload', stopTypingSignal);
 
 /* ── File pickers ────────────────────────────────────────────────────── */
 document.getElementById('mi').addEventListener('change', function() {
@@ -1207,6 +1220,22 @@ function ctxDelete() {
   deleteMessage(selectedMsgId);
 }
 window.ctxDelete = ctxDelete;
+
+// ── Mark conversation as read on load ───────────────────────────────────
+fetch('/api/messages/' + CONV_ID + '/read', { method: 'POST' }).catch(function(){});
+
+// ── Read receipt tick marks ──────────────────────────────────────────────
+// Rendered server-side: single tick = sent, double tick = read
+// We refresh read state when the thread is viewed
+(function() {
+  document.querySelectorAll('.msg-row.me').forEach(function(row) {
+    var id = row.dataset.msgId;
+    if (!id) return;
+    var isRead = row.dataset.isRead === '1';
+    var tick = row.querySelector('.msg-tick');
+    if (tick) tick.title = isRead ? 'Read' : 'Sent';
+  });
+})();
 
 // ── Online presence indicator ────────────────────────────────────────────
 (function() {
