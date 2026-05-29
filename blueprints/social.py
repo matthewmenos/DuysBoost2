@@ -876,9 +876,11 @@ def edit_profile():
     changes_made = user_d.get('username_changes', 0) or 0
     username_changes_left = max(0, 3 - changes_made)
     last_changed = user_d.get('username_last_changed') or ''
+    totp_enabled = bool(user_d.get('totp_enabled', 0))
     return render_template('edit_profile.html', user=user_d,
                            username_changes_left=username_changes_left,
-                           username_last_changed=last_changed)
+                           username_last_changed=last_changed,
+                           totp_enabled=totp_enabled)
 
 
 
