@@ -1117,7 +1117,7 @@ def follower_list(username):
         return render_template('error.html', code=404, message='User not found.'), 404
     rows = db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
-               u.follower_count, u.bio,
+               u.verified_tier, u.follower_count, u.bio,
                EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
         FROM follows f JOIN users u ON u.id=f.follower_id
         WHERE f.following_id=? ORDER BY f.created_at DESC LIMIT 100
@@ -1136,7 +1136,7 @@ def following_list(username):
         return render_template('error.html', code=404, message='User not found.'), 404
     rows = db.execute("""
         SELECT u.id, u.username, u.display_name, u.avatar_url, u.is_verified,
-               u.follower_count, u.bio,
+               u.verified_tier, u.follower_count, u.bio,
                EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=u.id) AS you_follow
         FROM follows f JOIN users u ON u.id=f.following_id
         WHERE f.follower_id=? ORDER BY f.created_at DESC LIMIT 100
@@ -1224,7 +1224,7 @@ def explore():
         if tab in ('top', 'people'):
             user_rows = db.execute("""
                 SELECT id, username, display_name, avatar_url, is_verified,
-                       follower_count, bio, subscriber_count,
+                       verified_tier, follower_count, bio, subscriber_count,
                        EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND following_id=id) AS you_follow
                 FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ?
                 ORDER BY follower_count DESC LIMIT 12
@@ -1733,6 +1733,9 @@ def message_thread(username):
         return redirect(url_for('social.messages_inbox'))
 
     conv = _get_or_create_conversation(db, uid, other['id'])
+    if not conv:
+        return render_template('error.html', code=500,
+                               message='Could not open conversation. Please try again.'), 500
     msgs = [dict(m) for m in udb.execute("""
         SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
         FROM messages m JOIN users u ON (
@@ -1824,7 +1827,8 @@ def send_message(username):
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
     # Messages and conversations are personal data → udb
-    view_once = int(bool(data.get('view_once', 0)))
+    _msg_data = _d if 'application/json' in (request.content_type or '') else {}
+    view_once = int(bool(_msg_data.get('view_once', 0)))
     udb.execute(
         'INSERT INTO messages '
         '(conversation_id,sender_id,body,msg_type,file_url,file_name,file_mime,view_once,created_at) '
@@ -1864,24 +1868,39 @@ def poll_messages(username):
     if not conv:
         return jsonify({'messages': []})
 
-    rows = db.execute("""
-        SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar
-        FROM messages m JOIN users u ON u.id=m.sender_id
-        WHERE m.conversation_id=? AND m.id > ? ORDER BY m.created_at ASC LIMIT 50
-    """, (conv['id'], after)).fetchall()
+    # Messages live in the personal DB (udb); enrich sender info from global DB
+    raw_rows = udb.execute(
+        'SELECT * FROM messages WHERE conversation_id=? AND id > ? ORDER BY created_at ASC LIMIT 50',
+        (conv['id'], after)
+    ).fetchall()
+    rows = []
+    for _r in raw_rows:
+        _rd = dict(_r)
+        _sender = db.execute('SELECT username, avatar_url FROM users WHERE id=?',
+                             (_rd['sender_id'],)).fetchone()
+        _rd['sender_username'] = _sender['username'] if _sender else ''
+        _rd['sender_avatar']   = _sender['avatar_url'] if _sender else None
+        _rd.setdefault('file_url',  None)
+        _rd.setdefault('file_name', None)
+        _rd.setdefault('file_mime', None)
+        _rd.setdefault('is_read',   1)
+        rows.append(_rd)
 
     if rows:
         udb.execute('UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=? AND id > ?',
                    (conv['id'], uid, after))
-        _tu_row = db.execute("""
-            SELECT COUNT(*) FROM messages m JOIN conversations c ON c.id=m.conversation_id
-            WHERE (c.user_a=? OR c.user_b=?) AND m.sender_id!=? AND m.is_read=0
-        """, (uid, uid, uid)).fetchone()
-        total_unread = _tu_row[0] if _tu_row else 0
-        db.execute('UPDATE users SET unread_dm_count=? WHERE id=?', (total_unread, uid))
-        db.commit()
+        udb.commit()
+        try:
+            _tu = udb.execute(
+                'SELECT COUNT(*) FROM messages WHERE sender_id!=? AND is_read=0', (uid,)
+            ).fetchone()
+            db.execute('UPDATE users SET unread_dm_count=? WHERE id=?',
+                       (_tu[0] if _tu else 0, uid))
+            db.commit()
+        except Exception:
+            pass
 
-    return jsonify({'messages': [dict(r) for r in rows]})
+    return jsonify({'messages': rows})
 
 
 @bp.route('/api/messages/<int:conv_id>/read', methods=['POST'])

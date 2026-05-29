@@ -321,18 +321,18 @@
         {% endif %}
         <div class="msg-col">
           {% set mt = m.msg_type or 'text' %}
-          {% if mt == 'image' and m.file_data %}
-            <img class="msg-img" src="{{ m.file_data }}" alt="{{ m.file_name or 'image' }}" onclick="lbOpen('{{ m.file_data }}')" loading="lazy">
-          {% elif mt == 'video' and m.file_data %}
-            <video class="msg-vid" src="{{ m.file_data }}" controls preload="metadata"></video>
-          {% elif mt == 'voice' and m.file_data %}
-            <div class="msg-voice" data-src="{{ m.file_data }}">
+          {% if mt == 'image' and m.file_url %}
+            <img class="msg-img" src="{{ m.file_url }}" alt="{{ m.file_name or 'image' }}" onclick="lbOpen('{{ m.file_url }}')" loading="lazy">
+          {% elif mt == 'video' and m.file_url %}
+            <video class="msg-vid" src="{{ m.file_url }}" controls preload="metadata"></video>
+          {% elif mt == 'voice' and m.file_url %}
+            <div class="msg-voice" data-src="{{ m.file_url }}">
               <button class="vbtn" onclick="vPlay(this)" aria-label="Play">▶</button>
               <div class="vwave">{% for i in range(24) %}<div class="vbar" style="height:{{ [4,6,9,13,16,18,14,10,7,5,8,12,17,15,11,6,9,14,18,16,12,8,5,7][i%24] }}px"></div>{% endfor %}</div>
               <span class="vdur"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>
             </div>
-          {% elif mt == 'file' and m.file_data %}
-            <a class="msg-file" href="{{ m.file_data }}" download="{{ m.file_name or 'file' }}" target="_blank">
+          {% elif mt == 'file' and m.file_url %}
+            <a class="msg-file" href="{{ m.file_url }}" download="{{ m.file_name or 'file' }}" target="_blank">
               <span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>
               <div><div class="msg-fname">{{ m.file_name or 'file' }}</div><div class="msg-fsub">Tap to download</div></div>
             </a>
@@ -731,15 +731,15 @@ function buildBubble(msg, seq) {
     : '<div class="avatar" style="width:26px;height:26px;font-size:10px;background:var(--gradient-primary);display:grid;place-items:center;color:#fff;font-weight:700;border-radius:50%">' + escapeHtml((msg.sender_username || '?')[0].toUpperCase()) + '</div>';
   const mt = msg.msg_type || 'text';
   let media = '';
-  if      (mt === 'image' && msg.file_data) media = '<img class="msg-img" src="' + escapeHtml(msg.file_data) + '" alt="" onclick="lbOpen(this.src)" loading="lazy">';
-  else if (mt === 'video' && msg.file_data) media = '<video class="msg-vid" src="' + escapeHtml(msg.file_data) + '" controls preload="metadata"></video>';
-  else if (mt === 'voice' && msg.file_data) {
+  if      (mt === 'image' && msg.file_url) media = '<img class="msg-img" src="' + escapeHtml(msg.file_url) + '" alt="" onclick="lbOpen(this.src)" loading="lazy">';
+  else if (mt === 'video' && msg.file_url) media = '<video class="msg-vid" src="' + escapeHtml(msg.file_url) + '" controls preload="metadata"></video>';
+  else if (mt === 'voice' && msg.file_url) {
     const bars = Array.from({length: 24}, function(_, i) {
       return '<div class="vbar" style="height:' + [4,6,9,13,16,18,14,10,7,5,8,12,17,15,11,6,9,14,18,16,12,8,5,7][i%24] + 'px"></div>';
     }).join('');
-    media = '<div class="msg-voice" data-src="' + escapeHtml(msg.file_data) + '"><button class="vbtn" onclick="vPlay(this)">▶</button><div class="vwave">' + bars + '</div><span class="vdur"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span></div>';
-  } else if (mt === 'file' && msg.file_data) {
-    media = '<a class="msg-file" href="' + escapeHtml(msg.file_data) + '" download="' + escapeHtml(msg.file_name || 'file') + '" target="_blank"><span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">' + escapeHtml(msg.file_name || 'file') + '</div><div class="msg-fsub">Tap to download</div></div></a>';
+    media = '<div class="msg-voice" data-src="' + escapeHtml(msg.file_url) + '"><button class="vbtn" onclick="vPlay(this)">▶</button><div class="vwave">' + bars + '</div><span class="vdur"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span></div>';
+  } else if (mt === 'file' && msg.file_url) {
+    media = '<a class="msg-file" href="' + escapeHtml(msg.file_url) + '" download="' + escapeHtml(msg.file_name || 'file') + '" target="_blank"><span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">' + escapeHtml(msg.file_name || 'file') + '</div><div class="msg-fsub">Tap to download</div></div></a>';
   }
   const body = msg.body ? '<div class="msg-bub">' + escapeHtml(msg.body || '').replace(/\n/g, '<br>') + '</div>' : '';
   const meta = seq ? '' : '<div class="msg-meta"><span class="msg-time">' + (msg.created_at || '').substring(11, 16) + '</span>' + (mine && msg.is_read ? '<span class="msg-read">✓✓</span>' : '') + '</div>';
