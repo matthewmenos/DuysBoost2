@@ -4,24 +4,34 @@
 
 {% block head_extra %}
 <style>
-/* Ensure the page-content takes full height with no padding for chat */
-.page-content { padding: 0 !important; height: calc(100dvh - var(--topbar-height)); overflow: hidden; }
+/* Full-height chat — fills the viewport below the topbar, no scroll on page */
+.page-content {
+  padding: 0 !important;
+  height: calc(100dvh - var(--topbar-height));
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.main-content { padding-bottom: 0 !important; }
 
 .chat-shell {
   display: flex; flex-direction: column;
-  /* Mobile: bottom nav is hidden on chat page, use full remaining height */
-  height: calc(100dvh - var(--topbar-height));
-  max-width: 760px; margin: 0 auto; min-height: 0;
-  border-radius: 0; overflow: hidden;
-  border: none; border-left: 1px solid var(--border);
+  flex: 1; min-height: 0;          /* fill page-content completely */
+  max-width: 760px; width: 100%; margin: 0 auto;
+  overflow: hidden;
+  border: none;
 }
 @media (min-width: 900px) {
   .chat-shell {
-    height: calc(100dvh - var(--topbar-height) - 24px);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
+    margin-top: 12px;
+    flex: none;
+    height: calc(100dvh - var(--topbar-height) - 24px);
   }
 }
+
+/* Reply banner hidden by default — shown only when replying to a DM */
+.reply-banner { display: none; }
 
 .chat-hdr {
   display: flex; align-items: center; gap: 10px;
@@ -148,6 +158,21 @@
   border-radius: 14px; margin: 0 10px 4px;
 }
 .voice-preview.show { display: flex; }
+
+/* Reply banner — hidden by default, shown when user taps "Reply" on a message */
+.reply-banner {
+  display: none; /* shown via JS when replying */
+  align-items: center; gap: 10px;
+  padding: 8px 14px; flex-shrink: 0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-top: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+}
+.reply-banner-text {
+  flex: 1; min-width: 0;
+  font-size: 13px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* Compose bar */
 .chat-compose {
@@ -1025,8 +1050,13 @@ async function sendVoiceNote() {
 window.sendVoiceNote = sendVoiceNote;
 
 function rbtnClick() {
-  if (isRec) stopRec();
-  else startRec();
+  if (isRec) {
+    stopRec();
+  } else if (rbtn.classList.contains('send')) {
+    doSend();
+  } else {
+    startRec();
+  }
 }
 window.rbtnClick = rbtnClick;
 
@@ -1159,6 +1189,8 @@ function cancelReplyTo() {
   replyTo = null;
   const strip = document.getElementById('reply-strip');
   if (strip) strip.style.display = 'none';
+  const banner = document.getElementById('reply-banner');
+  if (banner) banner.style.display = 'none';
 }
 window.cancelReplyTo = cancelReplyTo;
 var clearReply = cancelReplyTo;
@@ -1170,12 +1202,21 @@ function ctxReply() {
   closeCtxMenu();
   const row = document.querySelector('[data-id="' + selectedMsgId + '"]');
   if (!row) return;
-  replyTo = { id: selectedMsgId, name: '', body: row.dataset.body || '' };
+  const senderName = row.classList.contains('me') ? 'You' : (OTHER.display_name || OTHER.username);
+  replyTo = { id: selectedMsgId, name: senderName, body: row.dataset.body || '' };
+  // Show reply banner (the styled one in the template)
+  const banner = document.getElementById('reply-banner');
+  const nameEl = document.getElementById('reply-banner-name');
+  const bodyEl = document.getElementById('reply-banner-body');
+  if (banner) banner.style.display = 'flex';
+  if (nameEl) nameEl.textContent = senderName;
+  if (bodyEl) bodyEl.textContent = replyTo.body ? replyTo.body.slice(0, 80) : '📎 Media';
+  // Also sync the reply strip
   const strip = document.getElementById('reply-strip');
   if (strip) {
     strip.style.display = 'flex';
-    const bodyEl = document.getElementById('reply-strip-body');
-    if (bodyEl) bodyEl.textContent = replyTo.body || 'Media';
+    const stripBody = document.getElementById('reply-strip-body');
+    if (stripBody) stripBody.textContent = replyTo.body || '📎 Media';
   }
   txtEl.focus();
 }
@@ -1391,12 +1432,36 @@ window.saveEdit = saveEdit;
   var dot = document.getElementById('status-dot');
   var txt = document.getElementById('status-txt');
   if (!dot || !txt) return;
+  function _fmtLastSeen(iso) {
+    try {
+      var d = new Date(iso.replace(' ', 'T'));
+      var now = new Date();
+      var diffMs  = now - d;
+      var diffMin = Math.floor(diffMs / 60000);
+      var diffH   = Math.floor(diffMs / 3600000);
+      var diffD   = Math.floor(diffMs / 86400000);
+      if (diffMin < 1)  return 'just now';
+      if (diffMin < 60) return diffMin + 'm ago';
+      if (diffH   < 24) {
+        var h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
+        return (h % 12 || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
+      }
+      if (diffD === 1)  return 'yesterday at ' + (function(){var h=d.getHours(),m=String(d.getMinutes()).padStart(2,'0'); return (h%12||12)+':'+m+' '+(h<12?'AM':'PM');})();
+      if (diffD < 7) {
+        var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        return days[d.getDay()] + ' at ' + (function(){var h=d.getHours(),m=String(d.getMinutes()).padStart(2,'0'); return (h%12||12)+':'+m+' '+(h<12?'AM':'PM');})();
+      }
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return months[d.getMonth()] + ' ' + d.getDate();
+    } catch (_) { return iso; }
+  }
+
   function refresh() {
     fetch('/api/online/check/{{ other.username | e }}')
       .then(function(r) { return r.json(); })
       .then(function(d) {
         dot.className = d.online ? 'dot-online' : 'dot-offline';
-        txt.textContent = d.online ? 'Active now' : (d.last_seen ? 'Last seen ' + d.last_seen : 'Offline');
+        txt.textContent = d.online ? 'Active now' : (d.last_seen ? 'Last seen ' + _fmtLastSeen(d.last_seen) : 'Offline');
       })
       .catch(function() { dot.className = 'dot-offline'; txt.textContent = 'Offline'; });
   }
