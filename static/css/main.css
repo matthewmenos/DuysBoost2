@@ -1509,6 +1509,7 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .btn-ghost-icon:hover { background: var(--surface-2); color: var(--text); }
 
 .post-menu-dropdown {
+  display: none;
   position: absolute; top: 100%; right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1517,6 +1518,9 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   z-index: 9999;           /* above all post content and overlays */
   min-width: 180px;
   overflow: hidden;
+}
+.post-menu-dropdown.open {
+  display: block;
   animation: modalIn .15s ease;
 }
 .post-menu-item {

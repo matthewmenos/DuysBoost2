@@ -2620,7 +2620,7 @@ def group_send(slug):
     db.commit()
 
     return jsonify({'success': True, 'message': {
-        'id': msg_id, 'body': body, 'msg_type': msg_type,
+        'id': new_msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
         'view_once': view_once,
         'sender_id': uid, 'sender_username': me['username'],

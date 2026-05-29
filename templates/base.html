@@ -1021,6 +1021,17 @@ window.gcSubmit = gcSubmit;
   }
   window.openBoostModal = window.openBoostModal || openBoostModal;
 
+  function openPostTipModal(postId, username) {
+    document.getElementById('post-tip-post-id').value = postId;
+    document.getElementById('post-tip-username-display').textContent = '@' + username;
+    document.getElementById('post-tip-amount').value = '';
+    document.getElementById('post-tip-message').value = '';
+    document.getElementById('post-tip-error').style.display = 'none';
+    if (typeof openModal === 'function') openModal('post-tip-modal');
+    setTimeout(() => { const a = document.getElementById('post-tip-amount'); if(a) a.focus(); }, 180);
+  }
+  window.openPostTipModal = openPostTipModal;
+
   document.addEventListener('DOMContentLoaded', function() {
     const boostTarget = document.getElementById('boost-target');
     if (boostTarget) {
@@ -1087,35 +1098,8 @@ window.gcSubmit = gcSubmit;
         }
       });
     }
-          const d = await r.json();
-          if (d.success) {
-            if (typeof closeModal === 'function') closeModal('boost-modal');
-            if (typeof showToast === 'function') showToast('Post boosted! $' + d.budget.toFixed(2) + ' budget active.');
-            setTimeout(() => location.reload(), 1000);
-          } else {
-            if (err) { err.style.display = 'block'; err.textContent = d.error || 'Could not boost post.'; }
-          }
-        } catch(_) {
-          if (err) { err.style.display = 'block'; err.textContent = 'Network error.'; }
-        } finally {
-          if (btn) { btn.textContent = 'Boost now 🚀'; btn.disabled = false; }
-        }
-      });
-    }
-  });
 
-    // ── Post tip modal ──────────────────────────────────────────────────
-    function openPostTipModal(postId, username) {
-      document.getElementById('post-tip-post-id').value = postId;
-      document.getElementById('post-tip-username-display').textContent = '@' + username;
-      document.getElementById('post-tip-amount').value = '';
-      document.getElementById('post-tip-message').value = '';
-      document.getElementById('post-tip-error').style.display = 'none';
-      if (typeof openModal === 'function') openModal('post-tip-modal');
-      setTimeout(() => { const a = document.getElementById('post-tip-amount'); if(a) a.focus(); }, 180);
-    }
-    window.openPostTipModal = openPostTipModal;
-
+    // ── Post tip form ──────────────────────────────────────────────────
     const postTipForm = document.getElementById('post-tip-form');
     if (postTipForm) {
       postTipForm.addEventListener('submit', async e => {

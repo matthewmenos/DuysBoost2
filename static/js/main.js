@@ -860,54 +860,64 @@ async function deletePost(postId) {
 window.deletePost = deletePost;
 
 function togglePostMenu(postId, e) {
-  e.stopPropagation();
+  e && e.stopPropagation();
   const menu = document.getElementById('post-menu-' + postId);
   if (!menu) return;
-  const open = menu.style.display !== 'none';
+  const isOpen = menu.classList.contains('open');
 
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    m.style.display = 'none';
-    m.style.position = '';
-    m.style.top = '';
-    m.style.right = '';
-    m.style.left = '';
-    m.style.width = '';
+  // Close all open menus first
+  document.querySelectorAll('.post-menu-dropdown.open').forEach(function(m) {
+    m.classList.remove('open');
+    m.removeAttribute('style');
   });
 
-  if (open) return;
+  if (isOpen) return; // was open, we just closed it
 
-  const btn  = e.currentTarget || e.target;
-  const rect = btn.getBoundingClientRect();
-  const vw   = window.innerWidth;
-  const menuW = 200;
-
-  menu.style.display  = 'block';
-  menu.style.position = 'fixed';
-  menu.style.zIndex   = '99999';
-  menu.style.width    = menuW + 'px';
-  menu.style.top      = (rect.bottom + 4) + 'px';
-
-  if (rect.right - menuW >= 0) {
-    menu.style.right = (vw - rect.right) + 'px';
-    menu.style.left  = 'auto';
-  } else {
-    menu.style.left  = Math.max(8, rect.left) + 'px';
-    menu.style.right = 'auto';
+  // Position the menu. Use fixed positioning to escape any overflow:hidden ancestors.
+  var btn = (e && (e.currentTarget || e.target)) || document.querySelector('[onclick*="togglePostMenu(' + postId + '"]');
+  if (btn) {
+    var rect = btn.getBoundingClientRect();
+    var vw = window.innerWidth;
+    var menuW = 220;
+    menu.style.position = 'fixed';
+    menu.style.top = (rect.bottom + 2) + 'px';
+    menu.style.zIndex = '99999';
+    menu.style.width = Math.min(menuW, vw - 16) + 'px';
+    // Align right edge of menu with right edge of button, but clamp to viewport
+    var rightEdge = vw - rect.right;
+    if (rightEdge < 0) rightEdge = 8;
+    menu.style.right = rightEdge + 'px';
+    menu.style.left = 'auto';
+    // If menu would go below viewport, flip it above the button
+    var approxMenuH = menu.querySelectorAll('.post-menu-item').length * 44 + 8;
+    if (rect.bottom + approxMenuH > window.innerHeight - 8) {
+      menu.style.top = Math.max(8, rect.top - approxMenuH) + 'px';
+    }
   }
+
+  menu.classList.add('open');
+
+  // Close when clicking outside
+  function outsideClick(ev) {
+    if (!menu.contains(ev.target)) {
+      menu.classList.remove('open');
+      menu.removeAttribute('style');
+      document.removeEventListener('click', outsideClick, true);
+    }
+  }
+  // Use capture so we get the click before any other handler
+  setTimeout(function() {
+    document.addEventListener('click', outsideClick, true);
+  }, 0);
 }
 window.togglePostMenu = togglePostMenu;
 
 document.addEventListener('scroll', function() {
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    if (m.style.display !== 'none') m.style.display = 'none';
+  document.querySelectorAll('.post-menu-dropdown.open').forEach(function(m) {
+    m.classList.remove('open');
+    m.removeAttribute('style');
   });
 }, true);
-
-document.addEventListener('click', function() {
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
-    m.style.display = 'none';
-  });
-});
 
 function copyPostLink(postId) {
   navigator.clipboard.writeText(window.location.origin + '/post/' + postId);
