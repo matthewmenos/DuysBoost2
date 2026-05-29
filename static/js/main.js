@@ -800,13 +800,16 @@ async function sendReaction(postId, reaction, event) {
   const picker = document.getElementById('reaction-picker-' + postId);
   if (picker) picker.style.display = 'none';
 
-  const r = await fetch('/post/' + postId + '/react', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reaction })
-  });
-  const d = await r.json();
-  if (!d.success) return;
+  var r, d;
+  try {
+    r = await fetch('/post/' + postId + '/react', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reaction })
+    });
+    d = await r.json();
+  } catch (_) { showToast('Network error.', 'error'); return; }
+  if (!d || !d.success) { if (d && d.error) showToast(d.error, 'error'); return; }
 
   const btn  = document.querySelector('#reaction-wrap-' + postId + ' .like-btn');
   const icon = document.querySelector('.reaction-icon-' + postId);
@@ -826,29 +829,35 @@ async function sendReaction(postId, reaction, event) {
 window.sendReaction = sendReaction;
 
 async function toggleLike(postId, btn) {
-  // Legacy toggleLike — routes through reaction system using 'heart'
-  const picker = document.getElementById('reaction-picker-' + postId);
   const hasReaction = btn && btn.classList.contains('liked');
   await sendReaction(postId, hasReaction ? '' : 'heart', null);
 }
 window.toggleLike = toggleLike;
 
 async function toggleBookmark(postId, btn) {
-  const r = await fetch(`/post/${postId}/bookmark`, { method: 'POST' });
-  const d = await r.json();
-  if (!d.success) return;
-  const icon = btn.querySelector('.action-icon');
-  icon.textContent = d.saved ? '🔖' : '🏷';
-  btn.classList.toggle('bookmarked', d.saved);
-  btn.setAttribute('aria-pressed', d.saved);
+  var r, d;
+  try {
+    r = await fetch('/post/' + postId + '/bookmark', { method: 'POST' });
+    d = await r.json();
+  } catch (_) { showToast('Network error.', 'error'); return; }
+  if (!d || !d.success) { showToast((d && d.error) || 'Could not bookmark.', 'error'); return; }
+  const icon = btn && btn.querySelector('.action-icon svg');
+  if (icon) { icon.setAttribute('fill', d.saved ? 'currentColor' : 'none'); }
+  if (btn) {
+    btn.classList.toggle('bookmarked', d.saved);
+    btn.setAttribute('aria-pressed', String(d.saved));
+  }
   showToast(d.saved ? 'Bookmarked!' : 'Removed from bookmarks');
 }
 window.toggleBookmark = toggleBookmark;
 
 async function deletePost(postId) {
   if (!confirm('Delete this post?')) return;
-  const r = await fetch(`/post/${postId}/delete`, { method: 'POST' });
-  const d = await r.json();
+  var r, d;
+  try {
+    r = await fetch('/post/' + postId + '/delete', { method: 'POST' });
+    d = await r.json();
+  } catch (_) { showToast('Network error.', 'error'); return; }
   if (d.success) {
     const card = document.querySelector(`[data-post-id="${postId}"]`);
     if (card) { card.style.opacity = '0'; setTimeout(() => card.remove(), 300); }
@@ -859,65 +868,81 @@ async function deletePost(postId) {
 }
 window.deletePost = deletePost;
 
-function togglePostMenu(postId, e) {
-  e && e.stopPropagation();
-  const menu = document.getElementById('post-menu-' + postId);
-  if (!menu) return;
-  const isOpen = menu.classList.contains('open');
-
-  // Close all open menus first
-  document.querySelectorAll('.post-menu-dropdown.open').forEach(function(m) {
+/* Close every open post-menu — called on scroll and outside-click */
+function _closeAllPostMenus() {
+  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
     m.classList.remove('open');
-    m.removeAttribute('style');
+    m.style.display  = 'none';
+    m.style.position = m.style.top = m.style.bottom =
+    m.style.left     = m.style.right = m.style.width = m.style.zIndex = '';
   });
+}
 
-  if (isOpen) return; // was open, we just closed it
+function togglePostMenu(postId, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
 
-  // Position the menu. Use fixed positioning to escape any overflow:hidden ancestors.
-  var btn = (e && (e.currentTarget || e.target)) || document.querySelector('[onclick*="togglePostMenu(' + postId + '"]');
-  if (btn) {
-    var rect = btn.getBoundingClientRect();
-    var vw = window.innerWidth;
-    var menuW = 220;
-    menu.style.position = 'fixed';
-    menu.style.top = (rect.bottom + 2) + 'px';
-    menu.style.zIndex = '99999';
-    menu.style.width = Math.min(menuW, vw - 16) + 'px';
-    // Align right edge of menu with right edge of button, but clamp to viewport
-    var rightEdge = vw - rect.right;
-    if (rightEdge < 0) rightEdge = 8;
-    menu.style.right = rightEdge + 'px';
-    menu.style.left = 'auto';
-    // If menu would go below viewport, flip it above the button
-    var approxMenuH = menu.querySelectorAll('.post-menu-item').length * 44 + 8;
-    if (rect.bottom + approxMenuH > window.innerHeight - 8) {
-      menu.style.top = Math.max(8, rect.top - approxMenuH) + 'px';
+  var menu = document.getElementById('post-menu-' + postId);
+  if (!menu) return;
+
+  var wasOpen = menu.classList.contains('open');
+  _closeAllPostMenus();   // close any currently-open menu
+  if (wasOpen) return;    // it was already open → just close it, done
+
+  /* ── Position: fixed so it escapes overflow:hidden / stacking-context parents ── */
+  var btn  = (e && (e.currentTarget || e.target)) || null;
+  var rect = btn ? btn.getBoundingClientRect() : null;
+  var vw   = window.innerWidth;
+  var menuW = Math.min(230, vw - 16);
+  var itemCount = menu.querySelectorAll('.post-menu-item').length;
+  var approxH   = itemCount * 44 + 12;
+
+  menu.style.display  = 'block';         // must come before getBoundingClientRect on menu
+  menu.style.position = 'fixed';
+  menu.style.zIndex   = '99999';
+  menu.style.width    = menuW + 'px';
+  menu.style.minWidth = '180px';
+
+  if (rect) {
+    /* Prefer below; flip above if not enough room */
+    if (rect.bottom + approxH + 12 > window.innerHeight) {
+      menu.style.top    = Math.max(8, rect.top - approxH - 4) + 'px';
+    } else {
+      menu.style.top    = (rect.bottom + 4) + 'px';
     }
+    menu.style.bottom = 'auto';
+
+    /* Right-align with button; clamp so menu never goes off left edge */
+    var rightGap = vw - rect.right;
+    if (rect.right - menuW >= 8) {
+      menu.style.right = Math.max(8, rightGap) + 'px';
+      menu.style.left  = 'auto';
+    } else {
+      menu.style.left  = Math.max(8, rect.left) + 'px';
+      menu.style.right = 'auto';
+    }
+  } else {
+    menu.style.top   = '64px';
+    menu.style.right = '12px';
+    menu.style.left  = 'auto';
   }
 
   menu.classList.add('open');
 
-  // Close when clicking outside
-  function outsideClick(ev) {
+  /* Close on any click outside the menu (capture phase) */
+  function _outerClick(ev) {
     if (!menu.contains(ev.target)) {
-      menu.classList.remove('open');
-      menu.removeAttribute('style');
-      document.removeEventListener('click', outsideClick, true);
+      _closeAllPostMenus();
+      document.removeEventListener('click', _outerClick, true);
     }
   }
-  // Use capture so we get the click before any other handler
   setTimeout(function() {
-    document.addEventListener('click', outsideClick, true);
+    document.addEventListener('click', _outerClick, true);
   }, 0);
 }
 window.togglePostMenu = togglePostMenu;
 
-document.addEventListener('scroll', function() {
-  document.querySelectorAll('.post-menu-dropdown.open').forEach(function(m) {
-    m.classList.remove('open');
-    m.removeAttribute('style');
-  });
-}, true);
+/* Close on page scroll */
+document.addEventListener('scroll', _closeAllPostMenus, { passive: true, capture: true });
 
 function copyPostLink(postId) {
   navigator.clipboard.writeText(window.location.origin + '/post/' + postId);
@@ -977,18 +1002,20 @@ function submitEditPost() {
 window.submitEditPost = submitEditPost;
 
 async function pinPost(postId, btn) {
-  var r = await fetch('/post/' + postId + '/pin', { method: 'POST' });
-  var d = await r.json();
-  if (d.success) {
+  var r, d;
+  try {
+    r = await fetch('/post/' + postId + '/pin', { method: 'POST' });
+    d = await r.json();
+  } catch (_) { showToast('Network error.', 'error'); return; }
+  if (d && d.success) {
     showToast(d.pinned ? '📌 Pinned to profile!' : 'Unpinned.');
-    // Update button text without full reload
-    var item = btn.closest('.post-menu-item');
+    var item = btn && btn.closest('.post-menu-item');
     if (item) item.innerHTML = item.innerHTML.replace(
       d.pinned ? 'Pin to profile' : 'Unpin post',
-      d.pinned ? 'Unpin post' : 'Pin to profile'
+      d.pinned ? 'Unpin post'    : 'Pin to profile'
     );
   } else {
-    showToast(d.error || 'Could not pin post.', 'error');
+    showToast((d && d.error) || 'Could not pin post.', 'error');
   }
 }
 window.pinPost = pinPost;
@@ -1235,15 +1262,26 @@ window.submitReply = submitReply;
 
 // ── Follow user ───────────────────────────────────────────────────────────────
 async function followUser(username, btn) {
-  btn.disabled = true;
-  var r = await fetch('/user/' + username + '/follow', { method: 'POST' });
-  var d = await r.json();
-  if (d.success) {
-    btn.textContent = d.following ? 'Following' : 'Follow';
-    btn.classList.toggle('btn-outline', !d.following);
-    btn.classList.toggle('btn-ghost',   d.following);
+  if (btn) btn.disabled = true;
+  var r, d;
+  try {
+    r = await fetch('/user/' + username + '/follow', { method: 'POST' });
+    d = await r.json();
+  } catch (_) {
+    showToast('Network error.', 'error');
+    if (btn) btn.disabled = false;
+    return;
   }
-  btn.disabled = false;
+  if (d && d.success) {
+    if (btn) {
+      btn.textContent = d.following ? 'Following' : 'Follow';
+      btn.classList.toggle('btn-outline', !d.following);
+      btn.classList.toggle('btn-ghost',   d.following);
+    }
+  } else {
+    showToast((d && d.error) || 'Could not follow.', 'error');
+  }
+  if (btn) btn.disabled = false;
 }
 window.followUser = followUser;
 
