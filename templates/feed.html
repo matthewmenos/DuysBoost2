@@ -89,9 +89,14 @@
   margin-top: 6px;
   background: var(--accent); color: #fff;
   border: none; border-radius: 99px;
-  padding: 5px 16px; font-weight: 700; font-size: 12.5px;
+  padding: 0 18px; min-height: 36px;
+  font-weight: 700; font-size: 12.5px;
   cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
 }
+.wtf-mobile-follow-btn:active { opacity: .8; }
 .wtf-mobile-follow-btn.following { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
 </style>
 
