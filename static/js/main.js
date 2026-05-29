@@ -1453,3 +1453,38 @@ window.subscribeToCreator = subscribeToCreator;
     if (ta && ta.tagName === 'TEXTAREA') _attachToTextarea(ta);
   });
 })();
+
+/* ── Post edit history ───────────────────────────────────────────────────── */
+async function openEditHistory(postId) {
+  const r = await fetch('/api/post/' + postId + '/edits');
+  const d = await r.json();
+  if (!d.success || !d.edits.length) { showToast('No edit history.'); return; }
+  const text = d.edits.map(function(e) {
+    return e.edited_at.slice(0, 16) + ':\n' + (e.body || '(empty)');
+  }).join('\n\n---\n\n');
+  alert('Edit history:\n\n' + text);
+}
+window.openEditHistory = openEditHistory;
+
+/* ── Sensitive content reveal ────────────────────────────────────────────── */
+function revealSensitive(postId) {
+  var wrap = document.getElementById('sb-' + postId);
+  var overlay = wrap && wrap.nextElementSibling;
+  if (wrap) { wrap.style.filter = 'none'; wrap.style.pointerEvents = ''; }
+  if (overlay) overlay.style.display = 'none';
+}
+window.revealSensitive = revealSensitive;
+
+/* ── Compose: sensitive toggle ───────────────────────────────────────────── */
+function toggleSensitive() {
+  var inp = document.getElementById('compose-sensitive');
+  var btn = document.getElementById('sensitive-btn');
+  if (!inp) return;
+  var on = inp.value === '0';
+  inp.value = on ? '1' : '0';
+  if (btn) {
+    btn.style.color = on ? 'var(--red)' : '';
+    btn.title = on ? 'Marked as sensitive (click to remove)' : 'Mark as sensitive';
+  }
+}
+window.toggleSensitive = toggleSensitive;

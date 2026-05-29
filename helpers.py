@@ -425,6 +425,19 @@ def format_post(row, current_uid, db):
     except Exception:
         p['active_boost'] = None
 
+    # OG / link preview fields
+    for _og_key in ('og_url', 'og_title', 'og_description', 'og_image'):
+        if _og_key not in p:
+            p[_og_key] = None
+
+    # Sensitive content
+    p['is_sensitive'] = p.get('is_sensitive', 0) or 0
+    try:
+        viewer = db.execute('SELECT auto_show_sensitive FROM users WHERE id=?', (current_uid,)).fetchone()
+        p['auto_show_sensitive'] = int(viewer['auto_show_sensitive'] or 0) if viewer else 0
+    except Exception:
+        p['auto_show_sensitive'] = 0
+
     if 'media_url' not in p:
         p['media_url'] = None
     if 'media_mime' not in p:

@@ -114,6 +114,14 @@ def login():
         maybe_upgrade_password_hash(db, user['id'], password, user['password'])
         session.clear()
         session['user_id'] = user['id']
+        try:
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()[:45]
+            ua = request.headers.get('User-Agent', '')[:300]
+            db.execute('INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?,?,?)',
+                       (user['id'], ip, ua))
+            db.commit()
+        except Exception:
+            pass
         # Admin accounts land on the dashboard, not the social feed
         user_d    = dict(user)
         is_admin  = bool(user_d.get('is_admin', 0))
@@ -328,6 +336,14 @@ def _finalize_oauth_login(userinfo, provider):
             return redirect(url_for('auth.login') + '?banned=1')
         user_d = dict(user)
         session['user_id'] = user_d['id']
+        try:
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()[:45]
+            ua = request.headers.get('User-Agent', '')[:300]
+            db.execute('INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?,?,?)',
+                       (user_d['id'], ip, ua))
+            db.commit()
+        except Exception:
+            pass
         if user_d.get('is_admin', 0):
             return redirect(url_for('admin.admin'))
         return redirect(url_for('social.feed'))
@@ -411,3 +427,19 @@ def complete_profile():
         email=pending.get('email', ''),
         suggested_name=pending.get('suggested_name', ''),
     )
+
+
+@bp.route('/settings/security')
+@login_required
+def security_settings():
+    db  = get_db()
+    uid = session['user_id']
+    try:
+        history = db.execute(
+            'SELECT ip_address, user_agent, created_at FROM login_history '
+            'WHERE user_id=? ORDER BY created_at DESC LIMIT 10',
+            (uid,)
+        ).fetchall()
+    except Exception:
+        history = []
+    return render_template('security_settings.html', login_history=[dict(h) for h in history])

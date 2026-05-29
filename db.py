@@ -469,6 +469,46 @@ CREATE INDEX IF NOT EXISTS idx_reports_status  ON reports(status);
 CREATE INDEX IF NOT EXISTS idx_bans_user       ON user_bans(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_admin     ON admin_audit_log(admin_id);
 CREATE INDEX IF NOT EXISTS idx_sh_user         ON search_history(user_id);
+
+CREATE TABLE IF NOT EXISTS post_edits (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id    INTEGER NOT NULL,
+    body       TEXT,
+    edited_at  TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_post_edits_post ON post_edits(post_id);
+
+CREATE TABLE IF NOT EXISTS login_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id);
+
+CREATE TABLE IF NOT EXISTS verification_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL UNIQUE,
+    reason       TEXT,
+    evidence_url TEXT,
+    status       TEXT DEFAULT 'pending',
+    reviewed_by  INTEGER,
+    reviewed_at  TEXT,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS group_invites (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id   INTEGER NOT NULL,
+    token      TEXT    NOT NULL UNIQUE,
+    created_by INTEGER NOT NULL,
+    expires_at TEXT,
+    uses       INTEGER DEFAULT 0,
+    max_uses   INTEGER DEFAULT 100,
+    created_at TEXT    DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_group_invites_token ON group_invites(token);
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -900,6 +940,9 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('users', 'referral_click_count', 'INTEGER DEFAULT 0'),
         # notification preferences (JSON dict)
         ('users', 'notif_prefs',          "TEXT DEFAULT '{}'"),
+        # sensitive content warnings
+        ('posts', 'is_sensitive',         'INTEGER DEFAULT 0'),
+        ('users', 'auto_show_sensitive',  'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()
@@ -943,6 +986,17 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
             logger.info('Backfilled %d referral codes to usernames', updated)
     except Exception as _e:
         logger.warning('Referral backfill skipped: %s', _e)
+
+    # ── BACKFILL channel post_count ──────────────────────────────────────────
+    try:
+        conn.execute("""
+            UPDATE channels SET post_count = (
+                SELECT COUNT(*) FROM channel_posts WHERE channel_id = channels.id
+            ) WHERE post_count = 0
+        """)
+        conn.commit()
+    except Exception as _e:
+        logger.warning('Channel post_count backfill skipped: %s', _e)
 
 
 def get_db() -> sqlite3.Connection:

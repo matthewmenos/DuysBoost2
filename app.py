@@ -397,6 +397,14 @@ def create_app() -> Flask:
         response.headers['X-Content-Type-Options']  = 'nosniff'
         response.headers['X-Frame-Options']          = 'DENY'
         response.headers['Referrer-Policy']          = 'strict-origin-when-cross-origin'
+        response.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https: blob:; "
+            "connect-src 'self'; media-src 'self' https: blob:;"
+        )
         return response
 
     # ── Storage health check ─────────────────────────────────────────────────

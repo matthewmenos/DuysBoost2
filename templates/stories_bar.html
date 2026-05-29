@@ -276,16 +276,37 @@ loadStories();
 
 function renderStoryBar() {
   const bar = document.getElementById('stories-bar');
-  // Keep the "add" button (first child)
+  // Keep the "add" button (first child) — may be replaced below if user has stories
   while (bar.children.length > 1) bar.removeChild(bar.lastChild);
 
+  // Check if the current user has their own stories
+  const ownGrpIdx = _storyGroups.findIndex(function(g) { return g.is_own; });
+  const ownGrp    = ownGrpIdx >= 0 ? _storyGroups[ownGrpIdx] : null;
+
+  if (ownGrp) {
+    // Replace the "+" button with the user's own story ring
+    const addBtn = bar.firstElementChild;
+    if (addBtn) {
+      addBtn.onclick = function() { openStoryGroup(ownGrpIdx); };
+      const imgTag = ownGrp.avatar_url
+        ? `<img src="${ownGrp.avatar_url}" alt="">`
+        : `<span>${(ownGrp.display_name||ownGrp.username||'?')[0].toUpperCase()}</span>`;
+      addBtn.innerHTML = `
+        <div class="story-ring own">
+          <div class="story-ring-inner">${imgTag}</div>
+        </div>
+        <span class="story-username">Your story</span>`;
+    }
+  }
+
   _storyGroups.forEach(function(grp, gi) {
+    if (grp.is_own) return; // already handled as the first bubble
     const bubble = document.createElement('div');
     bubble.className = 'story-bubble';
     bubble.onclick   = function() { openStoryGroup(gi); };
 
     const allSeen   = !grp.has_unseen;
-    const ringClass = grp.is_own ? 'own' : (allSeen ? 'seen' : '');
+    const ringClass = allSeen ? 'seen' : '';
     const imgTag    = grp.avatar_url
       ? `<img src="${grp.avatar_url}" alt="">`
       : `<span>${(grp.display_name||grp.username||'?')[0].toUpperCase()}</span>`;

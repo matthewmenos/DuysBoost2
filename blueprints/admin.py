@@ -40,6 +40,7 @@ from helpers import (
     get_db, get_user_db, login_required, admin_required,
     safe_float, safe_int, add_notification, add_transaction, hash_password
 )
+from security import csrf_exempt
 
 bp = Blueprint('admin', __name__)
 
@@ -1008,4 +1009,57 @@ def send_notification():
         for u in db.execute('SELECT id FROM users').fetchall():
             add_notification(db, u['id'], f'📢 {message}')
     db.commit()
+    return jsonify({'success': True})
+
+
+# ── Verification requests ─────────────────────────────────────────────────────
+
+@bp.route('/admin/verifications')
+@admin_required
+def admin_verifications():
+    db = get_db()
+    requests_list = db.execute('''
+        SELECT vr.*, u.username, u.display_name, u.avatar_url
+        FROM verification_requests vr JOIN users u ON u.id=vr.user_id
+        WHERE vr.status='pending' ORDER BY vr.created_at DESC
+    ''').fetchall()
+    return render_template('admin/verifications.html',
+                           requests=[dict(r) for r in requests_list])
+
+
+@bp.route('/admin/verifications/<int:req_id>/approve', methods=['POST'])
+@admin_required
+@csrf_exempt
+def approve_verification(req_id):
+    db  = get_db()
+    uid = session['user_id']
+    vr  = db.execute('SELECT user_id FROM verification_requests WHERE id=?', (req_id,)).fetchone()
+    if not vr:
+        return jsonify({'success': False})
+    tier = request.form.get('tier', 'blue')
+    db.execute('UPDATE users SET is_verified=1, verified_tier=? WHERE id=?', (tier, vr['user_id']))
+    db.execute(
+        "UPDATE verification_requests SET status='approved', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?",
+        (uid, req_id)
+    )
+    db.commit()
+    add_notification(db, vr['user_id'], '✅ Your verification request was approved!', icon='verify')
+    return jsonify({'success': True})
+
+
+@bp.route('/admin/verifications/<int:req_id>/reject', methods=['POST'])
+@admin_required
+@csrf_exempt
+def reject_verification(req_id):
+    db  = get_db()
+    uid = session['user_id']
+    vr  = db.execute('SELECT user_id FROM verification_requests WHERE id=?', (req_id,)).fetchone()
+    if not vr:
+        return jsonify({'success': False})
+    db.execute(
+        "UPDATE verification_requests SET status='rejected', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?",
+        (uid, req_id)
+    )
+    db.commit()
+    add_notification(db, vr['user_id'], '❌ Your verification request was not approved.', icon='system')
     return jsonify({'success': True})

@@ -28,3 +28,6 @@ pywebpush>=2.0.0
 
 # ── Response compression ─────────────────────────────────────────────────────
 flask-compress>=1.15
+
+# ── HTML parsing for Open Graph link previews ─────────────────────────────────
+beautifulsoup4>=4.12.0

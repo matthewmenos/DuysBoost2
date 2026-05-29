@@ -143,6 +143,12 @@
               <button type="button" class="compose-icon-btn" id="schedule-btn" onclick="toggleSchedulePicker()" title="Schedule post" aria-label="Schedule post">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </button>
+              <!-- Sensitive content toggle -->
+              <button type="button" class="compose-icon-btn" id="sensitive-btn"
+                      onclick="toggleSensitive()" title="Mark as sensitive" aria-label="Sensitive content">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <input type="hidden" id="compose-sensitive" value="0">
               <input type="file" id="post-media-input" accept="image/*,video/*" multiple style="display:none">
               <input type="datetime-local" id="compose-scheduled-at" style="display:none;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:2px 6px;background:var(--surface-2);color:var(--text)">
               <span class="compose-chars" id="compose-chars">500</span>
@@ -422,6 +428,8 @@ if (composeInput) {
       }
       const scheduledAt = document.getElementById('compose-scheduled-at');
       if (scheduledAt && scheduledAt.value) fd.append('scheduled_at', scheduledAt.value);
+      const sensitiveInp = document.getElementById('compose-sensitive');
+      if (sensitiveInp) fd.append('is_sensitive', sensitiveInp.value);
       const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
       const r  = await fetch('/post', {
         method: 'POST',

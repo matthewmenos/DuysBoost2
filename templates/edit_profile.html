@@ -129,9 +129,18 @@
             Change
           </button>
         </div>
-        <div class="form-hint">
-          {% if (user.username_changes or 0) >= 3 %}
-            You\'ve used all 3 username changes.
+        <div class="form-hint" style="margin-top:4px">
+          {% if username_changes_left is defined %}
+            {% if username_changes_left > 0 %}
+              {{ username_changes_left }} change{{ 's' if username_changes_left != 1 else '' }} remaining · 60-day cooldown between changes
+            {% else %}
+              No more changes allowed
+              {% if username_last_changed %}
+                · Last changed {{ username_last_changed[:10] }}
+              {% endif %}
+            {% endif %}
+          {% elif (user.username_changes or 0) >= 3 %}
+            You've used all 3 username changes.
           {% else %}
             3 changes total · 60-day cooldown between changes
           {% endif %}
@@ -187,7 +196,21 @@
       </div>
     </div>
 
-    <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
+    <!-- Quick links to other settings pages -->
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
+      <a href="{{ url_for('auth.security_settings') }}" class="btn btn-ghost btn-sm">
+        <svg class="i-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        Login History
+      </a>
+      {% if not current_user.is_verified %}
+      <a href="{{ url_for('social.verify_apply') }}" class="btn btn-ghost btn-sm">
+        <svg class="i-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Apply for Verification
+      </a>
+      {% endif %}
+    </div>
+
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
       <div style="font-weight:700;color:var(--red,#e53e3e);margin-bottom:8px;font-size:14px">⚠️ Danger zone</div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
         Once deleted, your account cannot be recovered.

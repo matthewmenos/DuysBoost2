@@ -225,6 +225,8 @@ def create_post():
     if body and len(body) > 500:
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
 
+    is_sensitive = 1 if request.form.get('is_sensitive') == '1' else 0
+
     scheduled_at_raw = (request.form.get('scheduled_at') or '').strip() or None
     scheduled_at = None
     post_status  = 'published'
@@ -242,11 +244,11 @@ def create_post():
     now = datetime.now(timezone.utc).isoformat()
     db.execute("""
         INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
-                           is_subscriber_only, media_url, media_mime,
+                           is_subscriber_only, is_sensitive, media_url, media_mime,
                            post_type, poll_expires_at, scheduled_at, status, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (uid, body or None, reply_to, repost_of, quote_body,
-          subscriber_only, media_url, media_mime if media_url else None,
+          subscriber_only, is_sensitive, media_url, media_mime if media_url else None,
           post_type, poll_expires_at, scheduled_at, post_status, now))
     post_id = db.lastrowid
 
@@ -522,6 +524,14 @@ def edit_post(post_id):
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
     if not body and not post.get('media_url'):
         return jsonify({'success': False, 'error': 'Post cannot be empty.'}), 400
+
+    # Save old body to edit history before updating
+    old = db.execute('SELECT body FROM posts WHERE id=?', (post_id,)).fetchone()
+    if old and old['body']:
+        try:
+            db.execute('INSERT INTO post_edits (post_id, body) VALUES (?,?)', (post_id, old['body']))
+        except Exception:
+            pass
 
     now = datetime.now(timezone.utc).isoformat()
     db.execute('UPDATE posts SET body=?, edited_at=? WHERE id=?', (body or None, now, post_id))
@@ -862,7 +872,13 @@ def edit_profile():
         return jsonify({'success': True, 'redirect': url_for('social.profile', username=me['username'])})
 
     user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
-    return render_template('edit_profile.html', user=dict(user))
+    user_d = dict(user)
+    changes_made = user_d.get('username_changes', 0) or 0
+    username_changes_left = max(0, 3 - changes_made)
+    last_changed = user_d.get('username_last_changed') or ''
+    return render_template('edit_profile.html', user=user_d,
+                           username_changes_left=username_changes_left,
+                           username_last_changed=last_changed)
 
 
 
@@ -2743,4 +2759,120 @@ def view_once_open(msg_id):
     )
     udb.commit()
     return jsonify({'success': True})
+
+
+# ── Post edit history ─────────────────────────────────────────────────────────
+
+@bp.route('/api/post/<int:post_id>/edits')
+@login_required
+def post_edit_history(post_id):
+    db = get_db()
+    edits = db.execute(
+        'SELECT body, edited_at FROM post_edits WHERE post_id=? ORDER BY edited_at DESC LIMIT 20',
+        (post_id,)
+    ).fetchall()
+    return jsonify({'success': True, 'edits': [dict(e) for e in edits]})
+
+
+# ── Message read receipts ─────────────────────────────────────────────────────
+
+@bp.route('/api/messages/<int:conv_id>/read', methods=['POST'])
+@login_required
+@csrf_exempt
+def mark_messages_read(conv_id):
+    udb = get_user_db()
+    uid = session['user_id']
+    udb.execute(
+        'UPDATE messages SET is_read=1 WHERE conversation_id=? AND sender_id!=?',
+        (conv_id, uid)
+    )
+    udb.commit()
+    return jsonify({'ok': True})
+
+
+# ── Verification badge applications ──────────────────────────────────────────
+
+@bp.route('/verify/apply', methods=['GET', 'POST'])
+@login_required
+def verify_apply():
+    db  = get_db()
+    uid = session['user_id']
+    existing = db.execute('SELECT status FROM verification_requests WHERE user_id=?', (uid,)).fetchone()
+    if request.method == 'POST':
+        if existing and existing['status'] == 'pending':
+            return jsonify({'success': False, 'error': 'Request already pending.'})
+        reason = request.form.get('reason', '').strip()[:500]
+        evidence_url = request.form.get('evidence_url', '').strip()[:500]
+        if not reason:
+            return jsonify({'success': False, 'error': 'Reason is required.'})
+        if existing:
+            db.execute(
+                "UPDATE verification_requests SET reason=?,evidence_url=?,status=?,"
+                "reviewed_by=NULL,reviewed_at=NULL,created_at=datetime('now') WHERE user_id=?",
+                (reason, evidence_url, 'pending', uid)
+            )
+        else:
+            db.execute(
+                'INSERT INTO verification_requests (user_id,reason,evidence_url) VALUES (?,?,?)',
+                (uid, reason, evidence_url)
+            )
+        db.commit()
+        return jsonify({'success': True, 'message': 'Application submitted.'})
+    user = db.execute('SELECT is_verified FROM users WHERE id=?', (uid,)).fetchone()
+    return render_template('verify_apply.html', existing=dict(existing) if existing else None,
+                           is_verified=bool(user and user['is_verified']))
+
+
+# ── Group invite links ────────────────────────────────────────────────────────
+
+@bp.route('/group/<slug>/invite/create', methods=['POST'])
+@login_required
+@csrf_exempt
+def create_group_invite(slug):
+    import secrets as _sec
+    db  = get_db()
+    uid = session['user_id']
+    group = db.execute('SELECT id, created_by FROM groups WHERE slug=?', (slug,)).fetchone()
+    if not group:
+        return jsonify({'success': False, 'error': 'Group not found.'})
+    member = db.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+                        (group['id'], uid)).fetchone()
+    if not (member and member['role'] in ('admin', 'owner')) and group['created_by'] != uid:
+        return jsonify({'success': False, 'error': 'Not authorized.'})
+    token = _sec.token_urlsafe(12)
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    expires_at = (_dt.now(_tz.utc) + _td(days=7)).isoformat()
+    db.execute('INSERT INTO group_invites (group_id,token,created_by,expires_at) VALUES (?,?,?,?)',
+               (group['id'], token, uid, expires_at))
+    db.commit()
+    return jsonify({'success': True, 'token': token,
+                    'link': request.host_url.rstrip('/') + '/join/' + token})
+
+
+@bp.route('/join/<token>')
+def join_group_by_invite(token):
+    db  = get_db()
+    uid = session.get('user_id')
+    if not uid:
+        from flask import redirect, url_for as _uf
+        return redirect(_uf('auth.login'))
+    invite = db.execute(
+        "SELECT * FROM group_invites WHERE token=? AND "
+        "(expires_at IS NULL OR expires_at > datetime('now')) AND uses < max_uses",
+        (token,)
+    ).fetchone()
+    if not invite:
+        return render_template('error.html', message='Invite link is invalid or expired.'), 404
+    existing = db.execute('SELECT id FROM group_members WHERE group_id=? AND user_id=?',
+                          (invite['group_id'], uid)).fetchone()
+    if not existing:
+        db.execute('INSERT INTO group_members (group_id, user_id, role) VALUES (?,?,?)',
+                   (invite['group_id'], uid, 'member'))
+        db.execute('UPDATE group_invites SET uses=uses+1 WHERE id=?', (invite['id'],))
+        db.commit()
+    group = db.execute('SELECT slug FROM groups WHERE id=?', (invite['group_id'],)).fetchone()
+    from flask import redirect, url_for as _uf2
+    if group:
+        return redirect(_uf2('social.group_detail', slug=group['slug']))
+    return redirect(_uf2('social.feed'))
 

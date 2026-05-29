@@ -193,6 +193,11 @@ Before going live:
 - [ ] Switch to live Paystack keys
 - [ ] Use a single gunicorn worker to avoid global.db write contention
 - [ ] Test end-to-end with a small real deposit + withdrawal
+- [ ] Security headers (X-Frame-Options, CSP, Referrer-Policy) — enabled by default
+- [ ] Configure VAPID keys for web push notifications (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
+- [ ] Set `BREVO_API_KEY` for transactional email (password reset)
+- [ ] Review verification badge applications at `/admin/verifications`
+- [ ] Notification preferences available at `/edit-profile` (Notification Preferences section)
 
 ## Testing Without Paystack
 
