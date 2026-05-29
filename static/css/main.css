@@ -1523,6 +1523,10 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   display: block;
   animation: modalIn .15s ease;
 }
+.post-menu-dropdown.flip-up {
+  top: auto;
+  bottom: 100%;
+}
 .post-menu-item {
   display: flex; align-items: center; gap: 8px;
   width: 100%;

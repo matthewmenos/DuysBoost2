@@ -75,6 +75,10 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'user_id' not in session:
+            # Non-GET requests are AJAX/fetch — return JSON so clients can handle gracefully
+            # instead of silently following an HTML redirect and showing a JSON parse error
+            if request.method != 'GET':
+                return jsonify({'success': False, 'error': 'Session expired. Please log in again.', 'login_required': True}), 401
             return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated

@@ -31,10 +31,22 @@
               </a>
               <div class="post-username text-muted" style="font-size:14px">@{{ post.author.username }}</div>
             </div>
-            {% if current_user and (current_user.id == post.user_id or current_user.is_admin) %}
-            <button class="btn btn-danger btn-sm" style="margin-left:auto"
-                    onclick="deletePost({{ post.id }})">Delete</button>
-            {% endif %}
+            <div class="post-menu-wrap" style="margin-left:auto;position:relative">
+              <button class="btn-ghost-icon post-menu-btn" aria-label="More options"
+                      onclick="togglePostMenu({{ post.id }}, event)">⋯</button>
+              <div class="post-menu-dropdown" id="post-menu-{{ post.id }}">
+                {% if current_user and current_user.id == post.user_id %}
+                <button class="post-menu-item" onclick="openEditPost({{ post.id }}, {{ post.body | tojson }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit post</button>
+                <button class="post-menu-item" onclick="openBoostModal({{ post.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg> Boost this post</button>
+                {% endif %}
+                {% if current_user and (current_user.id == post.user_id or current_user.is_admin) %}
+                <button class="post-menu-item danger" onclick="deletePost({{ post.id }})">🗑 Delete post</button>
+                {% endif %}
+                <button class="post-menu-item" onclick="copyPostLink({{ post.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Copy link</button>
+                <button class="post-menu-item" style="color:var(--red,#e53e3e)"
+                        onclick="reportPost({{ post.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report post</button>
+              </div>
+            </div>
           </div>
           <div class="post-body" style="font-size:18px;line-height:1.6;margin:12px 0">
             {{ post.body | nl2br }}
@@ -96,6 +108,14 @@
                 {% endfor %}
               </div>
             </div>
+            <!-- View count (non-interactive, updated by IntersectionObserver) -->
+            <button class="post-action-btn views-btn" aria-label="Views"
+                    style="cursor:default;pointer-events:none" tabindex="-1">
+              <span class="action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              </span>
+              <span class="action-count" id="view-count-{{ post.id }}">{{ post.view_count or '' }}</span>
+            </button>
             <!-- Bookmark -->
             <button class="post-action-btn bookmark-btn {% if post.bookmarked %}bookmarked{% endif %}"
                     onclick="toggleBookmark({{ post.id }}, this)" aria-label="Bookmark"
@@ -111,6 +131,25 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
               </span>
             </button>
+            <!-- Tip (other users' posts only) -->
+            {% if current_user and (current_user.id | int) != (post.user_id | int) %}
+            <button class="post-action-btn tip-btn"
+                    onclick="openPostTipModal({{ post.id }}, '{{ post.author.username | e }}')"
+                    aria-label="Tip" title="Send a tip">
+              <span class="action-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              </span>
+            </button>
+            {% endif %}
+            <!-- Boost (owner only, not yet boosted) -->
+            {% if current_user and (current_user.id | int) == (post.user_id | int) and not post.is_boosted %}
+            <button class="post-action-btn boost-btn"
+                    onclick="openBoostModal({{ post.id }})" aria-label="Boost this post" title="Boost">
+              <span class="action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h7v8l11-14h-7l-1-6z"/></svg>
+              </span>
+            </button>
+            {% endif %}
           </div>
         </div>
       </div>

@@ -212,7 +212,10 @@ def init_security(app) -> None:
     @app.errorhandler(429)
     def ratelimit_handler(e):
         retry = getattr(e, 'retry_after', 60)
-        if request.path.startswith('/api/') or request.is_json:
+        # Always return JSON for mutating requests so fetch() callers get a proper error object
+        if (request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
+                or request.path.startswith('/api/')
+                or request.is_json):
             return jsonify({
                 'success':     False,
                 'error':       'Too many requests. Please slow down.',

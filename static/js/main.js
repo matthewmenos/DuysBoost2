@@ -868,69 +868,53 @@ async function deletePost(postId) {
 }
 window.deletePost = deletePost;
 
-/* Close every open post-menu — called on scroll and outside-click */
+/* Close every open post-menu */
 function _closeAllPostMenus() {
-  document.querySelectorAll('.post-menu-dropdown').forEach(function(m) {
+  document.querySelectorAll('.post-menu-dropdown.open').forEach(function(m) {
     m.classList.remove('open');
-    m.style.display  = 'none';
-    m.style.position = m.style.top = m.style.bottom =
-    m.style.left     = m.style.right = m.style.width = m.style.zIndex = '';
+    m.classList.remove('flip-up');
   });
 }
 
-function togglePostMenu(postId, e) {
-  if (e) { e.stopPropagation(); e.preventDefault(); }
+/* Auto-close menu when any menu item is clicked (capture phase fires before the item's onclick) */
+document.addEventListener('click', function(ev) {
+  if (ev.target && ev.target.closest && ev.target.closest('.post-menu-item')) {
+    _closeAllPostMenus();
+  }
+}, true);
 
-  var menu = document.getElementById('post-menu-' + postId);
+function togglePostMenu(postId, e) {
+  if (e) e.stopPropagation();
+
+  var menu   = document.getElementById('post-menu-' + postId);
   if (!menu) return;
 
+  /* Save opener button BEFORE closing — used to exclude it from _outerClick below */
+  var opener  = e ? (e.currentTarget || e.target) : null;
   var wasOpen = menu.classList.contains('open');
-  _closeAllPostMenus();   // close any currently-open menu
-  if (wasOpen) return;    // it was already open → just close it, done
 
-  /* ── Position: fixed so it escapes overflow:hidden / stacking-context parents ── */
-  var btn  = (e && (e.currentTarget || e.target)) || null;
-  var rect = btn ? btn.getBoundingClientRect() : null;
-  var vw   = window.innerWidth;
-  var menuW = Math.min(230, vw - 16);
-  var itemCount = menu.querySelectorAll('.post-menu-item').length;
-  var approxH   = itemCount * 44 + 12;
+  _closeAllPostMenus();
+  if (wasOpen) return;  // was open → just closed it, done
 
-  menu.style.display  = 'block';         // must come before getBoundingClientRect on menu
-  menu.style.position = 'fixed';
-  menu.style.zIndex   = '99999';
-  menu.style.width    = menuW + 'px';
-  menu.style.minWidth = '180px';
-
-  if (rect) {
-    /* Prefer below; flip above if not enough room */
-    if (rect.bottom + approxH + 12 > window.innerHeight) {
-      menu.style.top    = Math.max(8, rect.top - approxH - 4) + 'px';
-    } else {
-      menu.style.top    = (rect.bottom + 4) + 'px';
+  /* Flip menu above the button if there isn't enough room below */
+  var wrap = menu.parentElement;
+  if (wrap) {
+    var wRect     = wrap.getBoundingClientRect();
+    var itemCount = menu.querySelectorAll('.post-menu-item').length;
+    if (wRect.bottom + itemCount * 44 + 16 > window.innerHeight - 8) {
+      menu.classList.add('flip-up');
     }
-    menu.style.bottom = 'auto';
-
-    /* Right-align with button; clamp so menu never goes off left edge */
-    var rightGap = vw - rect.right;
-    if (rect.right - menuW >= 8) {
-      menu.style.right = Math.max(8, rightGap) + 'px';
-      menu.style.left  = 'auto';
-    } else {
-      menu.style.left  = Math.max(8, rect.left) + 'px';
-      menu.style.right = 'auto';
-    }
-  } else {
-    menu.style.top   = '64px';
-    menu.style.right = '12px';
-    menu.style.left  = 'auto';
   }
 
   menu.classList.add('open');
 
-  /* Close on any click outside the menu (capture phase) */
+  /* Close on any click outside the menu.
+     Exclude the opener button so that clicking ⋯ again doesn't immediately re-open.
+     (capture phase fires before onclick, so without this exclusion wasOpen would
+     already be false by the time togglePostMenu runs.) */
   function _outerClick(ev) {
-    if (!menu.contains(ev.target)) {
+    var onOpener = opener && (ev.target === opener || opener.contains(ev.target));
+    if (!menu.contains(ev.target) && !onOpener) {
       _closeAllPostMenus();
       document.removeEventListener('click', _outerClick, true);
     }

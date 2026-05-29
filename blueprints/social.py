@@ -1870,16 +1870,24 @@ def send_message(username):
     msg_id = udb.lastrowid
     udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
     udb.commit()
-    # Global DB: update unread count and online status
-    db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
-    db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
-    db.commit()
-
-    me = db.execute('SELECT username, avatar_url FROM users WHERE id=?', (uid,)).fetchone()
+    # Global DB: non-critical side-effects — wrap so a DB lock doesn't kill the response
+    # after the message is already durably saved in udb
+    try:
+        db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (other['id'],))
+        db.execute('UPDATE users SET online_at=? WHERE id=?', (now, uid))
+        db.commit()
+    except Exception:
+        pass
+    try:
+        me = db.execute('SELECT username, avatar_url FROM users WHERE id=?', (uid,)).fetchone()
+    except Exception:
+        me = None
     return jsonify({'success': True, 'message': {
         'id': msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
-        'sender_id': uid, 'sender_username': me['username'], 'sender_avatar': me['avatar_url'],
+        'sender_id': uid,
+        'sender_username': me['username'] if me else '',
+        'sender_avatar': me['avatar_url'] if me else None,
         'created_at': now, 'is_read': 0,
     }})
 
@@ -2607,13 +2615,13 @@ def group_send(slug):
         except (ValueError, RuntimeError) as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
-    msg_id = db.execute(
-        'INSERT OR IGNORE INTO group_messages '
+    _cur = db.execute(
+        'INSERT INTO group_messages '
         '(group_id,sender_id,body,msg_type,file_url,file_name,file_mime,reply_to_id,view_once,created_at) '
         'VALUES (?,?,?,?,?,?,?,?,?,?)',
         (g['id'], uid, body, msg_type, file_url, file_name, file_mime, reply_to, view_once, now)
     )
-    new_msg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+    new_msg_id = _cur.lastrowid
     db.execute('UPDATE users SET unread_group_count=unread_group_count+1 WHERE id IN '
                '(SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?)', (g['id'], uid))
     me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()
