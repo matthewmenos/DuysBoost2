@@ -25,6 +25,7 @@ bp = Blueprint('boost', __name__)
 @login_required
 def dashboard():
     db  = get_db()
+    udb = get_user_db()
     uid = session['user_id']
     CURRENCY_SYMBOL        = current_app.config['CURRENCY_SYMBOL']
     WORKER_REWARD_PER_TASK = current_app.config['WORKER_REWARD_PER_TASK']
@@ -38,13 +39,13 @@ def dashboard():
         'JOIN ads a ON tc.ad_id=a.id WHERE tc.worker_id=? '
         'ORDER BY tc.submitted_at DESC LIMIT 5', (uid,)
     ).fetchall()
-    total_earned = db.execute(
+    total_earned = udb.execute(
         'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type="earn"', (uid,)
     ).fetchone()[0]
-    total_spent = db.execute(
+    total_spent = udb.execute(
         'SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type="spend"', (uid,)
     ).fetchone()[0]
-    unread = db.execute(
+    unread = udb.execute(
         'SELECT COUNT(*) FROM notifications WHERE user_id=? AND read=0', (uid,)
     ).fetchone()[0]
     available_ads = [dict(a) for a in db.execute(
@@ -884,7 +885,10 @@ def my_subscriptions():
 @login_required
 def creator_earnings():
     db  = get_db()
+    udb = get_user_db()
     uid = session['user_id']
+
+    # subscription_tiers, subscriptions, tips are in global DB
     tier = db.execute('SELECT * FROM subscription_tiers WHERE creator_id=?', (uid,)).fetchone()
 
     tips_received = db.execute("""
@@ -903,10 +907,12 @@ def creator_earnings():
         WHERE s.creator_id=? AND s.status='active' ORDER BY s.started_at DESC
     """, (uid,)).fetchall()
 
-    sub_revenue = db.execute(
+    # transactions live in personal DB
+    sub_revenue = udb.execute(
         "SELECT COALESCE(SUM(amount),0) FROM transactions "
         "WHERE user_id=? AND type='earn' AND description LIKE 'Subscription from %'", (uid,)
     ).fetchone()[0]
+
     boost_earned = db.execute(
         'SELECT COALESCE(SUM(reward),0) FROM boost_engagements WHERE worker_id=?', (uid,)
     ).fetchone()[0]

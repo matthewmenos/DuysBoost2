@@ -25,7 +25,7 @@ def wallet():
     wdrs = udb.execute(
         'SELECT * FROM withdrawals WHERE user_id=? ORDER BY created_at DESC', (uid,)
     ).fetchall()
-    pending_deposits = db.execute(
+    pending_deposits = udb.execute(
         'SELECT * FROM crypto_deposits WHERE user_id=? ORDER BY created_at DESC LIMIT 10', (uid,)
     ).fetchall()
     return render_template('wallet.html', transactions=txs, withdrawals=wdrs,
@@ -40,6 +40,7 @@ def deposit():
     """Auto on-chain deposit verification — no admin needed."""
     from crypto_engine import verify_deposit as _chain_verify_deposit
     db  = get_db()
+    udb = get_user_db()
     uid = session['user_id']
 
     CRYPTO_NETWORKS = current_app.config['CRYPTO_NETWORKS']
@@ -54,7 +55,8 @@ def deposit():
     if not tx_hash or len(tx_hash) < 10:
         return jsonify({'success': False, 'error': 'Please enter a valid transaction hash.'}), 400
 
-    existing = db.execute(
+    # crypto_deposits lives in personal DB
+    existing = udb.execute(
         'SELECT id, status FROM crypto_deposits WHERE tx_hash=?', (tx_hash,)
     ).fetchone()
     if existing:
@@ -76,12 +78,13 @@ def deposit():
     if dep_id:
         udb.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('verifying', dep_id))
     else:
-        dep_id = db.execute(
+        udb.execute(
             'INSERT INTO crypto_deposits (user_id, network, tx_hash, amount, status, created_at) '
             'VALUES (?,?,?,0,?,?)',
             (uid, network, tx_hash, 'verifying', now)
-        ).fetchone()['id']
-    db.commit()
+        )
+        dep_id = udb.execute('SELECT last_insert_rowid()').fetchone()[0]
+    udb.commit()
 
     result = _chain_verify_deposit(
         network=network,
@@ -92,13 +95,12 @@ def deposit():
 
     if not result['ok']:
         udb.execute('UPDATE crypto_deposits SET status=? WHERE id=?', ('failed', dep_id))
-        dep_id = udb.lastrowid if dep_id is None else dep_id
-        db.commit()
+        udb.commit()
         return jsonify({'success': False, 'error': result['error']}), 400
 
     verified_amount = round(result['amount'], 6)
 
-    db.execute(
+    udb.execute(
         'UPDATE crypto_deposits SET status=?, amount=?, confirmed_at=? WHERE id=?',
         ('confirmed', verified_amount, datetime.now(timezone.utc).isoformat(), dep_id)
     )
@@ -110,6 +112,7 @@ def deposit():
         f'✅ Deposit confirmed on-chain! '
         f'${verified_amount:.2f} USDT via {net_label} added to your balance.')
     db.commit()
+    udb.commit()
 
     updated_balance = db.execute(
         'SELECT balance FROM users WHERE id=?', (uid,)

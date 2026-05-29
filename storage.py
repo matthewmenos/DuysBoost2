@@ -11,9 +11,6 @@ Bucket 2 (R2_DB_BUCKET_NAME):
 
 Both buckets share the same boto3 client (same R2 account credentials).
 
-All media previously stored as base64 blobs in PostgreSQL is uploaded
-here and replaced with a public CDN URL.
-
 R2 advantages over traditional S3/B2:
   • Zero egress fees — serving files to users is completely free
   • Cloudflare CDN built-in — files are served from 300+ edge locations

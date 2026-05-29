@@ -35,6 +35,7 @@ Flask helpers:
 import os
 import sqlite3
 import logging
+import tempfile
 import threading
 
 import boto3
@@ -402,9 +403,43 @@ CREATE TABLE IF NOT EXISTS pending_withdrawals (
     processed_at    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS subscription_tiers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    creator_id  INTEGER NOT NULL UNIQUE,
+    price_usd   REAL    NOT NULL DEFAULT 1.0,
+    title       TEXT    NOT NULL DEFAULT 'Supporter',
+    description TEXT,
+    perks       TEXT,
+    is_active   INTEGER DEFAULT 1,
+    created_at  TEXT    DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscriber_id INTEGER NOT NULL,
+    creator_id    INTEGER NOT NULL,
+    tier_id       INTEGER NOT NULL,
+    status        TEXT    DEFAULT 'active',
+    started_at    TEXT    DEFAULT (datetime('now')),
+    expires_at    TEXT,
+    UNIQUE (subscriber_id, creator_id)
+);
+CREATE TABLE IF NOT EXISTS tips (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_user_id INTEGER NOT NULL,
+    to_user_id   INTEGER NOT NULL,
+    post_id      INTEGER,
+    amount       REAL    NOT NULL,
+    message      TEXT,
+    created_at   TEXT    DEFAULT (datetime('now'))
+);
+
 -- Global indexes
 CREATE INDEX IF NOT EXISTS idx_pw_user         ON pending_withdrawals(user_id);
 CREATE INDEX IF NOT EXISTS idx_pw_status       ON pending_withdrawals(status);
+CREATE INDEX IF NOT EXISTS idx_sub_creator     ON subscriptions(creator_id);
+CREATE INDEX IF NOT EXISTS idx_sub_subscriber  ON subscriptions(subscriber_id);
+CREATE INDEX IF NOT EXISTS idx_tips_to         ON tips(to_user_id);
+CREATE INDEX IF NOT EXISTS idx_tips_from       ON tips(from_user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_user      ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created   ON posts(created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_score     ON posts(score);
@@ -637,8 +672,7 @@ def _personal_db_key(uid: int) -> str:
 
 
 def _personal_db_path(uid: int) -> str:
-    tmp = '/tmp'
-    os.makedirs(tmp, exist_ok=True)
+    tmp = tempfile.gettempdir()
     return os.path.join(tmp, f'user_{uid}.db')
 
 

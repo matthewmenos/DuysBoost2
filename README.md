@@ -191,7 +191,7 @@ Before going live:
 - [ ] Configure the webhook URL in Paystack dashboard
 - [ ] Fund your Paystack balance for transfers
 - [ ] Switch to live Paystack keys
-- [ ] Move off SQLite to PostgreSQL if expecting concurrency
+- [ ] Use a single gunicorn worker to avoid global.db write contention
 - [ ] Test end-to-end with a small real deposit + withdrawal
 
 ## Testing Without Paystack

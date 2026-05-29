@@ -75,9 +75,9 @@ def admin():
         banned_users = 0  # Column missing — migration will run on next request
     total_posts    = db.execute('SELECT COUNT(*) FROM posts').fetchone()[0]
     total_ads      = db.execute('SELECT COUNT(*) FROM ads').fetchone()[0]
-    total_vol      = db.execute('SELECT COALESCE(SUM(amount),0) FROM transactions').fetchone()[0]
+    total_vol      = db.execute('SELECT COALESCE(SUM(balance),0) FROM users').fetchone()[0]
     pending_wdrs   = db.execute(
-        "SELECT COUNT(*) FROM withdrawals WHERE status='pending'"
+        "SELECT COUNT(*) FROM pending_withdrawals WHERE status='pending'"
     ).fetchone()[0]
     open_reports   = db.execute(
         "SELECT COUNT(*) FROM reports WHERE status='open'"
@@ -96,11 +96,11 @@ def admin():
     """).fetchall()
     signup_chart = [dict(r) for r in signup_rows]
 
-    # ── Revenue last 7 days ───────────────────────────────────────────────────
+    # ── Revenue last 7 days (approved withdrawals as proxy — transactions live in personal DBs) ──
     revenue_rows = db.execute("""
         SELECT DATE(created_at) as day, ROUND(SUM(amount),2) as total
-        FROM transactions
-        WHERE type='deposit' AND created_at >= datetime('now','-7 days')
+        FROM pending_withdrawals
+        WHERE status='approved' AND created_at >= datetime('now','-7 days')
         GROUP BY day ORDER BY day
     """).fetchall()
     revenue_chart = [dict(r) for r in revenue_rows]
@@ -136,9 +136,9 @@ def admin():
         WHERE r.status='open' ORDER BY r.created_at DESC LIMIT 5
     """).fetchall()
     recent_wdrs = db.execute("""
-        SELECT w.*, u.username FROM withdrawals w
-        JOIN users u ON w.user_id=u.id
-        WHERE w.status='pending' ORDER BY w.created_at DESC LIMIT 5
+        SELECT pw.*, u.username FROM pending_withdrawals pw
+        JOIN users u ON pw.user_id=u.id
+        WHERE pw.status='pending' ORDER BY pw.created_at DESC LIMIT 5
     """).fetchall()
 
     return render_template('admin/overview.html',
@@ -244,11 +244,11 @@ def admin_user_detail(user_id):
         'following_count': db.execute('SELECT COUNT(*) FROM follows WHERE follower_id=?',  (user_id,)).fetchone()[0],
         'post_count':      db.execute('SELECT COUNT(*) FROM posts WHERE user_id=?',         (user_id,)).fetchone()[0],
         'like_count':      db.execute('SELECT COALESCE(SUM(like_count),0) FROM posts WHERE user_id=?', (user_id,)).fetchone()[0],
-        'total_earned':    db.execute(
+        'total_earned':    pudb.execute(
             "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type='earning'",
             (user_id,)
         ).fetchone()[0],
-        'total_spent':     db.execute(
+        'total_spent':     pudb.execute(
             "SELECT COALESCE(SUM(amount),0) FROM transactions WHERE user_id=? AND type IN ('ad_spend','boost_spend')",
             (user_id,)
         ).fetchone()[0],
@@ -678,16 +678,23 @@ def admin_delete_user(user_id):
     for _us in _ustories:
         _admin_delete_story_media(_us)
 
+    # Global DB tables only (personal DB is deleted from R2 below)
     for table, col in [
-        ('notifications', 'user_id'), ('transactions', 'user_id'),
-        ('withdrawals', 'user_id'), ('task_completions', 'worker_id'),
+        ('task_completions', 'worker_id'),
         ('post_likes', 'user_id'), ('bookmarks', 'user_id'),
         ('follows', 'follower_id'), ('follows', 'following_id'),
         ('search_history', 'user_id'), ('post_views', 'user_id'),
         ('poll_votes', 'user_id'), ('stories', 'user_id'),
         ('user_bans', 'user_id'), ('reports', 'reporter_id'),
+        ('subscriptions', 'subscriber_id'), ('subscriptions', 'creator_id'),
+        ('subscription_tiers', 'creator_id'),
+        ('tips', 'from_user_id'), ('tips', 'to_user_id'),
+        ('pending_withdrawals', 'user_id'),
     ]:
-        db.execute(f'DELETE FROM {table} WHERE {col}=?', (user_id,))
+        try:
+            db.execute(f'DELETE FROM {table} WHERE {col}=?', (user_id,))
+        except Exception:
+            pass
 
     # Delete all user posts — R2 media + cascade tables
     _uposts = db.execute('SELECT * FROM posts WHERE user_id=?', (user_id,)).fetchall()
@@ -705,12 +712,18 @@ def admin_delete_user(user_id):
     db.execute('DELETE FROM channel_members WHERE user_id=?', (user_id,))
     db.execute('DELETE FROM group_members WHERE user_id=?', (user_id,))
 
-    convs = [r[0] for r in db.execute(
-        'SELECT id FROM conversations WHERE user_a=? OR user_b=?', (user_id, user_id)
-    ).fetchall()]
-    for cid in convs:
-        db.execute('DELETE FROM messages WHERE conversation_id=?', (cid,))
-        db.execute('DELETE FROM conversations WHERE id=?', (cid,))
+    # Delete the user's personal DB from R2 (wallet, DMs, notifications live there)
+    try:
+        from db import _get_r2, _personal_db_key, _personal_db_path
+        import os as _os
+        bucket = current_app.config.get('R2_DB_BUCKET_NAME', '')
+        if bucket:
+            _get_r2().delete_object(Bucket=bucket, Key=_personal_db_key(user_id))
+        _pt = _personal_db_path(user_id)
+        if _os.path.exists(_pt):
+            _os.remove(_pt)
+    except Exception:
+        pass
 
     db.execute('DELETE FROM users WHERE id=?', (user_id,))
     db.commit()

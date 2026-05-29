@@ -816,9 +816,11 @@ def profile(username):
         (uid, target['id'])
     ).fetchone()) if not is_own and tier else False
 
-    # tips live in the target user's personal DB which we cannot access here;
-    # safely skip to avoid cross-DB crash
-    top_tips = []
+    top_tips = [dict(t) for t in db.execute("""
+        SELECT t.amount, t.message, u.username, u.avatar_url
+        FROM tips t JOIN users u ON u.id=t.from_user_id
+        WHERE t.to_user_id=? ORDER BY t.amount DESC LIMIT 3
+    """, (target['id'],)).fetchall()]
 
     target_online = False
     if target.get('show_online') and target.get('online_at') and not is_own:
@@ -1061,13 +1063,27 @@ def delete_account():
     # Leave groups/channels (don't delete them)
     db.execute('DELETE FROM channel_members WHERE user_id=?', (uid,))
     db.execute('DELETE FROM group_members   WHERE user_id=?', (uid,))
-    # Delete DMs
-    conv_ids = [r['id'] for r in db.execute(
-        'SELECT id FROM conversations WHERE user_a=? OR user_b=?', (uid, uid)
-    ).fetchall()]
-    for cid in conv_ids:
-        udb.execute('DELETE FROM messages     WHERE conversation_id=?', (cid,))
-        udb.execute('DELETE FROM conversations WHERE id=?', (cid,))
+    # Delete DMs (conversations and messages live in personal DB)
+    try:
+        conv_ids = [r['id'] for r in udb.execute(
+            'SELECT id FROM conversations WHERE user_a=? OR user_b=?', (uid, uid)
+        ).fetchall()]
+        for cid in conv_ids:
+            udb.execute('DELETE FROM messages     WHERE conversation_id=?', (cid,))
+            udb.execute('DELETE FROM conversations WHERE id=?', (cid,))
+    except Exception:
+        pass
+    # Delete global subscription/tip data
+    for tbl, col in [
+        ('subscriptions', 'subscriber_id'), ('subscriptions', 'creator_id'),
+        ('subscription_tiers', 'creator_id'),
+        ('tips', 'from_user_id'), ('tips', 'to_user_id'),
+        ('pending_withdrawals', 'user_id'),
+    ]:
+        try:
+            db.execute(f'DELETE FROM {tbl} WHERE {col}=?', (uid,))
+        except Exception:
+            pass
     # Delete user
     db.execute('DELETE FROM users WHERE id=?', (uid,))
     db.commit()

@@ -243,12 +243,40 @@ def _send_push(db, user_id, title, body, url='/feed'):
         pass
 
 
-def add_transaction(db, user_id, type_, amount, description, status='completed'):
-    db.execute(
-        'INSERT INTO transactions (user_id,type,amount,description,status) '
-        'VALUES (?,?,?,?,?)',
-        (user_id, type_, amount, description, status)
-    )
+def add_transaction(_db, user_id, type_, amount, description, status='completed'):
+    """
+    Insert a transaction into the target user's personal DB.
+    _db is accepted for API compatibility but ignored — routing is automatic.
+    If the current request's personal DB belongs to user_id, writes are in-request.
+    For other users, writes happen in a background thread (like add_notification).
+    """
+    _row = (user_id, type_, amount, description, status)
+    _sql = ('INSERT INTO transactions (user_id,type,amount,description,status) '
+            'VALUES (?,?,?,?,?)')
+
+    udb_conn = g.get('udb') if hasattr(g, 'udb') else None
+    udb_uid  = g.get('udb_uid') if hasattr(g, 'udb_uid') else None
+
+    if udb_conn and udb_uid == user_id:
+        udb_conn.execute(_sql, _row)
+        return
+
+    import threading as _threading
+
+    def _bg(uid, row):
+        try:
+            from db import _open_personal_db, _upload_personal_db
+            _cn, _pt = _open_personal_db(uid)
+            try:
+                _cn.execute(_sql, row)
+                _cn.commit()
+            finally:
+                _cn.close()
+                _upload_personal_db(uid, _pt)
+        except Exception:
+            pass
+
+    _threading.Thread(target=_bg, args=(user_id, _row), daemon=True).start()
 
 
 def check_and_award_referral_bonus(db, user_id):

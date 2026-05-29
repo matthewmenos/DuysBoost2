@@ -5,8 +5,8 @@ App factory replacing the monolithic app.py.
 Run locally:
     python app.py
 
-With gunicorn (multi-worker safe once you switch to PostgreSQL):
-    gunicorn "app:create_app()" -w 4 -b 0.0.0.0:5000
+With gunicorn (single-worker recommended — global.db syncs via R2):
+    gunicorn "app:create_app()" -w 1 -b 0.0.0.0:5000
 """
 import os
 import secrets
