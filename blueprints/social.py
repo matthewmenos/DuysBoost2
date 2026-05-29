@@ -262,18 +262,26 @@ def create_post():
                        (channel_id, post_id))
             db.execute('UPDATE channels SET post_count=post_count+1 WHERE id=?', (channel_id,))
 
-    if reply_to:
-        db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=?', (reply_to,))
-        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (reply_to,)).fetchone()
-        if parent and parent['user_id'] != uid:
-            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
-            add_notification(db, parent['user_id'], f'💬 @{me["username"]} replied to your post.')
-    if repost_of:
-        db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=?', (repost_of,))
-        parent = db.execute('SELECT user_id FROM posts WHERE id=?', (repost_of,)).fetchone()
-        if parent and parent['user_id'] != uid:
-            me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
-            add_notification(db, parent['user_id'], f'🔁 @{me["username"]} reposted your post.')
+    try:
+        if reply_to:
+            db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=?', (reply_to,))
+            parent = db.execute('SELECT user_id FROM posts WHERE id=?', (reply_to,)).fetchone()
+            if parent and parent['user_id'] != uid:
+                me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+                me_name = me['username'] if me else str(uid)
+                add_notification(db, parent['user_id'], f'💬 @{me_name} replied to your post.')
+    except Exception as _e:
+        logger.warning('reply notification failed: %s', _e)
+    try:
+        if repost_of:
+            db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=?', (repost_of,))
+            parent = db.execute('SELECT user_id FROM posts WHERE id=?', (repost_of,)).fetchone()
+            if parent and parent['user_id'] != uid:
+                me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+                me_name = me['username'] if me else str(uid)
+                add_notification(db, parent['user_id'], f'🔁 @{me_name} reposted your post.')
+    except Exception as _e:
+        logger.warning('repost notification failed: %s', _e)
 
     tags = list(set(t.lower() for t in re.findall(r'#(\w+)', body or '')))
     for tag in tags[:10]:
@@ -387,7 +395,7 @@ def post_replies_api(post_id):
                u.verified_tier
         FROM posts p
         JOIN users u ON u.id = p.user_id
-        WHERE p.reply_to = ?
+        WHERE p.reply_to_id = ?
         ORDER BY p.created_at ASC
         LIMIT 50
     """, (post_id,)).fetchall()
@@ -413,6 +421,7 @@ def post_replies_api(post_id):
 
 @bp.route('/post/<int:post_id>/delete', methods=['POST'])
 @login_required
+@csrf_exempt
 def delete_post(post_id):
     db  = get_db()
     uid = session['user_id']
@@ -510,6 +519,7 @@ def unrepost(post_id):
 
 @bp.route('/post/<int:post_id>/edit', methods=['POST'])
 @login_required
+@csrf_exempt
 def edit_post(post_id):
     db  = get_db()
     uid = session['user_id']
@@ -739,7 +749,8 @@ def toggle_follow(username):
                    (uid, target['id']))
         following = True
         me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
-        add_notification(db, target['id'], f'👤 @{me["username"]} started following you.')
+        me_name = me['username'] if me else str(uid)
+        add_notification(db, target['id'], f'👤 @{me_name} started following you.')
 
     update_counts(db, uid)
     update_counts(db, target['id'])
@@ -969,6 +980,7 @@ def change_username():
 
 @bp.route('/account/delete', methods=['POST'])
 @login_required
+@csrf_exempt
 def delete_account():
     """
     Hard-delete the current user's account and all their data.
@@ -1113,6 +1125,7 @@ def delete_account():
 @bp.route('/profile/upload-photo', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_UPLOAD)
+@csrf_exempt
 def upload_profile_photo():
     db    = get_db()
     uid   = session['user_id']
@@ -1498,6 +1511,7 @@ def poll_vote(post_id):
 
 @bp.route('/post/<int:post_id>/poll/edit', methods=['POST'])
 @login_required
+@csrf_exempt
 def poll_edit(post_id):
     db  = get_db()
     uid = session['user_id']
@@ -1531,6 +1545,7 @@ def poll_edit(post_id):
 
 @bp.route('/settings/saves', methods=['POST'])
 @login_required
+@csrf_exempt
 def toggle_post_saves():
     db  = get_db()
     uid = session['user_id']
@@ -1887,6 +1902,8 @@ def send_message(username):
     return jsonify({'success': True, 'message': {
         'id': msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
+        'view_once': view_once, 'view_once_opened': 0,
+        'reply_to_id': _msg_data.get('reply_to_id') if 'application/json' in (request.content_type or '') else None,
         'sender_id': uid,
         'sender_username': me['username'] if me else '',
         'sender_avatar': me['avatar_url'] if me else None,
@@ -2329,6 +2346,7 @@ def channel_detail(slug):
 
 @bp.route('/channel/<slug>/join', methods=['POST'])
 @login_required
+@csrf_exempt
 def channel_join(slug):
     db  = get_db()
     uid = session['user_id']
@@ -2348,6 +2366,7 @@ def channel_join(slug):
 
 @bp.route('/channel/<slug>/leave', methods=['POST'])
 @login_required
+@csrf_exempt
 def channel_leave(slug):
     db  = get_db()
     uid = session['user_id']
@@ -2364,6 +2383,7 @@ def channel_leave(slug):
 
 @bp.route('/channel/<slug>/edit', methods=['POST'])
 @login_required
+@csrf_exempt
 def channel_edit(slug):
     """Owner can update channel name, description and avatar."""
     import storage as _st
@@ -2402,6 +2422,7 @@ def channel_edit(slug):
 
 @bp.route('/channel/<slug>/promote', methods=['POST'])
 @login_required
+@csrf_exempt
 def channel_promote(slug):
     db  = get_db()
     uid = session['user_id']
@@ -2626,15 +2647,20 @@ def group_send(slug):
     new_msg_id = _cur.lastrowid
     db.execute('UPDATE users SET unread_group_count=unread_group_count+1 WHERE id IN '
                '(SELECT user_id FROM group_members WHERE group_id=? AND user_id!=?)', (g['id'], uid))
-    me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()
     db.commit()
+    try:
+        me = db.execute('SELECT username, avatar_url, display_name FROM users WHERE id=?', (uid,)).fetchone()
+    except Exception:
+        me = None
 
     return jsonify({'success': True, 'message': {
         'id': new_msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
         'view_once': view_once,
-        'sender_id': uid, 'sender_username': me['username'],
-        'sender_display': me['display_name'], 'sender_avatar': me['avatar_url'],
+        'sender_id': uid,
+        'sender_username': me['username'] if me else '',
+        'sender_display': me['display_name'] if me else '',
+        'sender_avatar': me['avatar_url'] if me else None,
         'reply_to_id': reply_to, 'created_at': now,
     }})
 
@@ -2671,6 +2697,7 @@ def group_poll_messages(slug):
 
 @bp.route('/group/<slug>/edit', methods=['POST'])
 @login_required
+@csrf_exempt
 def group_edit(slug):
     """Owner can update group name, description and avatar."""
     import storage as _st
@@ -2709,6 +2736,7 @@ def group_edit(slug):
 
 @bp.route('/group/<slug>/join', methods=['POST'])
 @login_required
+@csrf_exempt
 def group_join(slug):
     db  = get_db()
     uid = session['user_id']
@@ -2728,6 +2756,7 @@ def group_join(slug):
 
 @bp.route('/group/<slug>/leave', methods=['POST'])
 @login_required
+@csrf_exempt
 def group_leave(slug):
     db  = get_db()
     uid = session['user_id']

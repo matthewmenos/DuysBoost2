@@ -419,13 +419,18 @@ def create_app() -> Flask:
         return _j(_st.check_connection())
 
     # ── Error handlers ────────────────────────────────────────────────────────
-    # JSON-returning paths: /api/*, /post, /post/*, /user/*/follow, etc.
-    _JSON_PREFIXES = ('/api/', '/post', '/user/', '/auth/')
+    # JSON-returning paths — any route the JS calls with fetch()
+    _JSON_PREFIXES = (
+        '/api/', '/post', '/user/', '/auth/',
+        '/messages/', '/group/', '/channel/',
+        '/profile/', '/account/', '/settings/',
+        '/bookmarks', '/wallet', '/boost/',
+    )
 
     def _wants_json():
         p = request.path
-        # Explicit POST-only routes that always return JSON
-        if request.method == 'POST' and p in ('/post',):
+        # All mutating requests are AJAX and expect JSON
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             return True
         for prefix in _JSON_PREFIXES:
             if p.startswith(prefix):

@@ -82,6 +82,7 @@ def ads():
 @bp.route('/ads/create', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_AD)
+@csrf_exempt
 def create_ad():
     db  = get_db()
     uid = session['user_id']
@@ -131,6 +132,7 @@ def create_ad():
 
 @bp.route('/ads/<int:ad_id>/toggle', methods=['POST'])
 @login_required
+@csrf_exempt
 def toggle_ad(ad_id):
     db = get_db()
     ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
@@ -169,6 +171,7 @@ def tasks():
 @bp.route('/tasks/submit', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_TASK)
+@csrf_exempt
 def submit_task():
     db  = get_db()
     uid = session['user_id']
@@ -320,6 +323,7 @@ def boost_post(post_id):
 
 @bp.route('/post/<int:post_id>/boost/cancel', methods=['POST'])
 @login_required
+@csrf_exempt
 def cancel_boost(post_id):
     db  = get_db()
     uid = session['user_id']
@@ -611,6 +615,7 @@ def activity_feed():
 @bp.route('/post/<int:post_id>/tip', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_TIP)
+@csrf_exempt
 def tip_post(post_id):
     db  = get_db()
     uid = session['user_id']
@@ -656,6 +661,7 @@ def tip_post(post_id):
 @bp.route('/user/<username>/tip', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_TIP)
+@csrf_exempt
 def tip_user(username):
     db  = get_db()
     uid = session['user_id']
@@ -737,6 +743,7 @@ def creator_setup():
 
 @bp.route('/user/<username>/subscribe', methods=['POST'])
 @login_required
+@csrf_exempt
 @limiter.limit(LIMIT_SUBSCRIBE)
 def subscribe(username):
     db  = get_db()
@@ -805,6 +812,7 @@ def subscribe(username):
 
 @bp.route('/user/<username>/unsubscribe', methods=['POST'])
 @login_required
+@csrf_exempt
 def unsubscribe(username):
     db  = get_db()
     uid = session['user_id']

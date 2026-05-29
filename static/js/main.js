@@ -3,6 +3,36 @@
    All wiring is done via addEventListener on DOMContentLoaded so it works
    regardless of script-tag position.
    ========================================================================= */
+
+// ── Global fetch interceptor: attach CSRF token to every mutating request ──
+(function () {
+  var _csrfToken = '';
+  function _getToken() {
+    if (!_csrfToken) {
+      var m = document.querySelector('meta[name="csrf-token"]');
+      _csrfToken = m ? m.content : '';
+    }
+    return _csrfToken;
+  }
+  var _origFetch = window.fetch;
+  window.fetch = function (url, opts) {
+    opts = opts || {};
+    var method = (opts.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      var tok = _getToken();
+      if (tok) {
+        opts.headers = opts.headers || {};
+        if (opts.headers instanceof Headers) {
+          if (!opts.headers.has('X-CSRF-Token')) opts.headers.set('X-CSRF-Token', tok);
+        } else {
+          if (!opts.headers['X-CSRF-Token']) opts.headers['X-CSRF-Token'] = tok;
+        }
+      }
+    }
+    return _origFetch.call(this, url, opts);
+  };
+})();
+
 (function () {
   'use strict';
 

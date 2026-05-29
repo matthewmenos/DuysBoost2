@@ -204,9 +204,8 @@ def init_security(app) -> None:
                 'CSRF validation failed: endpoint=%s ip=%s',
                 endpoint, request.remote_addr
             )
-            if request.is_json or request.path.startswith('/api/'):
-                return jsonify({'success': False, 'error': 'Invalid CSRF token.'}), 403
-            abort(403)
+            # All POST requests from JS fetch() expect JSON — never return HTML 403
+            return jsonify({'success': False, 'error': 'Invalid CSRF token.'}), 403
 
     # ── Rate limit error handlers ─────────────────────────────────────────────
     @app.errorhandler(429)

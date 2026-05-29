@@ -128,6 +128,7 @@ def deposit():
 
 @bp.route('/wallet/crypto_address', methods=['POST'])
 @login_required
+@csrf_exempt
 def save_crypto_address():
     CRYPTO_NETWORKS = current_app.config['CRYPTO_NETWORKS']
     db      = get_db()
@@ -174,6 +175,7 @@ def remove_crypto_address():
 @bp.route('/wallet/withdraw', methods=['POST'])
 @login_required
 @limiter.limit(LIMIT_WITHDRAW)
+@csrf_exempt
 def withdraw():
     """Automatic on-chain withdrawal."""
     from crypto_engine import send_usdt as _chain_send_usdt
