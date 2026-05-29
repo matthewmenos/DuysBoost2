@@ -309,14 +309,37 @@ def withdraw():
 def referral():
     db  = get_db()
     uid = session['user_id']
+    udb = get_user_db()
     REFERRAL_BONUS = current_app.config['REFERRAL_BONUS']
-    referred_users = db.execute(
-        'SELECT * FROM users WHERE referred_by=? ORDER BY created_at DESC', (uid,)
-    ).fetchall()
-    total_earned = len(referred_users) * REFERRAL_BONUS
+
+    referred_users = [dict(u) for u in db.execute(
+        'SELECT id, username, display_name, avatar_url, created_at, referral_bonus_awarded '
+        'FROM users WHERE referred_by=? ORDER BY created_at DESC', (uid,)
+    ).fetchall()]
+
+    total_referred  = len(referred_users)
+    total_activated = sum(1 for u in referred_users if u.get('referral_bonus_awarded'))
+    total_earned    = total_activated * REFERRAL_BONUS
+
+    # Referral bonus payout history from personal transactions
+    try:
+        payout_history = [dict(r) for r in udb.execute(
+            "SELECT * FROM transactions WHERE type='referral_bonus' ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()]
+    except Exception:
+        payout_history = []
+
+    # Click count
+    me = db.execute('SELECT referral_click_count FROM users WHERE id=?', (uid,)).fetchone()
+    click_count = me['referral_click_count'] if me and me['referral_click_count'] else 0
+
     return render_template('referral.html',
                            referred_users=referred_users,
-                           total_earned=total_earned)
+                           total_earned=total_earned,
+                           total_referred=total_referred,
+                           total_activated=total_activated,
+                           payout_history=payout_history,
+                           click_count=click_count)
 
 
 @bp.route('/notifications')

@@ -182,9 +182,29 @@ def create_app() -> Flask:
             'CRYPTO_WALLETS':  CRYPTO_WALLETS,
             'CRYPTO_ENABLED':  any(CRYPTO_WALLETS.values()),
             'GOOGLE_ENABLED':  bool(os.environ.get('GOOGLE_CLIENT_ID')),
+            'VAPID_PUBLIC_KEY': os.environ.get('VAPID_PUBLIC_KEY', ''),
+            'PUSH_ENABLED':     bool(os.environ.get('VAPID_PUBLIC_KEY')),
             'open_report_count':  0,
             'pending_wdr_count':  0,
         }
+        # Bump online_at on every authenticated page load (GET only, throttled to 30s via session)
+        if user and request.method == 'GET' and not request.path.startswith('/static'):
+            try:
+                import time as _time
+                _now_ts = _time.time()
+                _last_bump = session.get('_online_bump', 0)
+                if _now_ts - _last_bump > 30:
+                    from db import get_db as _gdb
+                    from datetime import datetime as _dt2, timezone as _tz2
+                    _gdb().execute(
+                        'UPDATE users SET online_at=? WHERE id=?',
+                        (_dt2.now(_tz2.utc).isoformat(), user['id'])
+                    )
+                    _gdb().commit()
+                    session['_online_bump'] = _now_ts
+            except Exception:
+                pass
+
         # For admin pages, inject badge counts
         if user and user['is_admin']:
             try:
@@ -222,6 +242,111 @@ def create_app() -> Flask:
     from blueprints.stories import start_cleanup_thread
     start_cleanup_thread(app)
 
+    # ── Post scheduler — publishes scheduled posts when their time arrives ────
+    def _run_post_scheduler(app_ref):
+        import time as _t, sqlite3 as _sq3, logging as _lg
+        _log2 = _lg.getLogger('post_scheduler')
+        while True:
+            _t.sleep(60)
+            try:
+                with app_ref.app_context():
+                    from db import get_db as _gdb2
+                    from datetime import datetime as _dt3, timezone as _tz3
+                    _now = _dt3.now(_tz3.utc).isoformat()
+                    _db2 = _gdb2()
+                    _rows = _db2.execute(
+                        "SELECT id FROM posts WHERE status='scheduled' AND scheduled_at <= ?",
+                        (_now,)
+                    ).fetchall()
+                    for _r in _rows:
+                        _db2.execute(
+                            "UPDATE posts SET status='published', created_at=? WHERE id=?",
+                            (_now, _r['id'])
+                        )
+                    if _rows:
+                        _db2.commit()
+                        _log2.info('Published %d scheduled post(s)', len(_rows))
+            except Exception as _ex:
+                _log2.warning('Post scheduler error: %s', _ex)
+
+    import threading as _sched_t
+    _sched_t.Thread(target=_run_post_scheduler, args=(app,), daemon=True, name='post-scheduler').start()
+
+    # ── Daily boost reward payout ─────────────────────────────────────────────
+    def _run_payout_scheduler(app_ref):
+        """
+        Daily batch payout: for every user with balance >= $1 and a crypto address,
+        attempt on-chain USDT transfer. Falls back to creating a pending_withdrawals
+        record for admin approval if private key is not configured.
+        """
+        import time as _t2, logging as _lg2
+        _plog = _lg2.getLogger('payout_scheduler')
+        while True:
+            _t2.sleep(86400)  # once per day
+            try:
+                with app_ref.app_context():
+                    import os as _os2
+                    from db import get_db as _gdb3
+                    from datetime import datetime as _dt4, timezone as _tz4
+                    from helpers import add_transaction as _add_tx
+                    _db3 = _gdb3()
+                    _now4 = _dt4.now(_tz4.utc).isoformat()
+                    _min_bal = 1.0
+
+                    _eligible = _db3.execute(
+                        "SELECT id, username, balance, crypto_network, crypto_address "
+                        "FROM users WHERE balance >= ? AND crypto_address IS NOT NULL "
+                        "AND crypto_address != ''",
+                        (_min_bal,)
+                    ).fetchall()
+
+                    _sent = 0
+                    for _u in _eligible:
+                        _net  = _u['crypto_network'] or ''
+                        _addr = _u['crypto_address']
+                        _amt  = float(_u['balance'])
+                        _pk   = _os2.environ.get(
+                            f'PLATFORM_PRIVATE_KEY_{_net.upper()}', ''
+                        )
+                        if _pk:
+                            try:
+                                import crypto_engine as _ce
+                                _res = _ce.send_usdt(_net, _pk, _addr, _amt)
+                                if _res['ok']:
+                                    _db3.execute('UPDATE users SET balance=0 WHERE id=?', (_u['id'],))
+                                    _add_tx(_db3, _u['id'], 'withdraw', _amt,
+                                            f'Auto payout {_amt:.2f} USDT to {_addr}')
+                                    _db3.execute(
+                                        "INSERT INTO pending_withdrawals "
+                                        "(user_id,username,amount,method,address,status,created_at) "
+                                        "VALUES (?,?,?,'auto',?,'completed',?)",
+                                        (_u['id'], _u['username'], _amt, _addr, _now4)
+                                    )
+                                    _sent += 1
+                                else:
+                                    _plog.warning('Auto-payout failed uid=%s: %s', _u['id'], _res['error'])
+                            except Exception as _pe:
+                                _plog.warning('Auto-payout exception uid=%s: %s', _u['id'], _pe)
+                        else:
+                            # No private key — queue for admin
+                            try:
+                                _db3.execute(
+                                    "INSERT OR IGNORE INTO pending_withdrawals "
+                                    "(user_id,username,amount,method,address,status,created_at) "
+                                    "VALUES (?,?,?,'auto',?,'pending',?)",
+                                    (_u['id'], _u['username'], _amt, _addr or '', _now4)
+                                )
+                            except Exception:
+                                pass
+
+                    if _eligible:
+                        _db3.commit()
+                        _plog.info('Payout run: %d eligible, %d sent on-chain', len(_eligible), _sent)
+            except Exception as _ex2:
+                _plog.warning('Payout scheduler error: %s', _ex2)
+
+    _sched_t.Thread(target=_run_payout_scheduler, args=(app,), daemon=True, name='payout-scheduler').start()
+
     # ── Security (CSRF + rate limiting) ──────────────────────────────────────
     init_security(app)
 
@@ -238,6 +363,16 @@ def create_app() -> Flask:
             _log.getLogger(__name__).warning(
                 'init_db() failed at startup: %s', _e
             )
+
+    # ── Service worker at root scope ─────────────────────────────────────────
+    @app.route('/sw.js')
+    def service_worker():
+        from flask import send_from_directory, make_response
+        resp = make_response(send_from_directory('static', 'sw.js'))
+        resp.headers['Content-Type'] = 'application/javascript'
+        resp.headers['Service-Worker-Allowed'] = '/'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
 
     # ── Storage health check ─────────────────────────────────────────────────
     @app.route('/api/admin/storage-check')

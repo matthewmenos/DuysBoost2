@@ -1208,5 +1208,23 @@ function ctxDelete() {
 }
 window.ctxDelete = ctxDelete;
 
+// ── Online presence indicator ────────────────────────────────────────────
+(function() {
+  var dot = document.getElementById('status-dot');
+  var txt = document.getElementById('status-txt');
+  if (!dot || !txt) return;
+  function refresh() {
+    fetch('/api/online/check/{{ other.username | e }}')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        dot.className = d.online ? 'dot-online' : 'dot-offline';
+        txt.textContent = d.online ? 'Active now' : (d.last_seen ? 'Last seen ' + d.last_seen : 'Offline');
+      })
+      .catch(function() { dot.className = 'dot-offline'; txt.textContent = 'Offline'; });
+  }
+  refresh();
+  setInterval(refresh, 60000);
+})();
+
 </script>
 {% endblock %}

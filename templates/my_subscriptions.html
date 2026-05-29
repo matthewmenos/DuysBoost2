@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}My Subscriptions — DUYS Boost{% endblock %}
+{% block page_title %}My Subscriptions{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+<div class="feed-col">
+
+<div class="card" style="padding:20px 24px;margin-bottom:16px">
+  <h2 style="font-size:18px;font-weight:800;margin:0 0 4px">Your Subscriptions</h2>
+  <p class="text-muted" style="font-size:13.5px;margin:0">Creators you're currently subscribed to.</p>
+</div>
+
+{% if subs %}
+<div class="card" style="padding:0;overflow:hidden">
+  {% for s in subs %}
+  <div class="sub-row" id="sub-row-{{ s.creator_id }}"
+       style="display:flex;align-items:center;gap:14px;padding:16px 20px;border-bottom:1px solid var(--border)">
+    <a href="{{ url_for('social.profile', username=s.creator_username) }}" style="flex-shrink:0">
+      <div class="avatar avatar-md">
+        {% if s.creator_avatar %}<img src="{{ s.creator_avatar }}" alt="">
+        {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
+      </div>
+    </a>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:15px">
+        <a href="{{ url_for('social.profile', username=s.creator_username) }}" style="color:var(--text);text-decoration:none">
+          {{ s.creator_name or s.creator_username }}
+        </a>
+      </div>
+      <div class="text-muted" style="font-size:13px">@{{ s.creator_username }}</div>
+      <div style="font-size:12px;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap">
+        <span>
+          <span class="badge {% if s.status == 'active' %}badge-active{% else %}badge-failed{% endif %}">{{ s.status }}</span>
+        </span>
+        {% if s.tier_title %}
+        <span class="text-muted">{{ s.tier_title }}
+          {% if s.price_usd %} · {{ CURRENCY_SYMBOL }}{{ '%.2f'|format(s.price_usd|float) }}/mo{% endif %}
+        </span>
+        {% endif %}
+        {% if s.expires_at %}
+        <span class="text-muted">
+          Expires {{ s.expires_at[:10] }}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% if s.status == 'active' %}
+    <button class="btn btn-outline btn-sm"
+            onclick="cancelSub('{{ s.creator_username | e }}', this)"
+            style="flex-shrink:0;color:var(--red);border-color:var(--red)">
+      Cancel
+    </button>
+    {% else %}
+    <span class="text-muted" style="font-size:12px;flex-shrink:0">{{ s.status|capitalize }}</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state" style="padding:56px 24px;text-align:center">
+  <div style="font-size:40px;margin-bottom:12px">🔒</div>
+  <div class="empty-title">No subscriptions yet</div>
+  <div class="empty-text" style="margin-bottom:20px">Subscribe to creators to unlock exclusive content.</div>
+  <a href="{{ url_for('social.feed') }}" class="btn btn-primary">Browse Feed</a>
+</div>
+{% endif %}
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function cancelSub(username, btn) {
+  if (!confirm('Cancel subscription to @' + username + '? No refund will be issued.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+  try {
+    const r = await fetch('/user/' + username + '/unsubscribe', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Subscription cancelled.');
+      const row = document.getElementById('sub-row-' + btn.closest('[id]').id.replace('sub-row-',''));
+      if (row) {
+        btn.remove();
+        const badge = row.querySelector('.badge-active');
+        if (badge) { badge.textContent = 'cancelled'; badge.className = 'badge badge-failed'; }
+      }
+    } else {
+      showToast(d.error || 'Could not cancel.', 'error');
+      btn.disabled = false; btn.textContent = 'Cancel';
+    }
+  } catch (_) {
+    showToast('Network error.', 'error');
+    btn.disabled = false; btn.textContent = 'Cancel';
+  }
+}
+</script>
+{% endblock %}

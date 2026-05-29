@@ -146,7 +146,7 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
 
             def _bg_notify(uid, msg, icn, lnk):
                 try:
-                    from db import _open_personal_db, _upload_personal_db
+                    from db import _open_personal_db, _upload_personal_db, get_db as _gdb_bg
                     _cn, _pt = _open_personal_db(uid)
                     try:
                         try:
@@ -164,6 +164,16 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
                     finally:
                         _cn.close()
                         _upload_personal_db(uid, _pt)
+                    # Fire push notification via global db (push_subscriptions lives there)
+                    try:
+                        import sqlite3 as _sq3
+                        from flask import current_app as _ca
+                        _gdb = _sq3.connect(_ca.config['DB_PATH'])
+                        _gdb.row_factory = _sq3.Row
+                        _send_push(_gdb, uid, 'DUYS Boost', msg, lnk or '/feed')
+                        _gdb.close()
+                    except Exception:
+                        pass
                 except Exception as _e2:
                     import logging as _l2
                     _l2.getLogger(__name__).warning(
@@ -178,6 +188,44 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
     except Exception as _e:
         import logging as _log
         _log.getLogger(__name__).warning('add_notification failed uid=%s: %s', user_id, _e)
+
+
+def _send_push(db, user_id, title, body, url='/feed'):
+    """Fire-and-forget Web Push notification. Silently no-ops if pywebpush/VAPID not configured."""
+    try:
+        import os as _os, json as _json
+        private_key   = _os.environ.get('VAPID_PRIVATE_KEY', '')
+        claims_email  = _os.environ.get('VAPID_CLAIMS_EMAIL', '')
+        if not private_key:
+            return
+        subs = db.execute(
+            'SELECT id, endpoint, subscription_json FROM push_subscriptions WHERE user_id=?',
+            (user_id,)
+        ).fetchall()
+        if not subs:
+            return
+        from pywebpush import webpush, WebPushException
+        payload = _json.dumps({'title': title, 'body': body, 'url': url})
+        for sub in subs:
+            try:
+                sub_info = _json.loads(sub['subscription_json'])
+                webpush(
+                    subscription_info=sub_info,
+                    data=payload,
+                    vapid_private_key=private_key,
+                    vapid_claims={'sub': f'mailto:{claims_email or "push@duysboost.com"}'}
+                )
+            except WebPushException as _we:
+                if _we.response and _we.response.status_code in (404, 410):
+                    db.execute('DELETE FROM push_subscriptions WHERE id=?', (sub['id'],))
+                    try:
+                        db.commit()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def add_transaction(db, user_id, type_, amount, description, status='completed'):
@@ -275,6 +323,23 @@ def format_post(row, current_uid, db):
     p['bookmarked'] = bool(db.execute(
         'SELECT 1 FROM bookmarks WHERE user_id=? AND post_id=?',
         (current_uid, p['id'])).fetchone())
+    # Reactions: current user's reaction + per-type counts
+    try:
+        _ur = db.execute(
+            'SELECT reaction_type FROM post_reactions WHERE user_id=? AND post_id=?',
+            (current_uid, p['id'])
+        ).fetchone()
+        p['user_reaction'] = _ur['reaction_type'] if _ur else None
+        _rc = db.execute(
+            'SELECT reaction_type, COUNT(*) as cnt FROM post_reactions WHERE post_id=? GROUP BY reaction_type',
+            (p['id'],)
+        ).fetchall()
+        p['reaction_counts'] = {r['reaction_type']: r['cnt'] for r in _rc}
+        p['reaction_total']  = sum(p['reaction_counts'].values())
+    except Exception:
+        p['user_reaction']   = None
+        p['reaction_counts'] = {}
+        p['reaction_total']  = 0
     # Whether the current user has reposted or quoted this post
     p['reposted'] = bool(db.execute(
         'SELECT 1 FROM posts WHERE user_id=? AND repost_of_id=? LIMIT 1',
@@ -346,37 +411,53 @@ def format_post(row, current_uid, db):
 
 
 def format_post_with_poll(row, uid, db):
-    """format_post plus inline poll data."""
+    """format_post plus inline poll data. Sets flat keys used by post_card.html."""
     p = format_post(row, uid, db)
     if p and p.get('post_type') == 'poll':
         options = db.execute(
-            'SELECT * FROM poll_options WHERE post_id=?', (p['id'],)
+            'SELECT * FROM poll_options WHERE post_id=? ORDER BY id', (p['id'],)
         ).fetchall()
         total_votes = sum(o['votes'] for o in options)
-        user_vote = db.execute(
+        user_vote_row = db.execute(
             'SELECT option_id FROM poll_votes WHERE post_id=? AND user_id=?',
             (p['id'], uid)
         ).fetchone()
-        p['poll'] = {
-            'options': [
-                {
-                    'id': o['id'],
-                    'label': o['label'],
-                    'votes': o['votes'],
-                    'pct': round(o['votes'] / total_votes * 100, 1) if total_votes else 0,
-                }
-                for o in options
-            ],
-            'total_votes': total_votes,
-            'user_vote': user_vote['option_id'] if user_vote else None,
-            'expired': (
-                p.get('poll_expires_at') and
-                p['poll_expires_at'] < datetime.now(timezone.utc).isoformat()
-            ),
-        }
+        user_vote_id  = user_vote_row['option_id'] if user_vote_row else None
+        now_iso = datetime.now(timezone.utc).isoformat()
+        expired = bool(p.get('poll_expires_at') and p['poll_expires_at'] < now_iso)
+
+        formatted_options = [
+            {
+                'id':    o['id'],
+                'label': o['label'],
+                'votes': o['votes'],
+                'pct':   round(o['votes'] / total_votes * 100, 1) if total_votes else 0,
+            }
+            for o in options
+        ]
+        # Flat keys expected by post_card.html
+        p['poll_options']   = formatted_options
+        p['poll_user_vote'] = user_vote_id
+        p['poll_ended']     = expired
+        p['poll_total']     = total_votes
+        # Countdown: seconds until expiry (or 0 if expired/no expiry)
+        if p.get('poll_expires_at') and not expired:
+            try:
+                _exp = datetime.fromisoformat(p['poll_expires_at'].replace('Z', ''))
+                if _exp.tzinfo is None:
+                    _exp = _exp.replace(tzinfo=timezone.utc)
+                p['poll_expires_in'] = max(0, int((_exp - datetime.now(timezone.utc)).total_seconds()))
+            except Exception:
+                p['poll_expires_in'] = 0
+        else:
+            p['poll_expires_in'] = 0
     else:
         if p:
-            p['poll'] = None
+            p['poll_options']   = None
+            p['poll_user_vote'] = None
+            p['poll_ended']     = False
+            p['poll_total']     = 0
+            p['poll_expires_in'] = 0
     return p
 
 
@@ -443,6 +524,7 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE user_id IN ({ph}) AND reply_to_id IS NULL '
+            f'AND (status IS NULL OR status=\'published\') '
             f'AND id NOT IN (SELECT post_id FROM channel_posts) '
             f'ORDER BY score DESC LIMIT 60',
             following_ids
@@ -457,7 +539,8 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
             f'SELECT DISTINCT p.id, p.score FROM posts p '
             f'JOIN post_likes l ON l.post_id=p.id '
             f'WHERE l.user_id IN ({ph}) AND p.user_id != ? '
-            f'AND p.reply_to_id IS NULL ORDER BY p.score DESC LIMIT 40',
+            f'AND p.reply_to_id IS NULL AND (p.status IS NULL OR p.status=\'published\') '
+            f'ORDER BY p.score DESC LIMIT 40',
             following_ids + [uid]
         ).fetchall()
         for r in rows:
@@ -472,6 +555,7 @@ def get_personalized_post_ids(db, uid, limit=20, offset=0):
         rows = db.execute(
             f'SELECT id, score FROM posts '
             f'WHERE id NOT IN ({ph}) AND reply_to_id IS NULL AND user_id != ? '
+            f'AND (status IS NULL OR status=\'published\') '
             f'AND id NOT IN (SELECT post_id FROM channel_posts) '
             f'ORDER BY score DESC LIMIT ?',
             known + [uid, need + 20]

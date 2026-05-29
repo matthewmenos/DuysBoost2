@@ -174,6 +174,13 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     created_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, post_id)
 );
+CREATE TABLE IF NOT EXISTS post_reactions (
+    user_id       INTEGER NOT NULL,
+    post_id       INTEGER NOT NULL,
+    reaction_type TEXT    NOT NULL DEFAULT 'heart',
+    created_at    TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, post_id)
+);
 CREATE TABLE IF NOT EXISTS post_views (
     post_id    INTEGER NOT NULL,
     user_id    INTEGER NOT NULL,
@@ -370,6 +377,14 @@ CREATE TABLE IF NOT EXISTS search_history (
     query       TEXT    NOT NULL,
     result_type TEXT    DEFAULT 'mixed',
     created_at  TEXT    DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL,
+    endpoint          TEXT    NOT NULL UNIQUE,
+    subscription_json TEXT    NOT NULL,
+    created_at        TEXT    DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS pending_withdrawals (
@@ -833,6 +848,15 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('post_boosts', 'reward_per_engage', 'REAL DEFAULT 0.05'),
         ('post_boosts', 'engage_type',   "TEXT DEFAULT 'like'"),
         ('post_boosts', 'target_count',  'INTEGER DEFAULT 0'),
+        # post scheduling
+        ('posts', 'scheduled_at',        'TEXT'),
+        ('posts', 'status',              "TEXT DEFAULT 'published'"),
+        # report moderation notes
+        ('reports', 'notes',             'TEXT'),
+        ('reports', 'reviewed_by',       'INTEGER'),
+        ('reports', 'reviewed_at',       'TEXT'),
+        # referral click tracking
+        ('users', 'referral_click_count', 'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()

@@ -105,6 +105,26 @@ def admin():
     """).fetchall()
     revenue_chart = [dict(r) for r in revenue_rows]
 
+    # ── Daily posts last 7 days ───────────────────────────────────────────────
+    posts_chart = [dict(r) for r in db.execute("""
+        SELECT DATE(created_at) as day, COUNT(*) as cnt
+        FROM posts
+        WHERE created_at >= datetime('now','-7 days')
+        GROUP BY day ORDER BY day
+    """).fetchall()]
+
+    # ── Top earners (by balance) ──────────────────────────────────────────────
+    top_earners = [dict(r) for r in db.execute("""
+        SELECT username, display_name, balance FROM users
+        WHERE balance > 0 ORDER BY balance DESC LIMIT 5
+    """).fetchall()]
+
+    # ── Top posters ───────────────────────────────────────────────────────────
+    top_posters = [dict(r) for r in db.execute("""
+        SELECT username, display_name, post_count FROM users
+        WHERE post_count > 0 ORDER BY post_count DESC LIMIT 5
+    """).fetchall()]
+
     # ── Recent activity feed ──────────────────────────────────────────────────
     recent_users = db.execute(
         'SELECT id,username,display_name,avatar_url,created_at,is_banned '
@@ -128,6 +148,7 @@ def admin():
         pending_wdrs=pending_wdrs, open_reports=open_reports,
         total_reviews=total_reviews, avg_rating=avg_rating,
         signup_chart=signup_chart, revenue_chart=revenue_chart,
+        posts_chart=posts_chart, top_earners=top_earners, top_posters=top_posters,
         recent_users=recent_users, recent_reports=recent_reports,
         recent_wdrs=recent_wdrs,
     )
@@ -313,6 +334,7 @@ def admin_reports():
 
     counts = {
         'open':      db.execute("SELECT COUNT(*) FROM reports WHERE status='open'").fetchone()[0],
+        'reviewing': db.execute("SELECT COUNT(*) FROM reports WHERE status='reviewing'").fetchone()[0],
         'reviewed':  db.execute("SELECT COUNT(*) FROM reports WHERE status='reviewed'").fetchone()[0],
         'dismissed': db.execute("SELECT COUNT(*) FROM reports WHERE status='dismissed'").fetchone()[0],
         'actioned':  db.execute("SELECT COUNT(*) FROM reports WHERE status='actioned'").fetchone()[0],
@@ -742,19 +764,29 @@ def admin_delete_post(post_id):
 def action_report(report_id):
     db          = get_db()
     admin_id    = session['user_id']
-    action      = request.json.get('action')   # dismiss | warn | delete | ban
+    action      = request.json.get('action')   # reviewing | dismiss | warn | delete | ban
     note        = (request.json.get('note') or '').strip()
 
     report = db.execute('SELECT * FROM reports WHERE id=?', (report_id,)).fetchone()
     if not report:
         return jsonify({'success': False, 'error': 'Report not found'}), 404
 
-    now       = datetime.now(timezone.utc).isoformat()
-    new_status = 'dismissed' if action == 'dismiss' else 'actioned'
+    now = datetime.now(timezone.utc).isoformat()
 
+    if action == 'reviewing':
+        db.execute(
+            'UPDATE reports SET status=\'reviewing\', reviewed_by=?, reviewed_at=? WHERE id=?',
+            (admin_id, now, report_id)
+        )
+        if note:
+            db.execute('UPDATE reports SET notes=? WHERE id=?', (note, report_id))
+        db.commit()
+        return jsonify({'success': True, 'new_status': 'reviewing'})
+
+    new_status = 'dismissed' if action == 'dismiss' else 'actioned'
     db.execute(
-        'UPDATE reports SET status=?, reviewed_by=?, reviewed_at=?, action_taken=? WHERE id=?',
-        (new_status, admin_id, now, action, report_id)
+        'UPDATE reports SET status=?, reviewed_by=?, reviewed_at=?, action_taken=?, notes=? WHERE id=?',
+        (new_status, admin_id, now, action, note or None, report_id)
     )
 
     if action == 'delete' and report['target_type'] == 'post':

@@ -80,7 +80,19 @@ def signup():
         session['user_id'] = user['id']
         # New accounts via Google are never admin
         return jsonify({'success': True, 'redirect': url_for('social.feed')})
-    return render_template('auth.html', mode='signup')
+    # Track referral link click (GET with ?ref= param)
+    ref_param = request.args.get('ref', '').strip()
+    if ref_param and request.method == 'GET':
+        try:
+            db = get_db()
+            db.execute(
+                'UPDATE users SET referral_click_count=COALESCE(referral_click_count,0)+1 '
+                'WHERE referral_code=?', (ref_param,)
+            )
+            db.commit()
+        except Exception:
+            pass
+    return render_template('auth.html', mode='signup', prefill_ref=ref_param)
 
 
 @bp.route('/login', methods=['GET', 'POST'])

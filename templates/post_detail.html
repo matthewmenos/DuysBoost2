@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "post_card.html" import render_post %}
+{% from "post_card.html" import render_post with context %}
 {% block title %}Post by @{{ post.author.username }} — DUYS Boost{% endblock %}
 {% block page_title %}Post{% endblock %}
 
@@ -72,11 +72,24 @@
       </div>
     </div>
 
-    <!-- Replies -->
+    <!-- Replies (threaded) -->
     {% if replies %}
     <div style="margin-top:4px">
       {% for reply in replies %}
-        {{ render_post(reply) }}
+        {{ render_post(reply, show_thread=reply.sub_replies|length > 0) }}
+        {% if reply.sub_replies %}
+        <div class="thread-replies" style="margin-left:44px;border-left:2px solid var(--border);padding-left:4px">
+          {% for sub in reply.sub_replies %}
+            {{ render_post(sub) }}
+          {% endfor %}
+          {% if reply.get('reply_count', 0) > reply.sub_replies|length %}
+          <a href="{{ url_for('social.post_detail', post_id=reply.id) }}"
+             class="btn btn-ghost btn-sm" style="margin:6px 0 6px 12px;font-size:12px">
+            View more replies →
+          </a>
+          {% endif %}
+        </div>
+        {% endif %}
       {% endfor %}
     </div>
     {% else %}

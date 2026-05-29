@@ -12,6 +12,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 {% block head_extra %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -128,6 +132,10 @@
           <a href="{{ url_for('boost.creator_setup') }}" class="nav-sub-item {% if request.endpoint in ['creator_setup','social.creator_setup'] %}active{% endif %}">
             <svg class="nav-icon " width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
             <span class="nav-label">My Tier</span>
+          </a>
+          <a href="{{ url_for('boost.my_subscriptions') }}" class="nav-sub-item {% if request.endpoint == 'boost.my_subscriptions' %}active{% endif %}">
+            <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+            <span class="nav-label">Subscriptions</span>
           </a>
         </div>
       </div>
@@ -1042,5 +1050,91 @@ window.gcSubmit = gcSubmit;
 </script>
 {% endif %}
 {% endblock %}
+
+{# ── Service Worker + Web Push registration ────────────────────────────── #}
+<script>
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+
+  var VAPID_PUBLIC_KEY = {{ VAPID_PUBLIC_KEY | tojson }};
+  var PUSH_ENABLED     = {{ 'true' if PUSH_ENABLED else 'false' }};
+  var IS_LOGGED_IN     = {{ 'true' if current_user else 'false' }};
+
+  // Register service worker
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    .then(function(reg) {
+      if (!PUSH_ENABLED || !IS_LOGGED_IN) return;
+      if (!('PushManager' in window)) return;
+
+      // Check current subscription state
+      reg.pushManager.getSubscription().then(function(existing) {
+        if (existing) return;  // already subscribed
+        // Only prompt if user hasn't dismissed before
+        if (localStorage.getItem('push_dismissed')) return;
+        // Show a subtle banner after 3 seconds
+        setTimeout(function() { showPushBanner(reg); }, 3000);
+      });
+    })
+    .catch(function() {});
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = window.atob(base64);
+    var output  = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; i++) { output[i] = rawData.charCodeAt(i); }
+    return output;
+  }
+
+  function showPushBanner(reg) {
+    if (document.getElementById('push-banner')) return;
+    var banner = document.createElement('div');
+    banner.id = 'push-banner';
+    banner.innerHTML =
+      '<span style="flex:1;font-size:13px">🔔 Enable push notifications to stay updated</span>' +
+      '<button id="push-allow-btn" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:5px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0">Enable</button>' +
+      '<button id="push-deny-btn" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;flex-shrink:0">&times;</button>';
+    banner.style.cssText = 'position:fixed;bottom:70px;left:12px;right:12px;max-width:560px;margin:auto;' +
+      'background:var(--surface);border:1px solid var(--border);border-radius:14px;' +
+      'padding:12px 16px;display:flex;align-items:center;gap:10px;z-index:8000;' +
+      'box-shadow:0 4px 24px rgba(0,0,0,.35);animation:fadeIn .2s ease';
+    document.body.appendChild(banner);
+
+    document.getElementById('push-deny-btn').addEventListener('click', function() {
+      localStorage.setItem('push_dismissed', '1');
+      banner.remove();
+    });
+    document.getElementById('push-allow-btn').addEventListener('click', function() {
+      banner.remove();
+      subscribeToPush(reg);
+    });
+  }
+
+  async function subscribeToPush(reg) {
+    try {
+      var permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+      var sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      var subJson = sub.toJSON();
+      await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subJson)
+      });
+      if (typeof showToast === 'function') showToast('🔔 Push notifications enabled!');
+    } catch (err) {
+      console.warn('Push subscription failed:', err);
+    }
+  }
+
+  // Expose for manual trigger (e.g. settings page)
+  window._subscribeToPush = function() {
+    navigator.serviceWorker.ready.then(function(reg) { subscribeToPush(reg); });
+  };
+})();
+</script>
 </body>
 </html>

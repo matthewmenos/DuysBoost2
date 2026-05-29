@@ -485,23 +485,197 @@ function escapeHtml(s) {
   }
 })();
 
-// ── Post image lightbox (for feed media images) ───────────────────────────
+// ── Poll countdown timers ─────────────────────────────────────────────────
 (function() {
-  function openPostLightbox(postId) {
-    const card = document.querySelector(`[data-post-id="${postId}"]`);
-    if (!card) return;
-    const img = card.querySelector('.post-media-img');
-    if (!img) return;
-    const lb = document.createElement('div');
-    lb.className = 'post-lightbox';
-    lb.innerHTML = `<img src="${img.src}" alt="">`;
-    lb.addEventListener('click', () => lb.remove());
-    document.addEventListener('keydown', function esc(e) {
-      if (e.key === 'Escape') { lb.remove(); document.removeEventListener('keydown', esc); }
-    });
-    document.body.appendChild(lb);
+  function fmtCountdown(sec) {
+    if (sec <= 0) return 'Poll ended';
+    var d = Math.floor(sec / 86400);
+    var h = Math.floor((sec % 86400) / 3600);
+    var m = Math.floor((sec % 3600) / 60);
+    if (d > 0) return d + 'd ' + h + 'h left';
+    if (h > 0) return h + 'h ' + m + 'm left';
+    return m + 'm left';
   }
-  window.openPostLightbox = openPostLightbox;
+  function initCountdowns() {
+    document.querySelectorAll('.poll-countdown[data-expires-in]').forEach(function(el) {
+      if (el._timer) return;
+      var secs = parseInt(el.getAttribute('data-expires-in'), 10) || 0;
+      el.textContent = fmtCountdown(secs);
+      el._timer = setInterval(function() {
+        secs--;
+        if (secs <= 0) {
+          el.textContent = 'Poll ended';
+          clearInterval(el._timer);
+        } else {
+          el.textContent = fmtCountdown(secs);
+        }
+      }, 1000);
+    });
+  }
+  initCountdowns();
+  // Re-run when new posts are appended (infinite scroll)
+  document.addEventListener('postsAppended', initCountdowns);
+})();
+
+// ── Media lightbox — image & video with pinch-to-zoom ────────────────────
+(function() {
+  var _lb = null;
+
+  function openMediaLightbox(src, isVideo) {
+    if (_lb) closeLb();
+    isVideo = !!isVideo;
+
+    var lb = document.createElement('div');
+    lb.className = 'post-lightbox';
+    lb.setAttribute('role', 'dialog');
+    lb.setAttribute('aria-modal', 'true');
+    lb.style.cssText = 'cursor:default';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'lb-close-btn';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.addEventListener('click', closeLb);
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'lb-wrapper';
+
+    var media;
+    if (isVideo) {
+      media = document.createElement('video');
+      media.src = src;
+      media.controls = true;
+      media.autoplay = true;
+      media.playsInline = true;
+      media.style.cssText = 'max-width:94vw;max-height:88vh;border-radius:10px;display:block;touch-action:none';
+    } else {
+      media = document.createElement('img');
+      media.src = src;
+      media.alt = '';
+      media.draggable = false;
+      media.style.cssText = 'max-width:94vw;max-height:88vh;object-fit:contain;border-radius:10px;display:block;touch-action:none;user-select:none;-webkit-user-select:none';
+    }
+
+    wrapper.appendChild(media);
+    lb.appendChild(closeBtn);
+    lb.appendChild(wrapper);
+    document.body.appendChild(lb);
+    _lb = lb;
+
+    // Close on backdrop click (not on media)
+    lb.addEventListener('click', function(e) {
+      if (e.target === lb) closeLb();
+    });
+
+    // Keyboard close
+    function kClose(e) {
+      if (e.key === 'Escape') { closeLb(); document.removeEventListener('keydown', kClose); }
+    }
+    document.addEventListener('keydown', kClose);
+
+    // ── Pinch-to-zoom + pan + swipe-down (images only) ────────────────
+    if (!isVideo) {
+      var scale = 1, tx = 0, ty = 0;
+      var ptrs = {};
+      var pinchBase = 0, scaleBase = 1;
+      var panBase = null;
+      var lastTap = 0;
+      var swipeStartY = 0, swipePossible = false;
+
+      function applyXform() {
+        media.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      }
+
+      function ptrDist() {
+        var pts = Object.values(ptrs);
+        return Math.hypot(pts[1].clientX - pts[0].clientX, pts[1].clientY - pts[0].clientY);
+      }
+
+      media.addEventListener('pointerdown', function(e) {
+        media.setPointerCapture(e.pointerId);
+        ptrs[e.pointerId] = e;
+        var n = Object.keys(ptrs).length;
+        if (n === 2) {
+          pinchBase = ptrDist();
+          scaleBase = scale;
+          panBase = null;
+        } else if (n === 1) {
+          var now = Date.now();
+          if (now - lastTap < 300) {
+            // double-tap: toggle zoom
+            if (scale > 1) { scale = 1; tx = 0; ty = 0; } else { scale = 3; }
+            applyXform();
+          }
+          lastTap = now;
+          panBase = { x: e.clientX, y: e.clientY, tx: tx, ty: ty };
+          swipeStartY = e.clientY;
+          swipePossible = scale <= 1;
+        }
+      });
+
+      media.addEventListener('pointermove', function(e) {
+        ptrs[e.pointerId] = e;
+        var n = Object.keys(ptrs).length;
+        if (n >= 2) {
+          scale = Math.max(1, Math.min(6, scaleBase * ptrDist() / pinchBase));
+          swipePossible = false;
+          applyXform();
+        } else if (n === 1 && panBase) {
+          if (scale > 1) {
+            tx = panBase.tx + (e.clientX - panBase.x);
+            ty = panBase.ty + (e.clientY - panBase.y);
+            applyXform();
+          } else if (swipePossible) {
+            var dy = e.clientY - swipeStartY;
+            if (dy > 0) {
+              lb.style.opacity = Math.max(0, 1 - dy / 220).toFixed(2);
+              media.style.transform = 'translateY(' + dy + 'px)';
+            }
+          }
+        }
+      });
+
+      media.addEventListener('pointerup', function(e) {
+        var dy = e.clientY - swipeStartY;
+        if (swipePossible && dy > 90) {
+          closeLb(); return;
+        }
+        if (!swipePossible || dy <= 0) {
+          lb.style.opacity = '1';
+          applyXform();
+        } else {
+          lb.style.opacity = '1';
+          applyXform();
+        }
+        delete ptrs[e.pointerId];
+        panBase = null;
+        swipePossible = false;
+      });
+
+      media.addEventListener('pointercancel', function(e) {
+        delete ptrs[e.pointerId];
+      });
+
+      // Prevent context menu on long-press
+      media.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    }
+  }
+
+  function closeLb() {
+    if (_lb) { _lb.remove(); _lb = null; }
+  }
+
+  function openPostLightbox(postId) {
+    var card = document.querySelector('[data-post-id="' + postId + '"]');
+    if (!card) return;
+    var img  = card.querySelector('.post-media-img');
+    var vid  = card.querySelector('.post-media-video');
+    if (img) { openMediaLightbox(img.src, false); return; }
+    if (vid) { openMediaLightbox(vid.src, true);  return; }
+  }
+
+  window.openPostLightbox  = openPostLightbox;
+  window.openMediaLightbox = openMediaLightbox;
 })();
 
 // ── Poll voting ─────────────────────────────────────────────────────────────
@@ -588,16 +762,66 @@ window.sharePost = sharePost;
 
 // ── Post interaction functions (global — work on all pages) ──────────────────
 
-async function toggleLike(postId, btn) {
-  const r = await fetch(`/post/${postId}/like`, { method: 'POST' });
+// Reaction emoji map
+const REACTION_EMOJI = { fire:'🔥', heart:'❤️', laugh:'😂', target:'🎯', money:'💰' };
+
+function toggleReactionPicker(postId, event) {
+  event && event.stopPropagation();
+  const picker = document.getElementById('reaction-picker-' + postId);
+  if (!picker) return;
+  const isOpen = picker.style.display === 'flex';
+  // Close all open pickers first
+  document.querySelectorAll('.reaction-picker').forEach(function(p) { p.style.display = 'none'; });
+  if (!isOpen) {
+    picker.style.display = 'flex';
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', function _close(e) {
+        if (!picker.contains(e.target)) {
+          picker.style.display = 'none';
+          document.removeEventListener('click', _close);
+        }
+      });
+    }, 0);
+  }
+}
+window.toggleReactionPicker = toggleReactionPicker;
+
+async function sendReaction(postId, reaction, event) {
+  event && event.stopPropagation();
+  const picker = document.getElementById('reaction-picker-' + postId);
+  if (picker) picker.style.display = 'none';
+
+  const r = await fetch('/post/' + postId + '/react', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reaction })
+  });
   const d = await r.json();
   if (!d.success) return;
-  const icon = btn.querySelector('.action-icon');
+
+  const btn  = document.querySelector('#reaction-wrap-' + postId + ' .like-btn');
+  const icon = document.querySelector('.reaction-icon-' + postId);
   const cnt  = document.getElementById('like-count-' + postId);
-  icon.textContent = d.liked ? '❤️' : '🤍';
-  btn.classList.toggle('liked', d.liked);
-  btn.setAttribute('aria-pressed', d.liked);
-  if (cnt) cnt.textContent = d.like_count || '';
+
+  if (d.reaction) {
+    if (icon) icon.textContent = REACTION_EMOJI[d.reaction] || '❤️';
+    if (btn) { btn.classList.add('liked'); btn.setAttribute('aria-pressed', 'true'); }
+  } else {
+    if (icon) {
+      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>';
+    }
+    if (btn) { btn.classList.remove('liked'); btn.setAttribute('aria-pressed', 'false'); }
+  }
+  if (cnt) cnt.textContent = d.total || '';
+}
+window.sendReaction = sendReaction;
+
+async function toggleLike(postId, btn) {
+  // Legacy toggleLike — routes through reaction system using 'heart'
+  const picker = document.getElementById('reaction-picker-' + postId);
+  const hasReaction = btn && btn.classList.contains('liked');
+  await sendReaction(postId, hasReaction ? '' : 'heart', null);
 }
 window.toggleLike = toggleLike;
 

@@ -29,18 +29,28 @@
     <span style="font-size:12px;color:var(--muted)">{{ total }} users</span>
   </div>
 
+  <!-- Bulk action bar -->
+  <div id="user-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 16px;background:rgba(239,69,101,.08);border-bottom:1px solid rgba(239,69,101,.2)">
+    <span id="user-bulk-count" style="font-size:13px;font-weight:700;color:var(--red)">0 selected</span>
+    <button class="adm-btn danger" style="font-size:12px" onclick="bulkBanUsers(true)">🚫 Ban Selected</button>
+    <button class="adm-btn success" style="font-size:12px" onclick="bulkBanUsers(false)">🔓 Unban Selected</button>
+    <button class="adm-btn" style="font-size:12px" onclick="clearUserSelection()">✕ Clear</button>
+  </div>
+
   <!-- Table -->
   <div style="overflow-x:auto">
     <table class="adm-table">
       <thead>
         <tr>
+          <th style="width:32px"><input type="checkbox" id="user-select-all" onchange="toggleUserSelectAll(this)"></th>
           <th>User</th><th>Email</th><th>Balance</th>
           <th>Posts</th><th>Status</th><th>Joined</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for u in users %}
-        <tr>
+        <tr id="user-row-{{ u.id }}">
+          <td style="width:32px"><input type="checkbox" class="user-chk" value="{{ u.id }}" onchange="onUserCheckChange()"></td>
           <td>
             <div class="adm-user-cell">
               <div class="adm-avatar">
@@ -84,7 +94,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">
+        <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">
           No users found.
         </td></tr>
         {% endfor %}
@@ -133,6 +143,51 @@
 
 {% block scripts %}
 <script>
+// ── Bulk selection ───────────────────────────────────────────────────────
+function getUserSelected() {
+  return Array.from(document.querySelectorAll('.user-chk:checked')).map(function(c) { return parseInt(c.value); });
+}
+function onUserCheckChange() {
+  var sel = getUserSelected();
+  var bar = document.getElementById('user-bulk-bar');
+  var cnt = document.getElementById('user-bulk-count');
+  bar.style.display = sel.length ? 'flex' : 'none';
+  cnt.textContent = sel.length + ' selected';
+  var all = document.getElementById('user-select-all');
+  all.indeterminate = sel.length > 0 && sel.length < document.querySelectorAll('.user-chk').length;
+}
+function toggleUserSelectAll(cb) {
+  document.querySelectorAll('.user-chk').forEach(function(c) { c.checked = cb.checked; });
+  onUserCheckChange();
+}
+function clearUserSelection() {
+  document.querySelectorAll('.user-chk').forEach(function(c) { c.checked = false; });
+  document.getElementById('user-select-all').checked = false;
+  onUserCheckChange();
+}
+async function bulkBanUsers(doBan) {
+  var ids = getUserSelected();
+  if (!ids.length) return;
+  var action = doBan ? 'ban' : 'unban';
+  var reason = '';
+  if (doBan) {
+    reason = prompt('Ban reason (required):');
+    if (!reason) return;
+  }
+  if (!confirm((doBan ? 'Ban ' : 'Unban ') + ids.length + ' user(s)?')) return;
+  var ok = 0, fail = 0;
+  for (var id of ids) {
+    try {
+      var d = await api('/admin/user/' + id + '/ban', { action: action, reason: reason || undefined });
+      if (d.success) ok++;
+      else fail++;
+    } catch(_) { fail++; }
+  }
+  clearUserSelection();
+  showToast((doBan ? 'Banned ' : 'Unbanned ') + ok + ' user(s)' + (fail ? ', ' + fail + ' failed.' : '.'));
+  setTimeout(function() { location.reload(); }, 1200);
+}
+
 let _banUserId = null, _banIsBanned = false;
 
 function quickBan(userId, isBanned, username) {

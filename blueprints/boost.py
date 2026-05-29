@@ -863,6 +863,23 @@ def subscriber_list(username):
                            active_count=active_count, monthly_revenue=monthly_revenue)
 
 
+@bp.route('/my/subscriptions')
+@login_required
+def my_subscriptions():
+    """Subscriptions I'm paying for (as a subscriber)."""
+    db  = get_db()
+    uid = session['user_id']
+    subs = db.execute("""
+        SELECT s.*, u.username as creator_username, u.display_name as creator_name,
+               u.avatar_url as creator_avatar, t.title as tier_title, t.price_usd
+        FROM subscriptions s
+        JOIN users u ON u.id=s.creator_id
+        LEFT JOIN subscription_tiers t ON t.id=s.tier_id
+        WHERE s.subscriber_id=? ORDER BY s.started_at DESC
+    """, (uid,)).fetchall()
+    return render_template('my_subscriptions.html', subs=[dict(s) for s in subs])
+
+
 @bp.route('/creator/earnings')
 @login_required
 def creator_earnings():

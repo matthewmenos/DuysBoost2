@@ -51,13 +51,21 @@
   </div>
 </div>
 
-<div class="stats-grid-2" style="max-width:480px">
+<div class="stats-grid-4" style="margin-bottom:20px">
   <div class="stat-card">
-    <div class="stat-label">Total Referred</div>
-    <div class="stat-value cyan">{{ referred_users|length }}</div>
+    <div class="stat-label">Link Clicks</div>
+    <div class="stat-value cyan">{{ click_count }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Total Earned</div>
+    <div class="stat-label">Signed Up</div>
+    <div class="stat-value purple">{{ total_referred }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Activated</div>
+    <div class="stat-value yellow">{{ total_activated }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Earned</div>
     <div class="stat-value green">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(total_earned) }}</div>
   </div>
 </div>
@@ -68,14 +76,25 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Username</th><th>Joined</th><th>Reward</th></tr>
+        <tr><th>Username</th><th>Joined</th><th>Status</th><th>Reward</th></tr>
       </thead>
       <tbody>
       {% for u in referred_users %}
       <tr>
-        <td class="fw-700">{{ u.username }}</td>
+        <td class="fw-700">
+          <a href="{{ url_for('social.profile', username=u.username) }}" style="color:var(--text)">{{ u.username }}</a>
+        </td>
         <td class="text-xs text-muted">{{ u.created_at[:10] }}</td>
-        <td class="text-green fw-700">+{{ CURRENCY_SYMBOL }}1.00</td>
+        <td>
+          {% if u.referral_bonus_awarded %}
+          <span class="badge badge-active">Activated</span>
+          {% else %}
+          <span class="badge badge-pending">Pending</span>
+          {% endif %}
+        </td>
+        <td class="{% if u.referral_bonus_awarded %}text-green{% else %}text-muted{% endif %} fw-700">
+          {% if u.referral_bonus_awarded %}+{{ CURRENCY_SYMBOL }}1.00{% else %}—{% endif %}
+        </td>
       </tr>
       {% endfor %}
       </tbody>
@@ -89,6 +108,28 @@
   </div>
   {% endif %}
 </div>
+
+{% if payout_history %}
+<div class="card">
+  <div class="section-title mb-16">Payout History</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Description</th><th>Amount</th></tr>
+      </thead>
+      <tbody>
+      {% for tx in payout_history %}
+      <tr>
+        <td class="text-xs text-muted">{{ tx.created_at[:10] }}</td>
+        <td style="font-size:13px">{{ tx.description or 'Referral bonus' }}</td>
+        <td class="text-green fw-700">+{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(tx.amount|float) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

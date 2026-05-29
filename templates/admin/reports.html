@@ -5,7 +5,7 @@
 <div class="adm-card">
   <div class="adm-filters">
     <div class="adm-tabs">
-      {% for s in ['open','reviewed','dismissed','actioned'] %}
+      {% for s in ['open','reviewing','reviewed','dismissed','actioned'] %}
       <a href="{{ url_for('admin.admin_reports', status=s) }}"
          class="adm-tab {% if status==s %}active{% endif %}">
         {{ s.capitalize() }} <span class="cnt">({{ counts[s] }})</span>
@@ -17,7 +17,7 @@
   <div style="overflow-x:auto">
     <table class="adm-table">
       <thead>
-        <tr><th>ID</th><th>Reporter</th><th>Target</th><th>Reason</th><th>Status</th><th>Date</th><th>Actions</th></tr>
+        <tr><th>ID</th><th>Reporter</th><th>Target</th><th>Reason</th><th>Notes</th><th>Status</th><th>Date</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for r in reports %}
@@ -40,14 +40,23 @@
             <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                  title="{{ r.details or '' }}">{{ r.reason }}</div>
           </td>
+          <td style="max-width:160px">
+            {% if r.notes %}
+            <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.notes }}">{{ r.notes }}</div>
+            {% else %}<span style="color:var(--border)">—</span>{% endif %}
+          </td>
           <td>
-            <span class="badge badge-{{ 'active' if r.status=='actioned' else ('pending' if r.status=='open' else 'completed') }}">
+            <span class="badge badge-{{ 'active' if r.status=='actioned' else ('pending' if r.status in ('open','reviewing') else 'completed') }}">
               {{ r.status }}</span>
           </td>
           <td style="font-size:12px;color:var(--muted)">{{ (r.created_at or '')[:10] }}</td>
           <td>
-            {% if r.status == 'open' %}
+            {% if r.status in ('open', 'reviewing') %}
             <div class="actions" style="flex-wrap:wrap;gap:4px">
+              {% if r.status == 'open' %}
+              <button class="adm-btn" style="font-size:11px;color:var(--accent)"
+                      onclick="resolveReport({{ r.id }},'reviewing')">Review…</button>
+              {% endif %}
               <button class="adm-btn" style="font-size:11px"
                       onclick="resolveReport({{ r.id }},'dismiss')">Dismiss</button>
               <button class="adm-btn" style="font-size:11px;color:var(--yellow)"
@@ -63,7 +72,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">
+        <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted)">
           ✅ No {{ status }} reports.
         </td></tr>
         {% endfor %}
@@ -86,7 +95,10 @@
 <script>
 async function resolveReport(id, action) {
   let note = '';
-  if (['warn','ban'].includes(action)) {
+  if (action === 'reviewing') {
+    note = prompt('Add a note (optional):') || '';
+    if (note === null) return;
+  } else if (['warn','ban'].includes(action)) {
     note = prompt(`Note for ${action} action (shown to user):`);
     if (note === null) return;
   } else if (action === 'delete') {
@@ -94,8 +106,27 @@ async function resolveReport(id, action) {
   }
   const d = await api(`/admin/report/${id}/action`, { action, note });
   if (d.success) {
-    document.getElementById('report-row-' + id)?.remove();
-    showToast('✅ Report actioned');
+    if (action === 'reviewing') {
+      // Update row status badge in-place instead of removing
+      const row = document.getElementById('report-row-' + id);
+      if (row) {
+        const badge = row.querySelector('.badge');
+        if (badge) { badge.textContent = 'reviewing'; badge.className = 'badge badge-pending'; }
+        const actBtns = row.querySelector('.actions');
+        if (actBtns) {
+          const reviewBtn = actBtns.querySelector('[onclick*="reviewing"]');
+          if (reviewBtn) reviewBtn.remove();
+        }
+        if (note) {
+          const noteCell = row.cells[4];
+          if (noteCell) noteCell.innerHTML = '<div style="font-size:12px;color:var(--muted)">' + note + '</div>';
+        }
+      }
+      showToast('📋 Marked as reviewing');
+    } else {
+      document.getElementById('report-row-' + id)?.remove();
+      showToast('✅ Report actioned');
+    }
   } else showToast(d.error || 'Failed.', 'error');
 }
 </script>

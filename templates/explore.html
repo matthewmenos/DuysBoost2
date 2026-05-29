@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "post_card.html" import render_post %}
+{% from "post_card.html" import render_post with context %}
 {% block title %}{% if q %}{{ q }} — {% endif %}Explore — DUYS Boost{% endblock %}
 {% block page_title %}Explore{% endblock %}
 

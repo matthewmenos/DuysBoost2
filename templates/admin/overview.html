@@ -171,6 +171,41 @@
 
 </div>
 
+<!-- ── Posts chart + leaderboards ───────────────────────────────────────── -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
+
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Posts — 7 days
+      </span>
+    </div>
+    <div style="padding:16px;height:200px">
+      <canvas id="posts-chart"></canvas>
+    </div>
+  </div>
+
+  <div class="adm-card">
+    <div class="adm-card-header">
+      <span class="adm-card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        Top Earners
+      </span>
+      <a href="{{ url_for('admin.admin_users', sort='balance') }}" class="adm-btn">View all</a>
+    </div>
+    {% for u in top_earners %}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border)">
+      <a href="{{ url_for('admin.admin_user_detail', user_id=u.id if u.get('id') else 0) }}" style="font-size:13px;font-weight:700;color:var(--text);text-decoration:none">@{{ u.username }}</a>
+      <span style="font-weight:800;color:var(--green)">{{ CURRENCY_SYMBOL }}{{ '%.2f'|format(u.balance or 0) }}</span>
+    </div>
+    {% else %}
+    <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No earners yet.</div>
+    {% endfor %}
+  </div>
+
+</div>
+
 <!-- ── Bottom cards ──────────────────────────────────────────────────────── -->
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
 
@@ -280,6 +315,7 @@
 <script>
 const signupData  = {{ signup_chart  | tojson }};
 const revenueData = {{ revenue_chart | tojson }};
+const postsData   = {{ posts_chart   | tojson }};
 
 const CHART_DEFAULTS = {
   type: 'bar',
@@ -316,6 +352,7 @@ function makeChart(id, data, label, color) {
 
 makeChart('signup-chart',  signupData,  'New Users', '#1d9bf0');
 makeChart('revenue-chart', revenueData, 'Deposits',  '#2cb67d');
+makeChart('posts-chart',   postsData,   'Posts',     '#a855f7');
 
 // Live timestamp
 function updateTimestamp() {

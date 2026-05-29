@@ -225,15 +225,29 @@ def create_post():
     if body and len(body) > 500:
         return jsonify({'success': False, 'error': 'Max 500 characters.'}), 400
 
+    scheduled_at_raw = (request.form.get('scheduled_at') or '').strip() or None
+    scheduled_at = None
+    post_status  = 'published'
+    if scheduled_at_raw:
+        try:
+            _sched = datetime.fromisoformat(scheduled_at_raw)
+            if _sched.tzinfo is None:
+                _sched = _sched.replace(tzinfo=timezone.utc)
+            if _sched > datetime.now(timezone.utc):
+                scheduled_at = _sched.isoformat()
+                post_status  = 'scheduled'
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid scheduled time.'}), 400
+
     now = datetime.now(timezone.utc).isoformat()
     db.execute("""
         INSERT INTO posts (user_id, body, reply_to_id, repost_of_id, quote_body,
                            is_subscriber_only, media_url, media_mime,
-                           post_type, poll_expires_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                           post_type, poll_expires_at, scheduled_at, status, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (uid, body or None, reply_to, repost_of, quote_body,
           subscriber_only, media_url, media_mime if media_url else None,
-          post_type, poll_expires_at, now))
+          post_type, poll_expires_at, scheduled_at, post_status, now))
     post_id = db.lastrowid
 
     for opt_label in poll_options:
@@ -284,6 +298,10 @@ def create_post():
     update_counts(db, uid)
     recalc_post_score(db, post_id)
     db.commit()
+
+    if post_status == 'scheduled':
+        return jsonify({'success': True, 'scheduled': True,
+                        'message': f'Post scheduled for {scheduled_at[:16].replace("T", " ")} UTC'})
 
     try:
         post = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
@@ -468,10 +486,21 @@ def post_detail(post_id):
     row = db.execute('SELECT * FROM posts WHERE id=?', (post_id,)).fetchone()
     if not row:
         return render_template('error.html', code=404, message='Post not found.'), 404
-    post    = format_post(row, uid, db)
-    replies = [format_post(r, uid, db) for r in
-               db.execute('SELECT * FROM posts WHERE reply_to_id=? ORDER BY created_at ASC',
-                          (post_id,)).fetchall()]
+    post = format_post_with_poll(row, uid, db)
+
+    # Build 3-level thread: direct replies + their sub-replies
+    direct_reply_rows = db.execute(
+        'SELECT * FROM posts WHERE reply_to_id=? ORDER BY created_at ASC', (post_id,)
+    ).fetchall()
+    replies = []
+    for r in direct_reply_rows:
+        fp = format_post_with_poll(r, uid, db)
+        sub_rows = db.execute(
+            'SELECT * FROM posts WHERE reply_to_id=? ORDER BY created_at ASC LIMIT 10', (r['id'],)
+        ).fetchall()
+        fp['sub_replies'] = [format_post_with_poll(s, uid, db) for s in sub_rows]
+        replies.append(fp)
+
     return render_template('post_detail.html', post=post, replies=replies)
 
 
@@ -505,6 +534,66 @@ def toggle_like(post_id):
     recalc_post_score(db, post_id)
     db.commit()
     return jsonify({'success': True, 'liked': liked, 'like_count': new_count})
+
+
+@bp.route('/post/<int:post_id>/react', methods=['POST'])
+@login_required
+@limiter.limit(LIMIT_LIKE)
+@csrf_exempt
+def react_post(post_id):
+    """Add / change / remove a reaction on a post."""
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    reaction = (data.get('reaction') or '').strip()
+    VALID = {'fire', 'heart', 'laugh', 'target', 'money'}
+    if reaction not in VALID and reaction != '':
+        return jsonify({'success': False, 'error': 'Invalid reaction'}), 400
+
+    post = db.execute('SELECT user_id FROM posts WHERE id=?', (post_id,)).fetchone()
+    if not post:
+        return jsonify({'success': False, 'error': 'Not found'}), 404
+
+    existing = db.execute(
+        'SELECT reaction_type FROM post_reactions WHERE user_id=? AND post_id=?',
+        (uid, post_id)
+    ).fetchone()
+
+    if reaction == '' or (existing and existing['reaction_type'] == reaction):
+        # Remove reaction (toggle off)
+        db.execute('DELETE FROM post_reactions WHERE user_id=? AND post_id=?', (uid, post_id))
+        # Also remove from post_likes for consistency
+        db.execute('DELETE FROM post_likes WHERE user_id=? AND post_id=?', (uid, post_id))
+        db.execute('UPDATE posts SET like_count=MAX(0, like_count-1) WHERE id=? AND like_count>0', (post_id,))
+        active_reaction = None
+    else:
+        if existing:
+            db.execute('UPDATE post_reactions SET reaction_type=? WHERE user_id=? AND post_id=?',
+                       (reaction, uid, post_id))
+        else:
+            db.execute('INSERT INTO post_reactions (user_id,post_id,reaction_type) VALUES (?,?,?)',
+                       (uid, post_id, reaction))
+            # Keep like_count in sync for feed ranking
+            db.execute('INSERT OR IGNORE INTO post_likes (user_id,post_id) VALUES (?,?)', (uid, post_id))
+            db.execute('UPDATE posts SET like_count=like_count+1 WHERE id=?', (post_id,))
+            if post['user_id'] != uid:
+                me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+                EMOJI_MAP = {'fire':'🔥','heart':'❤️','laugh':'😂','target':'🎯','money':'💰'}
+                add_notification(db, post['user_id'],
+                    f'{EMOJI_MAP.get(reaction,"❤️")} @{me["username"]} reacted to your post.')
+        active_reaction = reaction
+
+    # Tally all reactions for this post
+    rows = db.execute(
+        'SELECT reaction_type, COUNT(*) as cnt FROM post_reactions WHERE post_id=? GROUP BY reaction_type',
+        (post_id,)
+    ).fetchall()
+    counts = {r['reaction_type']: r['cnt'] for r in rows}
+    total  = sum(counts.values())
+
+    recalc_post_score(db, post_id)
+    db.commit()
+    return jsonify({'success': True, 'reaction': active_reaction, 'counts': counts, 'total': total})
 
 
 @bp.route('/post/<int:post_id>/bookmark', methods=['POST'])
@@ -612,8 +701,10 @@ def profile(username):
             (target['id'], per, offset)
         ).fetchall()
     else:
+        _sched_filter = '' if is_own else "AND (status IS NULL OR status='published') "
         rows = db.execute(
             'SELECT * FROM posts WHERE user_id=? AND reply_to_id IS NULL '
+            + _sched_filter +
             'AND id NOT IN (SELECT post_id FROM channel_posts) '
             'ORDER BY created_at DESC LIMIT ? OFFSET ?',
             (target['id'], per, offset)
@@ -639,6 +730,16 @@ def profile(username):
     # safely skip to avoid cross-DB crash
     top_tips = []
 
+    target_online = False
+    if target.get('show_online') and target.get('online_at') and not is_own:
+        try:
+            _last = datetime.fromisoformat(target['online_at'].replace('Z', ''))
+            if _last.tzinfo is None:
+                _last = _last.replace(tzinfo=timezone.utc)
+            target_online = (datetime.now(timezone.utc) - _last).total_seconds() < 90
+        except Exception:
+            pass
+
     return render_template('profile.html', target=dict(target),
                            posts=posts, tab=tab,
                            page=page, has_more=has_more,
@@ -646,7 +747,8 @@ def profile(username):
                            followers=followers,
                            tier=dict(tier) if tier else None,
                            is_subscribed=is_subscribed,
-                           top_tips=top_tips)
+                           top_tips=top_tips,
+                           target_online=target_online)
 
 
 @bp.route('/profile/edit', methods=['GET', 'POST'])
@@ -1356,6 +1458,45 @@ def check_online(username):
                         'last_seen': row['online_at'][:16]})
     except Exception:
         return jsonify({'online': False})
+
+
+# ── Web Push subscriptions ────────────────────────────────────────────────────
+
+@bp.route('/api/push/subscribe', methods=['POST'])
+@login_required
+@csrf_exempt
+def push_subscribe():
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    endpoint = (data.get('endpoint') or '').strip()
+    if not endpoint:
+        return jsonify({'success': False, 'error': 'Missing endpoint'}), 400
+    import json as _json
+    sub_json = _json.dumps(data)
+    db.execute(
+        'INSERT INTO push_subscriptions (user_id, endpoint, subscription_json) VALUES (?,?,?) '
+        'ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, subscription_json=excluded.subscription_json',
+        (uid, endpoint, sub_json)
+    )
+    db.commit()
+    return jsonify({'success': True})
+
+
+@bp.route('/api/push/unsubscribe', methods=['POST'])
+@login_required
+@csrf_exempt
+def push_unsubscribe():
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    endpoint = (data.get('endpoint') or '').strip()
+    if endpoint:
+        db.execute('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?', (uid, endpoint))
+    else:
+        db.execute('DELETE FROM push_subscriptions WHERE user_id=?', (uid,))
+    db.commit()
+    return jsonify({'success': True})
 
 
 # ── Direct Messages ───────────────────────────────────────────────────────────

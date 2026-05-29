@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "post_card.html" import render_post %}
+{% from "post_card.html" import render_post with context %}
 {% block title %}Home — DUYS Boost{% endblock %}
 {% block page_title %}Home{% endblock %}
 
@@ -134,7 +134,12 @@
               </button>
               <!-- Poll -->
               <button type="button" class="compose-icon-btn" id="feed-poll-btn" onclick="feedTogglePoll()" title="Create poll" aria-label="Create poll"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
+              <!-- Schedule -->
+              <button type="button" class="compose-icon-btn" id="schedule-btn" onclick="toggleSchedulePicker()" title="Schedule post" aria-label="Schedule post">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </button>
               <input type="file" id="post-media-input" accept="image/*,video/*" multiple style="display:none">
+              <input type="datetime-local" id="compose-scheduled-at" style="display:none;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:2px 6px;background:var(--surface-2);color:var(--text)">
               <span class="compose-chars" id="compose-chars">500</span>
               <button type="button" class="sub-only-pill" id="sub-only-pill" title="Toggle audience">🌐 Public</button>
               <input type="checkbox" id="compose-sub-only" style="display:none">
@@ -561,6 +566,8 @@ if (composeInput) {
         fd.append('post_type', 'poll');
         fd.append('poll_options', JSON.stringify(pollOptions));
       }
+      const scheduledAt = document.getElementById('compose-scheduled-at');
+      if (scheduledAt && scheduledAt.value) fd.append('scheduled_at', scheduledAt.value);
       const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
       const r  = await fetch('/post', {
         method: 'POST',
@@ -580,11 +587,19 @@ if (composeInput) {
         composeInput.style.height = 'auto';
         postMediaFiles = []; renderPostPreviews();
         if (isPoll) { pollWrap.style.display='none'; document.getElementById('feed-poll-btn').style.color=''; }
+        const schedEl = document.getElementById('compose-scheduled-at');
+        if (schedEl) { schedEl.value = ''; schedEl.style.display = 'none'; }
+        const schedBtn = document.getElementById('schedule-btn');
+        if (schedBtn) schedBtn.style.color = '';
         localStorage.removeItem('compose_draft');
         const bar = document.getElementById('draft-restore-bar');
         if (bar) bar.remove();
-        prependPost(d.post);
-        showToast('Posted!');
+        if (d.scheduled) {
+          showToast(d.message || 'Post scheduled!');
+        } else {
+          prependPost(d.post);
+          showToast('Posted!');
+        }
       } else {
         showToast(d.error || 'Could not post.', 'error');
       }
@@ -594,6 +609,27 @@ if (composeInput) {
     }
   });
 }
+
+// ── Schedule picker ─────────────────────────────────────────────────────────
+function toggleSchedulePicker() {
+  var el = document.getElementById('compose-scheduled-at');
+  var btn = document.getElementById('schedule-btn');
+  if (!el) return;
+  if (el.style.display === 'none' || !el.style.display) {
+    el.style.display = 'inline-block';
+    // Default to 1 hour from now
+    var d = new Date(Date.now() + 3600000);
+    var pad = function(n) { return String(n).padStart(2,'0'); };
+    el.value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+    el.focus();
+    if (btn) btn.style.color = 'var(--accent)';
+  } else {
+    el.style.display = 'none';
+    el.value = '';
+    if (btn) btn.style.color = '';
+  }
+}
+window.toggleSchedulePicker = toggleSchedulePicker;
 
 // ── Reply ───────────────────────────────────────────────────────────────────
 

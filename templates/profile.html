@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "post_card.html" import render_post %}
+{% from "post_card.html" import render_post with context %}
 {% block title %}{{ target.display_name or target.username }} (@{{ target.username }}) — DUYS Boost{% endblock %}
 {% block page_title %}Profile{% endblock %}
 
@@ -171,9 +171,14 @@
   {% endif %}
 
   <div class="x-avatar-row">
+    <div class="x-avatar-wrap" style="position:relative;display:inline-block">
     <div class="x-avatar" {% if is_own %}onclick="document.getElementById('avatar-input').click()" title="Change photo"{% endif %}>
       {% if target.avatar_url %}<img src="{{ target.avatar_url }}" alt="{{ target.username }}">
       {% else %}<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg>{% endif %}
+    </div>
+    {% if target_online %}
+    <span class="profile-online-dot" title="Active now" aria-label="Active now"></span>
+    {% endif %}
     </div>
     {% if is_own %}
     <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
