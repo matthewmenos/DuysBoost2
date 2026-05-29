@@ -2548,7 +2548,8 @@ def group_detail(slug):
         WHERE gm.group_id=? AND gm.deleted_at IS NULL ORDER BY gm.created_at ASC LIMIT 100
     """, (g['id'],)).fetchall()]
     members = [dict(m) for m in db.execute("""
-        SELECT u.username, u.display_name, u.avatar_url, u.is_verified, gm.role, gm.joined_at
+        SELECT u.username, u.display_name, u.avatar_url,
+               u.is_verified, u.verified_tier, gm.role, gm.joined_at
         FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=?
         ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'mod' THEN 2 ELSE 3 END, gm.joined_at
         LIMIT 50
@@ -2594,6 +2595,8 @@ def group_send(slug):
     if msg_type != 'text' and not file_data:
         return jsonify({'success': False, 'error': 'No file data.'}), 400
 
+    view_once = int(bool(_d.get('view_once', 0) if 'application/json' in (request.content_type or '') else request.form.get('view_once', 0)))
+
     now = datetime.now(timezone.utc).isoformat()
 
     # Upload file attachment to B2 if present
@@ -2606,9 +2609,9 @@ def group_send(slug):
 
     msg_id = db.execute(
         'INSERT OR IGNORE INTO group_messages '
-        '(group_id,sender_id,body,msg_type,file_url,file_name,file_mime,reply_to_id,created_at) '
-        'VALUES (?,?,?,?,?,?,?,?,?)',
-        (g['id'], uid, body, msg_type, file_url, file_name, file_mime, reply_to, now)
+        '(group_id,sender_id,body,msg_type,file_url,file_name,file_mime,reply_to_id,view_once,created_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?)',
+        (g['id'], uid, body, msg_type, file_url, file_name, file_mime, reply_to, view_once, now)
     )
     new_msg_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
     db.execute('UPDATE users SET unread_group_count=unread_group_count+1 WHERE id IN '
@@ -2619,6 +2622,7 @@ def group_send(slug):
     return jsonify({'success': True, 'message': {
         'id': msg_id, 'body': body, 'msg_type': msg_type,
         'file_url': file_url, 'file_name': file_name, 'file_mime': file_mime,
+        'view_once': view_once,
         'sender_id': uid, 'sender_username': me['username'],
         'sender_display': me['display_name'], 'sender_avatar': me['avatar_url'],
         'reply_to_id': reply_to, 'created_at': now,
@@ -2758,6 +2762,33 @@ def view_once_open(msg_id):
         'UPDATE messages SET view_once_opened=1, file_url=NULL WHERE id=?', (msg_id,)
     )
     udb.commit()
+    return jsonify({'success': True})
+
+
+# ── Group view-once ───────────────────────────────────────────────────────────
+
+@bp.route('/api/group-message/<int:msg_id>/view-once-open', methods=['POST'])
+@login_required
+@csrf_exempt
+def group_view_once_open(msg_id):
+    """Mark group view-once message as opened and wipe its file from R2."""
+    import storage as _st
+    db  = get_db()
+    uid = session['user_id']
+    msg = db.execute('SELECT * FROM group_messages WHERE id=?', (msg_id,)).fetchone()
+    if not msg:
+        return jsonify({'success': False, 'error': 'Not found.'}), 404
+    if msg['sender_id'] == uid:
+        return jsonify({'success': False, 'error': 'Cannot open your own view-once.'}), 400
+    if msg.get('view_once_opened'):
+        return jsonify({'success': True, 'already_opened': True})
+    if msg.get('file_url'):
+        try:
+            _st.delete_object(msg['file_url'])
+        except Exception:
+            pass
+    db.execute('UPDATE group_messages SET view_once_opened=1, file_url=NULL WHERE id=?', (msg_id,))
+    db.commit()
     return jsonify({'success': True})
 
 

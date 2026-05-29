@@ -121,6 +121,31 @@ html, body { overflow: hidden !important; height: 100%; }
 .msg-fname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
 .msg-fsub  { font-size: 11px; color: var(--muted); }
 
+/* ── View-once messages (WhatsApp style) ─────────────────────────────────── */
+.vo-wrap {
+  position: relative; border-radius: 14px; overflow: hidden;
+  max-width: 240px; cursor: pointer; display: inline-block;
+}
+.vo-wrap img, .vo-wrap video { display: block; width: 100%; max-height: 220px; object-fit: cover; filter: blur(14px); }
+.vo-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(0,0,0,.38);
+}
+.vo-icon  { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,.22); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.vo-label { font-size: 12px; color: #fff; font-weight: 600; letter-spacing: .02em; }
+.vo-expired { pointer-events: none; }
+.vo-expired img, .vo-expired video { filter: none; opacity: .35; }
+.vo-own-badge {
+  position: absolute; bottom: 6px; right: 8px;
+  background: rgba(0,0,0,.55); border-radius: 99px;
+  padding: 2px 7px; font-size: 11px; color: #fff;
+  display: flex; align-items: center; gap: 4px;
+}
+/* View-once compose button dot */
+#vo-btn { position: relative; }
+#vo-dot { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: none; }
+
 /* ── WhatsApp-style voice note bubble ───────────────────────────────────── */
 .msg-voice {
   display: flex; align-items: center; gap: 10px;
@@ -446,7 +471,40 @@ html, body { overflow: hidden !important; height: 100%; }
         {% endif %}
         <div class="msg-col">
           {% set mt = m.msg_type or 'text' %}
-          {% if mt == 'image' and m.file_url %}
+          {# ── View-once media ── #}
+          {% if m.get('view_once') %}
+            {% if mine %}
+              {# Own view-once: show normally with eye indicator #}
+              {% if m.file_url %}
+              <div class="vo-wrap" style="cursor:default">
+                {% if mt == 'video' %}<video src="{{ m.file_url }}" style="filter:none" preload="metadata"></video>
+                {% else %}<img src="{{ m.file_url }}" alt="" style="filter:none">{% endif %}
+                <div class="vo-own-badge">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> 1
+                </div>
+              </div>
+              {% endif %}
+            {% elif not m.get('view_once_opened') and m.file_url %}
+              {# Recipient: tap to view #}
+              <div class="vo-wrap" onclick="openViewOnceMsg({{ m.id }}, this)">
+                {% if mt == 'video' %}<video src="{{ m.file_url }}" preload="metadata"></video>
+                {% else %}<img src="{{ m.file_url }}" alt="">{% endif %}
+                <div class="vo-overlay">
+                  <div class="vo-icon">👁</div>
+                  <div class="vo-label">Tap to view · 1</div>
+                </div>
+              </div>
+            {% else %}
+              {# Already opened (or file wiped) #}
+              <div class="vo-wrap vo-expired">
+                <div style="width:200px;height:80px;background:var(--surface-2)"></div>
+                <div class="vo-overlay">
+                  <div class="vo-icon" style="font-size:16px">⏱</div>
+                  <div class="vo-label">{{ 'Photo' if mt == 'image' else 'Video' }} · Opened</div>
+                </div>
+              </div>
+            {% endif %}
+          {% elif mt == 'image' and m.file_url %}
             <img class="msg-img" src="{{ m.file_url }}" alt="{{ m.file_name or 'image' }}" onclick="lbOpen('{{ m.file_url }}')" loading="lazy">
           {% elif mt == 'video' and m.file_url %}
             <video class="msg-vid" src="{{ m.file_url }}" controls preload="metadata"></video>
@@ -543,6 +601,11 @@ html, body { overflow: hidden !important; height: 100%; }
         </button>
         <button class="icn-btn" onclick="document.getElementById('fi').click()" title="File" aria-label="Attach file">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <!-- View-once toggle -->
+        <button class="icn-btn" id="vo-btn" onclick="toggleViewOnce(this)" title="View once — media deletes after viewing" aria-label="View once">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span id="vo-dot"></span>
         </button>
       </div>
       <input type="file" id="mi" accept="image/*,video/*" multiple style="display:none">
@@ -898,20 +961,42 @@ function buildBubble(msg, seq) {
   const av   = msg.sender_avatar
     ? '<img src="' + escapeHtml(msg.sender_avatar) + '" style="width:26px;height:26px;border-radius:50%;object-fit:cover" alt="">'
     : '<div class="avatar" style="width:26px;height:26px;font-size:10px;background:var(--gradient-primary);display:grid;place-items:center;color:#fff;font-weight:700;border-radius:50%">' + escapeHtml((msg.sender_username || '?')[0].toUpperCase()) + '</div>';
-  const mt = msg.msg_type || 'text';
+  const mt  = msg.msg_type || 'text';
+  const src = msg.file_url || '';
   let media = '';
-  if      (mt === 'image' && msg.file_url) media = '<img class="msg-img" src="' + escapeHtml(msg.file_url) + '" alt="" onclick="lbOpen(this.src)" loading="lazy">';
-  else if (mt === 'video' && msg.file_url) media = '<video class="msg-vid" src="' + escapeHtml(msg.file_url) + '" controls preload="metadata"></video>';
-  else if (mt === 'voice' && msg.file_url) {
+
+  if (msg.view_once) {
+    if (mine) {
+      // Own view-once: show with eye badge
+      if (src) {
+        var voInner = mt === 'video'
+          ? '<video src="'+escapeHtml(src)+'" preload="metadata" style="filter:none"></video>'
+          : '<img src="'+escapeHtml(src)+'" alt="" style="filter:none">';
+        media = '<div class="vo-wrap" style="cursor:default">'+voInner+'<div class="vo-own-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>1</div></div>';
+      }
+    } else if (src) {
+      // Recipient: tap-to-view blur
+      var voBubble = mt === 'video'
+        ? '<video src="'+escapeHtml(src)+'" preload="metadata"></video>'
+        : '<img src="'+escapeHtml(src)+'" alt="">';
+      media = '<div class="vo-wrap" onclick="openViewOnceMsg('+msg.id+',this)">'+voBubble+'<div class="vo-overlay"><div class="vo-icon">👁</div><div class="vo-label">Tap to view · 1</div></div></div>';
+    } else {
+      media = '<div class="vo-wrap vo-expired"><div style="width:200px;height:80px;background:var(--surface-2)"></div><div class="vo-overlay"><div class="vo-icon" style="font-size:16px">⏱</div><div class="vo-label">'+(mt==='video'?'Video':'Photo')+' · Opened</div></div></div>';
+    }
+  } else if (mt === 'image' && src) {
+    media = '<img class="msg-img" src="'+escapeHtml(src)+'" alt="" onclick="lbOpen(this.src)" loading="lazy">';
+  } else if (mt === 'video' && src) {
+    media = '<video class="msg-vid" src="'+escapeHtml(src)+'" controls preload="metadata"></video>';
+  } else if (mt === 'voice' && src) {
     var VH = [4,6,10,16,22,18,12,8,5,9,15,21,17,11,7,5,8,13,19,22,17,11,7,4,6,10,16,20,14,9];
     var bars = VH.map(function(h){ return '<div class="vbar" style="height:'+h+'px"></div>'; }).join('');
-    media = '<div class="msg-voice" data-src="'+escapeHtml(msg.file_url)+'">'
+    media = '<div class="msg-voice" data-src="'+escapeHtml(src)+'">'
       +'<button class="vplay-btn" onclick="vPlay(this)" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>'
       +'<div class="vwave-wrap"><div class="vwave">'+bars+'</div></div>'
       +'<span class="vdur">0:00</span>'
       +'</div>';
-  } else if (mt === 'file' && msg.file_url) {
-    media = '<a class="msg-file" href="' + escapeHtml(msg.file_url) + '" download="' + escapeHtml(msg.file_name || 'file') + '" target="_blank"><span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">' + escapeHtml(msg.file_name || 'file') + '</div><div class="msg-fsub">Tap to download</div></div></a>';
+  } else if (mt === 'file' && src) {
+    media = '<a class="msg-file" href="'+escapeHtml(src)+'" download="'+escapeHtml(msg.file_name||'file')+'" target="_blank"><span class="msg-file-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">'+escapeHtml(msg.file_name||'file')+'</div><div class="msg-fsub">Tap to download</div></div></a>';
   }
   const body = msg.body ? '<div class="msg-bub">' + escapeHtml(msg.body || '').replace(/\n/g, '<br>') + '</div>' : '';
   const TICK_SENT = '<svg viewBox="0 0 12 11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/></svg>';
@@ -935,27 +1020,32 @@ function toggleViewOnce(btn) {
 }
 window.toggleViewOnce = toggleViewOnce;
 
-async function openViewOnceMsg(msgId, btn) {
-  if (btn.dataset.opened) return;
-  btn.dataset.opened = '1';
-  btn.textContent = 'Opening…';
-  const r = await fetch('/messages/' + msgId + '/view-once-open', {
-    method: 'POST', headers: { 'X-CSRF-Token': CSRF }
-  });
-  const d = await r.json().catch(() => ({}));
-  if (d.success) {
-    // File was wiped — remove it from DOM
-    const bubble = btn.closest('.msg-bubble');
-    if (bubble) {
-      const mediaEl = bubble.querySelector('.msg-img, video, .msg-voice');
-      if (mediaEl) {
-        const notice = document.createElement('span');
-        notice.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic';
-        notice.textContent = '🔒 Opened — media deleted';
-        mediaEl.replaceWith(notice);
+async function openViewOnceMsg(msgId, wrapEl) {
+  if (!wrapEl || wrapEl.dataset.opened) return;
+  wrapEl.dataset.opened = '1';
+
+  // Show fullscreen via lightbox
+  const img = wrapEl.querySelector('img');
+  const vid = wrapEl.querySelector('video');
+  if (img) lbOpen(img.src);
+  else if (vid) lbOpen(vid.src);
+
+  // Delete on server after 1 s so user sees it
+  setTimeout(async function() {
+    try {
+      const r = await fetch('/messages/' + msgId + '/view-once-open', {
+        method: 'POST', headers: { 'X-CSRF-Token': CSRF }
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d.success || d.already_opened) {
+        // Replace with expired state
+        wrapEl.classList.add('vo-expired');
+        wrapEl.onclick = null;
+        const ovl = wrapEl.querySelector('.vo-overlay');
+        if (ovl) ovl.innerHTML = '<div class="vo-icon" style="font-size:16px">⏱</div><div class="vo-label">Photo · Opened</div>';
       }
-    }
-  }
+    } catch(_) {}
+  }, 1000);
 }
 window.openViewOnceMsg = openViewOnceMsg;
 

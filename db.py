@@ -910,8 +910,10 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         ('notifications', 'link',   'TEXT'),
         ('notifications', 'icon',   'TEXT'),
         # group_messages extra columns
-        ('group_messages', 'reactions',  'TEXT'),
-        ('group_messages', 'is_pinned',  'INTEGER DEFAULT 0'),
+        ('group_messages', 'reactions',        'TEXT'),
+        ('group_messages', 'is_pinned',        'INTEGER DEFAULT 0'),
+        ('group_messages', 'view_once',        'INTEGER DEFAULT 0'),
+        ('group_messages', 'view_once_opened', 'INTEGER DEFAULT 0'),
         # channel post_count
         ('channels', 'post_count',       'INTEGER DEFAULT 0'),
         # user_bans lifted columns

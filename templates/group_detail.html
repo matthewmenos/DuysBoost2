@@ -126,11 +126,62 @@ html, body { overflow: hidden !important; height: 100%; }
 
 /* Members sidebar */
 .grp-main-col { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+
+/* Desktop sidebar */
 .grp-members-panel {
   display: none; width: 220px; flex-shrink: 0;
   border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto;
 }
 @media (min-width: 900px) { .grp-members-panel.open { display: flex; flex-direction: column; } }
+
+/* Mobile: full-height drawer from the right */
+.grp-members-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+}
+.grp-members-backdrop.show { display: block; animation: fadeIn .15s; }
+
+@media (max-width: 899px) {
+  .grp-members-panel {
+    position: fixed !important;
+    right: 0; top: var(--topbar-height); bottom: 0;
+    z-index: 310; width: min(300px, 85vw);
+    display: flex !important; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: -4px 0 24px rgba(0,0,0,.3);
+  }
+  .grp-members-panel.open { transform: translateX(0); }
+}
+
+/* View-once media */
+.vo-wrap {
+  position: relative; border-radius: 14px; overflow: hidden;
+  max-width: 220px; cursor: pointer; display: inline-block;
+}
+.vo-wrap img, .vo-wrap video { display: block; width: 100%; max-height: 200px; object-fit: cover; filter: blur(14px); }
+.vo-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(0,0,0,.38);
+}
+.vo-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(255,255,255,.2); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.vo-label { font-size: 12px; color: #fff; font-weight: 600; letter-spacing: .02em; }
+.vo-expired { opacity: .55; pointer-events: none; filter: none; }
+.vo-expired .vo-overlay { background: rgba(0,0,0,.5); }
+
+/* Own view-once badge */
+.vo-own-badge {
+  position: absolute; bottom: 6px; right: 8px;
+  background: rgba(0,0,0,.55); border-radius: 99px;
+  padding: 2px 7px; font-size: 11px; color: #fff;
+  display: flex; align-items: center; gap: 4px;
+}
 .grp-mp-header {
   padding: 14px; font-weight: 700; font-size: 13.5px;
   border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -242,12 +293,33 @@ html, body { overflow: hidden !important; height: 100%; }
       </button>
     </div>
 
-    <!-- Messages -->
+    <!-- Messages — only members can read -->
+    {% if not is_member %}
+    <div style="flex:1;min-height:0;position:relative;overflow:hidden">
+      <!-- Blurred preview of first few messages for non-members -->
+      <div style="filter:blur(8px);pointer-events:none;padding:12px 10px;display:flex;flex-direction:column;gap:4px;height:100%;overflow:hidden;background:var(--bg-elevated)">
+        {% for m in messages[:4] %}
+        <div style="display:flex;gap:8px;align-items:flex-end;max-width:75%;{% if m.sender_id == current_user.id %}align-self:flex-end;flex-direction:row-reverse{% endif %}">
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--gradient-primary);flex-shrink:0"></div>
+          <div style="padding:8px 12px;border-radius:14px;font-size:14px;background:{% if m.sender_id == current_user.id %}var(--gradient-primary){% else %}var(--surface){% endif %};color:{% if m.sender_id == current_user.id %}#fff{% else %}var(--text){% endif %}">
+            {{ (m.body or '🖼')[:40] }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <!-- Lock overlay -->
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(0,0,0,.55);padding:24px;text-align:center">
+        <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:28px">🔒</div>
+        <div style="color:#fff;font-weight:800;font-size:18px;font-family:var(--font-display)">Members only</div>
+        <div style="color:rgba(255,255,255,.7);font-size:13.5px;max-width:260px;line-height:1.5">Join this group to read messages and participate in the conversation.</div>
+        <button class="btn btn-primary" onclick="joinGroup()" style="min-width:140px">Join group</button>
+      </div>
+    </div>
+    {% else %}
     <div class="grp-msgs" id="grp-msgs">
       {% if not messages %}
       <div style="text-align:center;padding:52px 20px;color:var(--muted);font-size:14px">
-        {% if is_member %}👋 Welcome to <strong>{{ g.name }}</strong>! Say hello.
-        {% else %}🔒 Join this group to see messages.{% endif %}
+        👋 Welcome to <strong>{{ g.name }}</strong>! Say hello.
       </div>
       {% endif %}
 
@@ -269,26 +341,59 @@ html, body { overflow: hidden !important; height: 100%; }
           <div class="grp-col">
             {% if not mine and not seq %}<div class="grp-sender" style="color:{{ color }}">{{ m.sender_display or m.sender_username }}</div>{% endif %}
             {% set mt = m.msg_type or 'text' %}
-            {% if mt == 'image' and m.file_data %}
-              <img class="grp-img" src="{{ m.file_data }}" alt="" onclick="lbOpen('{{ m.file_data }}')" loading="lazy">
-            {% elif mt == 'video' and m.file_data %}
-              <video class="grp-vid" src="{{ m.file_data }}" controls preload="metadata"></video>
-            {% elif mt == 'voice' and m.file_data %}
+            {% set has_file = m.file_url %}
+            {# View-once rendering #}
+            {% if m.get('view_once') %}
+              {% if mine %}
+                {# Own view-once: show with indicator #}
+                {% if has_file %}
+                <div class="vo-wrap" style="cursor:default">
+                  <img src="{{ m.file_url }}" alt="" style="filter:none">
+                  <div class="vo-own-badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    1
+                  </div>
+                </div>
+                {% endif %}
+              {% elif not m.get('view_once_opened') and has_file %}
+                {# Recipient hasn't viewed yet #}
+                <div class="vo-wrap" onclick="openGroupViewOnce(this, {{ m.id }}, '{{ mt }}', '{{ m.file_url | e }}')">
+                  {% if mt == 'image' %}<img src="{{ m.file_url }}" alt="">
+                  {% elif mt == 'video' %}<video src="{{ m.file_url }}" preload="metadata"></video>
+                  {% else %}<div style="width:200px;height:100px;background:var(--surface-2)"></div>{% endif %}
+                  <div class="vo-overlay">
+                    <div class="vo-icon">👁</div>
+                    <div class="vo-label">Tap to view · 1</div>
+                  </div>
+                </div>
+              {% else %}
+                {# Already opened — show expired state #}
+                <div class="vo-wrap vo-expired">
+                  <div style="width:180px;height:70px;background:var(--surface-2)"></div>
+                  <div class="vo-overlay">
+                    <div class="vo-icon" style="font-size:16px">⏱</div>
+                    <div class="vo-label">{{ 'Photo' if mt=='image' else 'Video' }} · Opened</div>
+                  </div>
+                </div>
+              {% endif %}
+            {% elif mt == 'image' and has_file %}
+              <img class="grp-img" src="{{ m.file_url }}" alt="" onclick="lbOpen('{{ m.file_url | e }}')" loading="lazy">
+            {% elif mt == 'video' and has_file %}
+              <video class="grp-vid" src="{{ m.file_url }}" controls preload="metadata"></video>
+            {% elif mt == 'voice' and has_file %}
               {% set VH = [4,6,10,16,22,18,12,8,5,9,15,21,17,11,7,5,8,13,19,22,17,11,7,4] %}
-              <div class="grp-voice" data-src="{{ m.file_data }}">
+              <div class="grp-voice" data-src="{{ m.file_url }}">
                 <button class="vplay-btn" onclick="grpVPlay(this)" aria-label="Play">
                   <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
                 <div class="vwave-wrap" style="flex:1">
-                  <div class="vwave">
-                    {% for h in VH %}<div class="vbar" style="height:{{ h }}px"></div>{% endfor %}
-                  </div>
+                  <div class="vwave">{% for h in VH %}<div class="vbar" style="height:{{ h }}px"></div>{% endfor %}</div>
                 </div>
                 <span class="vdur">0:00</span>
               </div>
-            {% elif mt == 'file' and m.file_data %}
-              <a class="grp-file" href="{{ m.file_data }}" download="{{ m.file_name or 'file' }}" target="_blank">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            {% elif mt == 'file' and has_file %}
+              <a class="grp-file" href="{{ m.file_url }}" download="{{ m.file_name or 'file' }}" target="_blank">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
                 <div><div style="font-weight:600;font-size:13px">{{ m.file_name or 'File' }}</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div>
               </a>
             {% endif %}
@@ -302,6 +407,7 @@ html, body { overflow: hidden !important; height: 100%; }
         <div class="typing-bub"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
       </div>
     </div>
+    {% endif %}
 
     <!-- Attach strip -->
     <div class="grp-attach-strip" id="grp-att-strip"></div>
@@ -315,6 +421,11 @@ html, body { overflow: hidden !important; height: 100%; }
         </button>
         <button class="grp-icn-btn" onclick="document.getElementById('grp-fi').click()" aria-label="File">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <!-- View-once toggle -->
+        <button class="grp-icn-btn" id="grp-vo-btn" onclick="grpToggleViewOnce(this)" title="View once — media deletes after viewing" aria-label="View once" style="position:relative">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span id="grp-vo-dot" style="display:none;position:absolute;top:8px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>
         </button>
         <input type="file" id="grp-mi" accept="image/*,video/*" multiple style="display:none">
         <input type="file" id="grp-fi" accept="*/*" style="display:none">
@@ -332,20 +443,31 @@ html, body { overflow: hidden !important; height: 100%; }
     {% endif %}
   </div>
 
-  <!-- Members sidebar -->
+  <!-- Members sidebar (desktop) + drawer backdrop (mobile) -->
+  <div class="grp-members-backdrop" id="grp-members-backdrop" onclick="closeMembers()"></div>
   <div class="grp-members-panel open" id="grp-members-panel">
     <div class="grp-mp-header">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       Members ({{ g.member_count or 0 }})
+      <!-- Close button visible on mobile -->
+      <button onclick="closeMembers()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;transition:background .15s" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     {% for m in members %}
     <div class="grp-mp-item">
-      <div class="grp-av-sm" style="width:34px;height:34px;font-size:12px">
+      <div class="grp-av-sm" style="width:36px;height:36px;font-size:12px;flex-shrink:0">
         {% if m.avatar_url %}<img src="{{ m.avatar_url }}" alt="">
         {% else %}<span style="color:#fff;font-weight:700">{{ (m.display_name or m.username or '?')[0].upper() }}</span>{% endif %}
       </div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.display_name or m.username }}</div>
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px">
+          {{ m.display_name or m.username }}
+          {%- if m.is_verified -%}
+            {%- set _t = m.verified_tier or 'blue' -%}
+            <span class="badge-verified tier-{{ _t }}" title="Verified" style="width:14px;height:14px;flex-shrink:0"><svg class="badge-shell" viewBox="0 0 22 22" fill="currentColor"><path d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568-.54.354-.969.854-1.24 1.44-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567.539-.354.969-.854 1.24-1.44.608.222 1.267.272 1.902.14.635-.13 1.22-.436 1.69-.882.445-.47.749-1.055.878-1.688.13-.633.08-1.29-.144-1.896.587-.274 1.087-.705 1.443-1.245.356-.54.555-1.17.574-1.817z"/></svg><svg class="badge-check" viewBox="0 0 10 10" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 5.5 4.2 7.5 8 3"/></svg></span>
+          {%- endif %}
+        </div>
         <div style="font-size:11px;color:var(--muted)">@{{ m.username }}</div>
         {% if m.role != 'member' %}
         <div class="grp-mp-role" style="color:{{ {'owner':'var(--yellow)','admin':'var(--accent-light)','mod':'var(--green)'}.get(m.role,'var(--muted)') }}">
@@ -436,7 +558,7 @@ async function doSend(){
   try{
     for(let i=0;i<pendingFiles.length;i++){
       const f=pendingFiles[i];
-      const r=await fetch('/group/'+GRP_SLUG+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg_type:f.type,file_data:f.dataUrl,file_name:f.name,file_mime:f.mime})});
+      const r=await fetch('/group/'+GRP_SLUG+'/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg_type:f.type,file_data:f.dataUrl,file_name:f.name,file_mime:f.mime,view_once:grpViewOnceActive?1:0})});
       const d=await r.json().catch(()=>null);
       if(r.ok&&d&&d.success) appendMsg(d.message);
       else showToast((d&&d.error)||'File send failed.','error');
@@ -453,20 +575,48 @@ async function doSend(){
   finally{sending=false;if(rbtn)rbtn.disabled=false;syncRbtn();}
 }
 
-function buildBubble(msg,mine){
-  const dir=mine?'mine':'them';
-  const avSrc=msg.sender_avatar?'<img src="'+escapeHtml(msg.sender_avatar)+'" alt="" style="width:30px;height:30px;border-radius:50%;object-fit:cover">'
-    :'<div class="grp-av-sm" style="background:var(--surface-2);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
-  const senderLine=!mine?'<div class="grp-sender">'+escapeHtml(msg.sender_display||msg.sender_username)+'</div>':'';
-  const mt=msg.msg_type||'text';
-  let media='';
-  if(mt==='image'&&msg.file_data) media='<img class="grp-img" src="'+escapeHtml(msg.file_data)+'" alt="" onclick="lbOpen(this.src)" loading="lazy">';
-  else if(mt==='video'&&msg.file_data) media='<video class="grp-vid" src="'+escapeHtml(msg.file_data)+'" controls preload="metadata"></video>';
-  else if(mt==='file'&&msg.file_data) media='<a class="grp-file" href="'+escapeHtml(msg.file_data)+'" download="'+escapeHtml(msg.file_name||'file')+'" target="_blank"><span style="font-size:20px"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">'+escapeHtml(msg.file_name||'file')+'</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div></a>';
-  else if(mt==='voice'&&msg.file_data){var VH2=[4,6,10,16,22,18,12,8,5,9,15,21,17,11,7,5,8,13,19,22,17,11,7,4];var bars2=VH2.map(function(h){return '<div class="vbar" style="height:'+h+'px"></div>';}).join('');media='<div class="grp-voice" data-src="'+escapeHtml(msg.file_data)+'"><button class="vplay-btn" onclick="grpVPlay(this)" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></button><div class="vwave-wrap" style="flex:1"><div class="vwave">'+bars2+'</div></div><span class="vdur">0:00</span></div>';}
-  const body=msg.body?'<div class="grp-bub">'+escapeHtml(msg.body||'').replace(/\n/g,'<br>')+'</div>':'';
-  const meta='<div class="grp-meta">'+(msg.created_at||'').substring(11,16)+'</div>';
-  return '<div class="grp-row '+dir+'" data-id="'+msg.id+'">'+(mine?'':'<div>'+avSrc+'</div>')+'<div class="grp-col">'+senderLine+media+body+meta+'</div></div>';
+function buildBubble(msg, mine) {
+  const dir = mine ? 'mine' : 'them';
+  const avSrc = msg.sender_avatar
+    ? '<img src="'+escapeHtml(msg.sender_avatar)+'" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+    : '<div class="grp-av-sm" style="width:28px;height:28px;font-size:10px;flex-shrink:0"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="width:55%;height:55%;opacity:.65"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm0 2c-4.418 0-8 2.686-8 6v2h16v-2c0-3.314-3.582-6-8-6z"/></svg></div>';
+  const senderLine = !mine
+    ? '<div class="grp-sender">'+escapeHtml(msg.sender_display || msg.sender_username)+'</div>'
+    : '';
+  const mt  = msg.msg_type || 'text';
+  const src = msg.file_url || '';  // API returns file_url
+  let media = '';
+
+  if (msg.view_once) {
+    if (mine) {
+      // Own view-once: show with eye badge
+      if (src) media = '<div class="vo-wrap" style="cursor:default"><img src="'+escapeHtml(src)+'" alt="" style="filter:none"><div class="vo-own-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>1</div></div>';
+    } else if (src) {
+      // Recipient: tap-to-view
+      var VOid = msg.id;
+      media = '<div class="vo-wrap" data-vomsgid="'+VOid+'" data-vomt="'+escapeHtml(mt)+'" onclick="openGroupViewOnce(this,'+VOid+',\''+escapeHtml(mt)+'\',\''+escapeHtml(src)+'\')">'
+        +(mt==='video'?'<video src="'+escapeHtml(src)+'" preload="metadata"></video>':'<img src="'+escapeHtml(src)+'" alt="">')
+        +'<div class="vo-overlay"><div class="vo-icon">👁</div><div class="vo-label">Tap to view · 1</div></div></div>';
+    } else {
+      media = '<div class="vo-wrap vo-expired"><div style="width:160px;height:60px;background:var(--surface-2)"></div><div class="vo-overlay"><div class="vo-icon" style="font-size:16px">⏱</div><div class="vo-label">'+(mt==='video'?'Video':'Photo')+' · Opened</div></div></div>';
+    }
+  } else if (mt === 'image' && src) {
+    media = '<img class="grp-img" src="'+escapeHtml(src)+'" alt="" onclick="lbOpen(\''+escapeHtml(src)+'\')" loading="lazy">';
+  } else if (mt === 'video' && src) {
+    media = '<video class="grp-vid" src="'+escapeHtml(src)+'" controls preload="metadata"></video>';
+  } else if (mt === 'file' && src) {
+    media = '<a class="grp-file" href="'+escapeHtml(src)+'" download="'+escapeHtml(msg.file_name||'file')+'" target="_blank"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg><div><div style="font-weight:600;font-size:13px">'+escapeHtml(msg.file_name||'file')+'</div><div style="font-size:11px;color:var(--muted)">Tap to download</div></div></a>';
+  } else if (mt === 'voice' && src) {
+    var VH2 = [4,6,10,16,22,18,12,8,5,9,15,21,17,11,7,5,8,13,19,22,17,11,7,4];
+    var bars2 = VH2.map(function(h){ return '<div class="vbar" style="height:'+h+'px"></div>'; }).join('');
+    media = '<div class="grp-voice" data-src="'+escapeHtml(src)+'"><button class="vplay-btn" onclick="grpVPlay(this)" aria-label="Play"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></button><div class="vwave-wrap" style="flex:1"><div class="vwave">'+bars2+'</div></div><span class="vdur">0:00</span></div>';
+  }
+
+  const body = msg.body ? '<div class="grp-bub">'+escapeHtml(msg.body||'').replace(/\n/g,'<br>')+'</div>' : '';
+  const meta = '<div class="grp-meta">'+(msg.created_at||'').substring(11,16)+'</div>';
+  return '<div class="grp-row '+dir+'" data-id="'+msg.id+'">'
+    +(mine ? '' : '<div style="flex-shrink:0">'+avSrc+'</div>')
+    +'<div class="grp-col">'+senderLine+media+body+meta+'</div></div>';
 }
 
 function appendMsg(msg){
@@ -554,6 +704,46 @@ window.grpVPlay = grpVPlay;
 function lbOpen(src){document.getElementById('lb-img').src=src;document.getElementById('lb').classList.add('open');}
 window.lbOpen=lbOpen;
 
+/* ── Group view-once toggle ──────────────────────────────────────── */
+let grpViewOnceActive = false;
+function grpToggleViewOnce(btn) {
+  grpViewOnceActive = !grpViewOnceActive;
+  const dot = document.getElementById('grp-vo-dot');
+  if (dot) dot.style.display = grpViewOnceActive ? 'block' : 'none';
+  btn.style.color = grpViewOnceActive ? 'var(--accent)' : '';
+  showToast(grpViewOnceActive ? '👁 View once on — media deletes after viewing' : 'View once off');
+}
+window.grpToggleViewOnce = grpToggleViewOnce;
+
+/* Open a group view-once message (fullscreen, then delete) */
+async function openGroupViewOnce(wrapEl, msgId, msgType, fileUrl) {
+  if (!fileUrl) return;
+  // Show fullscreen
+  const lb = document.getElementById('lb');
+  const img = document.getElementById('lb-img');
+  if (!lb || !img) return;
+  img.src = fileUrl;
+  lb.classList.add('open');
+  // Mark as opened after a 1-second delay so user actually sees the image
+  setTimeout(async function() {
+    try {
+      const r = await fetch('/api/group-message/' + msgId + '/view-once-open', {method:'POST'});
+      const d = await r.json().catch(()=>({}));
+      if (d.success || d.already_opened) {
+        // Replace the preview with expired state
+        if (wrapEl) {
+          wrapEl.classList.add('vo-expired');
+          const ovl = wrapEl.querySelector('.vo-overlay');
+          if (ovl) ovl.innerHTML = '<div class="vo-icon" style="font-size:16px">⏱</div><div class="vo-label">'+(msgType==='video'?'Video':'Photo')+' · Opened</div>';
+          // Remove the onclick so it can't be re-opened
+          wrapEl.onclick = null;
+        }
+      }
+    } catch(_) {}
+  }, 1000);
+}
+window.openGroupViewOnce = openGroupViewOnce;
+
 // Join / leave
 // Group edit modal placeholder — injected into DOM
 (function() {
@@ -607,10 +797,25 @@ async function leaveGroup(){
   else showToast(d.error||'Could not leave.','error');
 }
 
-function toggleMembers(){
-  const panel=document.getElementById('grp-members-panel');
-  panel.classList.toggle('open');
+/* ── Members panel: desktop sidebar + mobile full-height drawer ── */
+function toggleMembers() {
+  const panel = document.getElementById('grp-members-panel');
+  const bd    = document.getElementById('grp-members-backdrop');
+  const opening = !panel.classList.contains('open');
+  panel.classList.toggle('open', opening);
+  if (window.innerWidth < 900) {
+    if (bd) bd.classList.toggle('show', opening);
+    document.body.classList.toggle('no-scroll', opening);
+  }
 }
+function closeMembers() {
+  const panel = document.getElementById('grp-members-panel');
+  const bd    = document.getElementById('grp-members-backdrop');
+  panel.classList.remove('open');
+  if (bd) bd.classList.remove('show');
+  document.body.classList.remove('no-scroll');
+}
+window.closeMembers = closeMembers;
 
 // ── Group settings ────────────────────────────────────────────────────────────
 let _grpAvatarData = null;
