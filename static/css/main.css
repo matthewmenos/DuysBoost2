@@ -328,7 +328,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 
 .hamburger,
 .btn-icon {
-  width: 38px; height: 38px;
+  width: 44px; height: 44px;
   border-radius: 10px;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -989,10 +989,11 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .modal-title { font-family: var(--font-display); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
 .modal-close {
   background: var(--surface-2); border: 1px solid var(--border);
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 44px; height: 44px; border-radius: 10px;
   display: grid; place-items: center; cursor: pointer;
   color: var(--muted); font-size: 18px;
   transition: background var(--transition), color var(--transition);
+  flex-shrink: 0;
 }
 .modal-close:hover { background: var(--surface-3); color: var(--text); }
 
@@ -1384,7 +1385,7 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   align-items: center;
   justify-content: flex-start;
   gap:         4px;
-  height:      34px;        /* fixed height — every button same */
+  height:      44px;        /* 44px WCAG touch target */
   padding:     0 6px;
   border-radius: 99px;
   border:      none;
@@ -2178,13 +2179,15 @@ button:hover .i-icon, a:hover .i-icon,
 
 .nav-group-btn {
   display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 9px 14px 9px 16px;
+  width: 100%; padding: 10px 14px 10px 16px;
+  min-height: 44px;
   background: none; border: none;
   color: var(--text-dim); font-family: var(--font-body);
   font-size: 13.5px; font-weight: 600; cursor: pointer;
   border-radius: var(--radius); text-align: left;
   transition: background var(--transition), color var(--transition);
   position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 .nav-group-btn:hover { background: var(--surface-2); color: var(--text); }
 .nav-group-btn .nav-label { flex: 1; }
@@ -2222,12 +2225,14 @@ button:hover .i-icon, a:hover .i-icon,
 /* Sub-items */
 .nav-sub-item {
   display: flex; align-items: center; gap: 9px;
-  padding: 7px 10px 7px 12px;
+  padding: 10px 10px 10px 12px;
+  min-height: 44px;
   color: var(--text-dim); text-decoration: none;
   font-size: 13px; font-weight: 500;
   border-radius: var(--radius); margin: 1px 4px;
   transition: background var(--transition), color var(--transition);
   position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 .nav-sub-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-sub-item.active {
@@ -2289,6 +2294,72 @@ button:hover .i-icon, a:hover .i-icon,
 .story-viewers-handle {
   width: 40px; height: 4px; background: rgba(255,255,255,.2);
   border-radius: 99px; margin: 10px auto 16px;
+}
+
+/* ── Story pause badge ───────────────────────────────────────────────────── */
+.sv-pause-badge {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; z-index: 15;
+}
+.sv-pause-icon {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: pauseBadgePop .2s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes pauseBadgePop {
+  from { transform: scale(.5); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
+/* ── Story bottom bar (Instagram-style heart) ────────────────────────────── */
+.sv-bottom-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  z-index: 8;
+  padding: 16px 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; justify-content: flex-end; gap: 14px;
+  pointer-events: none; /* let taps pass through empty space */
+}
+.sv-bottom-bar > * { pointer-events: auto; }
+
+.sv-heart-btn {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255,255,255,.12);
+  border: 1.5px solid rgba(255,255,255,.22);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .15s cubic-bezier(.34,1.56,.64,1), background .15s;
+}
+.sv-heart-btn:hover  { background: rgba(255,255,255,.22); }
+.sv-heart-btn:active { transform: scale(.88); }
+.sv-heart-btn.reacted svg { fill: #f91880; stroke: #f91880; }
+@keyframes heartPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.45); }
+  70%  { transform: scale(.9); }
+  100% { transform: scale(1); }
+}
+.sv-heart-btn.heartpop { animation: heartPop .4s cubic-bezier(.34,1.56,.64,1); }
+
+/* ── Story pause/play button in header ───────────────────────────────────── */
+.story-pause-btn {
+  background: none; border: none; color: rgba(255,255,255,.85); font-size: 20px;
+  cursor: pointer; padding: 6px; line-height: 1; border-radius: 50%;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.story-pause-btn:hover { background: rgba(255,255,255,.15); }
+
+/* ── Float-up reaction emoji animation ──────────────────────────────────── */
+@keyframes floatUp {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  70%  { opacity: 1; transform: translateX(-50%) translateY(-80px) scale(1.25); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-130px) scale(.8); }
 }
 .story-viewer-item {
   display: flex; align-items: center; gap: 12px;

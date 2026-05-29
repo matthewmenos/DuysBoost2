@@ -191,22 +191,36 @@
             onclick="deleteCurrentStory()" title="Delete story">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
     </button>
+    <button class="story-pause-btn" id="sv-pause-btn" onclick="toggleStoryPause()" aria-label="Pause / Play" title="Pause / Play">
+      <svg id="sv-pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    </button>
     <button class="story-close-btn" onclick="closeStoryViewer()"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div class="story-media" id="sv-media"></div>
+  <!-- Pause badge overlay -->
+  <div class="sv-pause-badge" id="sv-pause-badge" style="display:none">
+    <div class="sv-pause-icon" id="sv-pause-icon-wrap">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+           id="sv-pause-badge-svg">
+        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+      </svg>
+    </div>
+  </div>
   <div class="story-caption" id="sv-caption" style="display:none"></div>
   <button class="story-nav-btn story-nav-prev" onclick="prevStory()"></button>
   <button class="story-nav-btn story-nav-next" onclick="nextStory()"></button>
 
-  <!-- Reaction bar (non-owners only) -->
-  <div id="sv-reaction-bar" style="display:none;
-    position:absolute;bottom:80px;left:50%;transform:translateX(-50%);
-    display:none;gap:6px;background:rgba(0,0,0,.55);
-    backdrop-filter:blur(12px);border-radius:99px;padding:6px 10px;
-    border:1px solid rgba(255,255,255,.15)">
-    <div id="sv-reaction-bar-inner" style="display:flex;gap:6px">
-      <!-- populated by JS -->
-    </div>
+  <!-- Bottom bar: Instagram-style ❤️ react button (non-owners only) -->
+  <div class="sv-bottom-bar" id="sv-bottom-bar" style="display:none">
+    <button class="sv-heart-btn" id="sv-heart-btn"
+            aria-label="React with ❤️"
+            title="Tap to react · Hold for more">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round" id="sv-heart-svg">
+        <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Viewers bottom sheet (owner only) -->
@@ -295,23 +309,61 @@ function openStoryGroup(groupIdx, storyIdx) {
 }
 window.openStoryGroup = openStoryGroup;
 
-let _svPaused = false;
+let _svPaused    = false;
+let _svPausedAt  = 0;   // progress-bar width (%) at time of pause
+let _svPauseTime = 0;   // timestamp when pause started
+
+/* Apply or lift the paused state without restarting the story */
+function _applyPauseState() {
+  const vid   = document.querySelector('#sv-media video');
+  const badge = document.getElementById('sv-pause-badge');
+  const fill  = document.getElementById('spf-' + _svStoryIdx);
+  const pBtn  = document.getElementById('sv-pause-icon');
+
+  if (_svPaused) {
+    clearTimeout(_svTimer);
+    /* Freeze progress bar at current width */
+    if (fill && fill.parentElement) {
+      const w  = fill.getBoundingClientRect().width;
+      const pw = fill.parentElement.getBoundingClientRect().width || 1;
+      _svPausedAt = Math.min(100, (w / pw) * 100);
+      fill.style.transition = 'none';
+      fill.style.width      = _svPausedAt + '%';
+    }
+    if (vid) vid.pause();
+    if (badge) badge.style.display = 'flex';
+    /* Switch header icon to "play" triangle */
+    if (pBtn) pBtn.innerHTML = '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/>';
+  } else {
+    if (vid) vid.play().catch(function(){});
+    if (badge) badge.style.display = 'none';
+    /* Switch header icon back to "pause" bars */
+    if (pBtn) pBtn.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+    /* Resume progress bar for remaining duration */
+    const remaining = Math.max(200, _svDuration * (1 - _svPausedAt / 100));
+    if (fill) {
+      fill.style.transition = 'width ' + remaining + 'ms linear';
+      setTimeout(function() { fill.style.width = '100%'; }, 20);
+    }
+    _svTimer = setTimeout(function() { nextStory(); }, remaining);
+  }
+}
 
 function toggleStoryPause() {
   _svPaused = !_svPaused;
-  document.querySelectorAll('.sv-seg .fill').forEach(function(el) {
-    el.style.animationPlayState = _svPaused ? 'paused' : 'running';
-  });
-  var vid = document.querySelector('#sv-media video');
-  if (vid) { _svPaused ? vid.pause() : vid.play(); }
-  var badge = document.getElementById('sv-pause-badge');
-  if (badge) badge.style.display = _svPaused ? 'flex' : 'none';
+  _applyPauseState();
 }
 window.toggleStoryPause = toggleStoryPause;
 
 function _showCurrentStory() {
-  _svPaused = false;
+  _svPaused   = false;
+  _svPausedAt = 0;
   clearTimeout(_svTimer);
+  /* Reset pause badge and header icon */
+  const badge = document.getElementById('sv-pause-badge');
+  if (badge) badge.style.display = 'none';
+  const pBtn = document.getElementById('sv-pause-icon');
+  if (pBtn) pBtn.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
   const grp    = _storyGroups[_svGroupIdx];
   const story  = grp && grp.stories[_svStoryIdx];
   if (!story) { closeStoryViewer(); return; }
@@ -349,12 +401,16 @@ function _showCurrentStory() {
   // Close viewers sheet if open
   const sheet = document.getElementById('sv-viewers-sheet');
   if (sheet) sheet.classList.remove('open');
-  // Show reaction bar for non-owners
-  const rbar = document.getElementById('sv-reaction-bar');
-  if (rbar) {
+  // Show Instagram-style bottom bar for non-owners
+  const bbar = document.getElementById('sv-bottom-bar');
+  if (bbar) {
     const isOwn = story && story.is_own;
-    rbar.style.display = isOwn ? 'none' : 'flex';
-    if (!isOwn && story) _buildReactionBar(story.id);
+    bbar.style.display = isOwn ? 'none' : 'flex';
+    const hBtn = document.getElementById('sv-heart-btn');
+    if (hBtn) {
+      hBtn.dataset.storyId = story.id;
+      hBtn.classList.remove('reacted', 'heartpop');
+    }
   }
 
   // Media — infer type from mime or URL extension
@@ -604,27 +660,63 @@ function closeViewers() {
 window.closeViewers = closeViewers;
 
 /* ── Story reactions ─────────────────────────────────────────────────────── */
-const STORY_REACTIONS = ['❤️','😂','😮','😢','🔥','👏','💯','🎉'];
 
-function _buildReactionBar(storyId) {
-  const inner = document.getElementById('sv-reaction-bar-inner');
-  if (!inner) return;
-  inner.innerHTML = STORY_REACTIONS.map(e =>
-    `<button onclick="sendStoryReaction(${storyId},'${e}')"
-       style="font-size:22px;background:none;border:none;cursor:pointer;
-              padding:2px;border-radius:50%;transition:transform .15s"
-       onmouseenter="this.style.transform='scale(1.3)'"
-       onmouseleave="this.style.transform='scale(1)'">${e}</button>`
-  ).join('') +
-  `<button onclick="openStoryEmojiPicker(${storyId},this)"
-     style="font-size:14px;font-weight:700;background:rgba(255,255,255,.15);
-            border:1px solid rgba(255,255,255,.25);border-radius:50%;
-            width:32px;height:32px;cursor:pointer;color:#fff">+</button>`;
+/* Tap heart = send ❤️ · Long-press heart = full emoji picker */
+function svSendHeart() {
+  const btn = document.getElementById('sv-heart-btn');
+  const sid = btn && btn.dataset.storyId;
+  if (!sid) return;
+  /* Visual feedback */
+  btn.classList.remove('heartpop');
+  void btn.offsetWidth; /* reflow to restart animation */
+  btn.classList.add('reacted', 'heartpop');
+  const svg = document.getElementById('sv-heart-svg');
+  if (svg) { svg.setAttribute('fill', '#f91880'); svg.setAttribute('stroke', '#f91880'); }
+  sendStoryReaction(parseInt(sid), '❤️');
 }
+window.svSendHeart = svSendHeart;
+
+/* Wire up the heart button: tap → svSendHeart, long-press → full picker */
+(function() {
+  function bindHeartBtn() {
+    const btn = document.getElementById('sv-heart-btn');
+    if (!btn || btn.dataset.heartBound) return;
+    btn.dataset.heartBound = '1';
+    let holdT = null;
+    let _didLongPress = false;
+    btn.addEventListener('pointerdown', function(e) {
+      _didLongPress = false;
+      holdT = setTimeout(function() {
+        holdT = null;
+        _didLongPress = true;
+        const sid = btn.dataset.storyId;
+        if (sid) openStoryEmojiPicker(parseInt(sid), btn);
+      }, 500);
+    });
+    btn.addEventListener('pointerup', function() {
+      if (holdT) { clearTimeout(holdT); holdT = null; }
+    });
+    btn.addEventListener('pointerleave', function() {
+      if (holdT) { clearTimeout(holdT); holdT = null; }
+    });
+    btn.addEventListener('click', function(e) {
+      if (_didLongPress) { _didLongPress = false; return; } /* skip click after long-press */
+      svSendHeart();
+    });
+  }
+  /* Try binding immediately, and also after each story open */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindHeartBtn);
+  } else { bindHeartBtn(); }
+  /* Re-bind after story overlay opens (heart btn might not exist yet on first run) */
+  const _origOpen = window.openStoryGroup;
+  window.openStoryGroup = function() {
+    _origOpen.apply(this, arguments);
+    setTimeout(bindHeartBtn, 50);
+  };
+})();
 
 async function sendStoryReaction(storyId, emoji) {
-  const rbar = document.getElementById('sv-reaction-bar');
-  if (rbar) { rbar.style.display = 'none'; }
   try {
     const r = await fetch('/api/story/' + storyId + '/react', {
       method: 'POST',
@@ -633,16 +725,16 @@ async function sendStoryReaction(storyId, emoji) {
     });
     const d = await r.json();
     if (d.success) {
-      // Float the emoji up as an animation
+      /* Float the emoji up */
       const overlay = document.getElementById('story-overlay');
       const floater = document.createElement('div');
       floater.textContent = emoji;
-      floater.style.cssText = 'position:absolute;bottom:100px;left:50%;font-size:36px;' +
+      floater.style.cssText = 'position:absolute;bottom:120px;left:50%;font-size:38px;' +
         'transform:translateX(-50%);animation:floatUp 1.2s ease forwards;pointer-events:none;z-index:9999';
       overlay.appendChild(floater);
-      setTimeout(() => floater.remove(), 1300);
-      // Advance to next story after reaction
-      setTimeout(nextStory, 800);
+      setTimeout(function() { floater.remove(); }, 1300);
+      /* Advance after short delay */
+      setTimeout(nextStory, 900);
     }
   } catch(_) {}
 }
@@ -676,19 +768,47 @@ function openStoryEmojiPicker(storyId, anchor) {
 window.openStoryEmojiPicker = openStoryEmojiPicker;
 
 
-// Swipe up gesture to open viewers on own stories
+// Touch gestures: hold-to-pause + swipe-up-to-viewers
 (function() {
-  let startY = 0;
+  let startY   = 0;
+  let holdT    = null;
+  let holding  = false;
   const overlay = document.getElementById('story-overlay');
+
   overlay.addEventListener('touchstart', function(e) {
-    startY = e.touches[0].clientY;
+    if (e.target.closest('button, a')) return; // ignore taps on interactive elements
+    startY  = e.touches[0].clientY;
+    holding = false;
+    holdT   = setTimeout(function() {
+      holding = true;
+      holdT   = null;
+      if (!_svPaused) { _svPaused = true; _applyPauseState(); }
+    }, 150);
   }, {passive: true});
+
+  overlay.addEventListener('touchmove', function(e) {
+    if (holdT && Math.abs(startY - e.touches[0].clientY) > 10) {
+      clearTimeout(holdT); holdT = null; /* cancel hold if swiping */
+    }
+  }, {passive: true});
+
   overlay.addEventListener('touchend', function(e) {
+    if (holdT) { clearTimeout(holdT); holdT = null; }
+
+    if (holding) {
+      /* Finger lifted after hold — resume */
+      holding  = false;
+      _svPaused = false;
+      _applyPauseState();
+      return;
+    }
+
+    /* Swipe up to view story viewers (owner only) */
     const grp   = _storyGroups[_svGroupIdx];
     const story = grp && grp.stories[_svStoryIdx];
     if (!story || !story.is_own) return;
     const dy = startY - e.changedTouches[0].clientY;
-    if (dy > 60) openViewers();  // Swipe up > 60px
+    if (dy > 60) openViewers();
   }, {passive: true});
 })();
 </script>
