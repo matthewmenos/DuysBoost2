@@ -64,30 +64,32 @@
 {% endblock %}
 
 {% block content %}
-<div style="max-width:600px;margin:0 auto">
-  <div class="card">
-    <div class="section-title mb-20">Edit your profile</div>
+<div style="max-width:600px;margin:0 auto;padding-bottom:40px">
 
-    <!-- Banner picker -->
+  <!-- ── Photos card ──────────────────────────────────────────────────────── -->
+  <div class="card" style="padding:20px">
+    <div class="section-title mb-16" style="font-size:16px">Photos</div>
+
+    <!-- Banner -->
     <div class="form-group">
-      <label class="form-label">Banner photo</label>
+      <label class="form-label">Banner</label>
       <div class="banner-picker" id="banner-picker" onclick="document.getElementById('banner-input').click()">
         {% if user.banner_url %}
           <img src="{{ user.banner_url }}" alt="Banner" id="banner-preview">
           <div class="banner-overlay"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> Change banner</div>
         {% else %}
           <div class="banner-empty" id="banner-empty">
-            <span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></span> Upload a banner photo
+            <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            Upload a banner photo
           </div>
           <img src="" alt="" id="banner-preview" style="display:none">
         {% endif %}
       </div>
-      <input type="file" id="banner-input" class="photo-input"
-             accept="image/jpeg,image/png,image/webp,image/gif">
+      <input type="file" id="banner-input" class="photo-input" accept="image/jpeg,image/png,image/webp,image/gif">
       <div class="upload-progress" id="banner-progress"><div class="upload-progress-bar"></div></div>
     </div>
 
-    <!-- Avatar picker -->
+    <!-- Avatar -->
     <div class="photo-picker">
       <div class="photo-preview-wrap" onclick="document.getElementById('avatar-input').click()">
         <div class="avatar" style="width:88px;height:88px;font-size:34px" id="avatar-wrap">
@@ -103,28 +105,31 @@
         <div class="fw-700" style="font-size:15px">Profile photo</div>
         <div class="text-xs text-muted mt-4">JPG, PNG, WebP or GIF · max 5 MB</div>
       </div>
-      <input type="file" id="avatar-input" class="photo-input"
-             accept="image/jpeg,image/png,image/webp,image/gif">
+      <input type="file" id="avatar-input" class="photo-input" accept="image/jpeg,image/png,image/webp,image/gif">
       <div class="upload-progress" id="avatar-progress"><div class="upload-progress-bar"></div></div>
     </div>
+  </div>
 
-    <hr class="divider">
-
-    <!-- Text fields -->
+  <!-- ── Profile info form ─────────────────────────────────────────────────── -->
+  <div class="card" style="margin-top:12px;padding:20px">
+    <div class="section-title mb-16" style="font-size:16px">Profile Info</div>
     <form id="edit-profile-form" novalidate>
+
+      <!-- Display name -->
       <div class="form-group">
-        <label class="form-label" for="ep-username">
-          Username
-          <span class="text-muted" style="font-weight:400;font-size:12px">
-            ({{ 3 - (user.username_changes or 0) }} changes remaining)
-          </span>
-        </label>
+        <label class="form-label" for="ep-display">Display name</label>
+        <input class="form-input" id="ep-display" name="display_name" type="text" maxlength="60"
+               value="{{ user.display_name or '' }}" placeholder="Your name">
+      </div>
+
+      <!-- Username -->
+      <div class="form-group">
+        <label class="form-label" for="ep-username">Username</label>
         <div style="display:flex;gap:8px">
           <input class="form-input" id="ep-username" type="text" maxlength="30"
                  value="{{ user.username }}" pattern="[a-z0-9_]+"
                  style="flex:1;text-transform:lowercase">
-          <button type="button" class="btn btn-outline btn-sm"
-                  onclick="changeUsername()"
+          <button type="button" class="btn btn-outline btn-sm" onclick="changeUsername()"
                   {% if (user.username_changes or 0) >= 3 %}disabled title="No changes left"{% endif %}>
             Change
           </button>
@@ -134,10 +139,7 @@
             {% if username_changes_left > 0 %}
               {{ username_changes_left }} change{{ 's' if username_changes_left != 1 else '' }} remaining · 60-day cooldown between changes
             {% else %}
-              No more changes allowed
-              {% if username_last_changed %}
-                · Last changed {{ username_last_changed[:10] }}
-              {% endif %}
+              No more changes allowed{% if username_last_changed %} · Last changed {{ username_last_changed[:10] }}{% endif %}
             {% endif %}
           {% elif (user.username_changes or 0) >= 3 %}
             You've used all 3 username changes.
@@ -147,16 +149,14 @@
         </div>
       </div>
 
+      <!-- Bio -->
       <div class="form-group">
-        <label class="form-label" for="ep-display">Display name</label>
-        <input class="form-input" id="ep-display" name="display_name" type="text" maxlength="60"
-               value="{{ user.display_name or '' }}" placeholder="Your name">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="ep-bio">Bio <span class="optional">(160 chars)</span></label>
+        <label class="form-label" for="ep-bio">Bio <span class="text-muted" style="font-weight:400;font-size:12px">(160 chars)</span></label>
         <textarea class="form-input" id="ep-bio" name="bio" maxlength="160" rows="3"
                   placeholder="Tell people about yourself…">{{ user.bio or '' }}</textarea>
       </div>
+
+      <!-- Location + Website -->
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label" for="ep-location">Location</label>
@@ -170,61 +170,88 @@
         </div>
       </div>
 
+      <!-- Privacy -->
       <div class="form-group">
-        <label class="form-label">Settings</label>
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius)">
+        <label class="form-label">Privacy</label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius)">
           <input type="checkbox" name="allow_post_saves" id="allow-saves"
                  {% if user.allow_post_saves != 0 %}checked{% endif %}
                  style="width:18px;height:18px;accent-color:var(--accent)">
           <div>
-            <div style="font-weight:700;font-size:14px">Allow saving images</div>
-            <div class="text-xs text-muted">Others can download your image posts to their gallery</div>
+            <div style="font-weight:600;font-size:14px">Allow saving images</div>
+            <div class="text-xs text-muted" style="margin-top:2px">Others can download your image posts to their gallery</div>
           </div>
         </label>
       </div>
 
-      <div id="edit-error" class="error-list" style="display:none"></div>
+      <div id="edit-error" class="error-list" style="display:none;margin-bottom:12px"></div>
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button type="submit" class="btn btn-primary">Save changes</button>
-
-    <!-- Notification preferences -->
-    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
-      <div style="font-weight:700;font-size:15px;margin-bottom:14px">🔔 Notification preferences</div>
-      <div id="notif-prefs-wrap" style="display:flex;flex-direction:column;gap:10px">
-        <div style="color:var(--muted);font-size:13px">Loading…</div>
-      </div>
-    </div>
-
-    <!-- Quick links to other settings pages -->
-    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
-      <a href="{{ url_for('auth.security_settings') }}" class="btn btn-ghost btn-sm">
-        <svg class="i-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        Login History
-      </a>
-      {% if not current_user.is_verified %}
-      <a href="{{ url_for('social.verify_apply') }}" class="btn btn-ghost btn-sm">
-        <svg class="i-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Apply for Verification
-      </a>
-      {% endif %}
-    </div>
-
-    <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
-      <div style="font-weight:700;color:var(--red,#e53e3e);margin-bottom:8px;font-size:14px">⚠️ Danger zone</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-        Once deleted, your account cannot be recovered.
-      </p>
-      <button type="button" class="btn btn-outline btn-sm"
-              style="border-color:var(--red,#e53e3e);color:var(--red,#e53e3e)"
-              onclick="openDeleteAccount()">
-        Delete my account
-      </button>
-    </div>
+      <!-- Save / Cancel -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <button type="submit" class="btn btn-primary" style="min-width:140px">Save changes</button>
         <a href="{{ url_for('social.profile', username=user.username) }}" class="btn btn-ghost">Cancel</a>
       </div>
     </form>
   </div>
+
+  <!-- ── Notification preferences ─────────────────────────────────────────── -->
+  <div class="card" style="margin-top:12px;padding:20px">
+    <div class="section-title mb-4" style="font-size:16px">Notification Preferences</div>
+    <p class="text-muted" style="font-size:13px;margin-bottom:16px">Choose which notifications you receive.</p>
+    <div id="notif-prefs-wrap" style="display:flex;flex-direction:column">
+      <div style="color:var(--muted);font-size:13px;padding:8px 0">Loading…</div>
+    </div>
+  </div>
+
+  <!-- ── Account links ──────────────────────────────────────────────────────── -->
+  <div class="card" style="margin-top:12px;padding:20px">
+    <div class="section-title mb-16" style="font-size:16px">Account</div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <a href="{{ url_for('auth.security_settings') }}"
+         style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:var(--radius);background:var(--surface-2);text-decoration:none;color:var(--text);font-size:14px;font-weight:500;transition:background var(--transition)"
+         onmouseover="this.style.background='var(--surface-3)'" onmouseout="this.style.background='var(--surface-2)'">
+        <span style="display:flex;align-items:center;gap:10px">
+          <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          Security &amp; Login History
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      {% if not current_user.is_verified %}
+      <a href="{{ url_for('social.verify_apply') }}"
+         style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:var(--radius);background:var(--surface-2);text-decoration:none;color:var(--text);font-size:14px;font-weight:500;transition:background var(--transition)"
+         onmouseover="this.style.background='var(--surface-3)'" onmouseout="this.style.background='var(--surface-2)'">
+        <span style="display:flex;align-items:center;gap:10px">
+          <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Apply for Verification
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      {% endif %}
+      <a href="{{ url_for('social.wallet') }}"
+         style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:var(--radius);background:var(--surface-2);text-decoration:none;color:var(--text);font-size:14px;font-weight:500;transition:background var(--transition)"
+         onmouseover="this.style.background='var(--surface-3)'" onmouseout="this.style.background='var(--surface-2)'">
+        <span style="display:flex;align-items:center;gap:10px">
+          <svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Wallet &amp; Earnings
+        </span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Danger zone ────────────────────────────────────────────────────────── -->
+  <div class="card" style="margin-top:12px;padding:20px;border-color:rgba(239,69,101,.25)">
+    <div style="font-weight:700;color:var(--red,#ef4565);font-size:15px;margin-bottom:6px">Danger Zone</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5">
+      Deleting your account is permanent. All your posts, messages, wallet history and data will be gone.
+    </p>
+    <button type="button" class="btn btn-sm"
+            style="border:1.5px solid var(--red,#ef4565);color:var(--red,#ef4565);background:none"
+            onclick="openDeleteAccount()">
+      Delete my account
+    </button>
+  </div>
+
 </div>
 {% endblock %}
 

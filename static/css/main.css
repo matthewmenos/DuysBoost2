@@ -1398,9 +1398,10 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .post-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: space-between;
   margin-top: 6px;
-  margin-left: -6px;   /* align first icon to content edge */
+  margin-left: -6px;   /* align first icon flush with content edge */
+  margin-right: -6px;  /* mirror on the right */
 }
 
 /* ── Base button — every action icon is identical ────────────────── */

@@ -335,11 +335,15 @@ def _finalize_oauth_login(userinfo, provider):
     user = db.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
 
     if user:
-        # Returning user — sign in directly
+        # Returning user — sign in (check 2FA first)
         session.clear()
         if user and dict(user).get('is_banned', 0):
             return redirect(url_for('auth.login') + '?banned=1')
         user_d = dict(user)
+        # If 2FA is enabled, require the TOTP challenge before granting access
+        if user_d.get('totp_enabled') and user_d.get('totp_secret'):
+            session['2fa_pending_uid'] = user_d['id']
+            return redirect(url_for('auth.two_fa_challenge'))
         session['user_id'] = user_d['id']
         try:
             ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()[:45]

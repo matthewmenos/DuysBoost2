@@ -42,7 +42,20 @@
             {{ p.created_at[:10] }}
           </time>
         </div>
-        <div class="post-menu-wrap" style="margin-left:auto;position:relative">
+        <div class="post-header-right" style="display:flex;align-items:center;gap:1px;margin-left:auto;flex-shrink:0">
+          {# Tip (other users' posts) #}
+          {% if current_user and (current_user.id | int) != (p.user_id | int) %}
+          <button class="btn-ghost-icon post-top-btn" style="width:34px;height:34px;font-size:15px"
+                  onclick="openPostTipModal({{ p.id }}, '{{ a.username | e }}')"
+                  aria-label="Tip" title="Send a tip">💰</button>
+          {% endif %}
+          {# Boost (owner only, not yet boosted) #}
+          {% if current_user and (current_user.id | int) == (p.user_id | int) and not p.is_boosted %}
+          <button class="btn-ghost-icon post-top-btn" style="width:34px;height:34px;font-size:15px"
+                  onclick="openBoostModal({{ p.id }})"
+                  aria-label="Boost" title="Boost this post">🚀</button>
+          {% endif %}
+          <div class="post-menu-wrap" style="position:relative">
           <button class="btn-ghost-icon post-menu-btn" aria-label="More options"
                   onclick="togglePostMenu({{ p.id }}, event)">⋯</button>
           <div class="post-menu-dropdown" id="post-menu-{{ p.id }}">
@@ -64,8 +77,9 @@
             <button class="post-menu-item" style="color:var(--red,#e53e3e)"
                     onclick="reportPost({{ p.id }})"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg> Report post</button>
           </div>
-        </div>
-      </div>
+          </div>{# /.post-menu-wrap #}
+        </div>{# /.post-header-right #}
+      </div>{# /.post-header #}
 
       {# Reply context #}
       {% if p.reply_to_username %}
@@ -348,35 +362,6 @@
             </svg>
           </span>
         </button>
-
-        <!-- Tip (other users' posts only) -->
-        {% if current_user and (current_user.id | int) != (p.user_id | int) %}
-        <button class="post-action-btn tip-btn"
-                onclick="openPostTipModal({{ p.id }}, '{{ a.username | e }}')"
-                aria-label="Tip" title="Send a tip">
-          <span class="action-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="12" y1="1" x2="12" y2="23"/>
-              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
-            </svg>
-          </span>
-        </button>
-        {% endif %}
-
-        <!-- Boost (owner only, not yet boosted) -->
-        {% if current_user and (current_user.id | int) == (p.user_id | int) and not p.is_boosted %}
-        <button class="post-action-btn boost-btn"
-                onclick="openBoostModal({{ p.id }})" aria-label="Boost this post"
-                title="Boost">
-          <span class="action-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M13 2L3 14h7v8l11-14h-7l-1-6z"/>
-            </svg>
-          </span>
-        </button>
-        {% endif %}
 
       </div>
     </div>{# /.post-content-col #}
