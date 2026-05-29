@@ -152,7 +152,13 @@
       <div class="deposit-wallet-box">
         <div class="text-xs text-muted fw-700">SEND USDT TO THIS ADDRESS</div>
         <div class="wallet-addr" id="deposit-wallet-addr">—</div>
-        <button type="button" class="copy-btn" onclick="copyWalletAddr()" title="Copy address"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Copy</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button type="button" class="copy-btn" onclick="copyWalletAddr()" title="Copy address"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> Copy</button>
+          <button type="button" class="copy-btn" onclick="saveWalletQR()" title="Save QR code"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Save QR</button>
+        </div>
+        <div id="deposit-qr-wrap" style="margin-top:14px;display:flex;justify-content:center">
+          <!-- QR code rendered here by qrcodejs -->
+        </div>
       </div>
     </div>
 
@@ -406,6 +412,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 // Wallet addresses per network (injected from server)
 const cryptoWallets = {{ CRYPTO_WALLETS | tojson }};
@@ -425,15 +432,32 @@ function selectDepositNetwork(key) {
     document.getElementById('deposit-wallet-addr').textContent = addr;
     display.style.display = '';
     noWarn.style.display = 'none';
+    _renderDepositQR(addr);
   } else {
     display.style.display = 'none';
     noWarn.style.display = '';
   }
 }
 
+function _renderDepositQR(addr) {
+  const wrap = document.getElementById('deposit-qr-wrap');
+  if (!wrap || typeof QRCode === 'undefined') return;
+  wrap.innerHTML = '';
+  new QRCode(wrap, { text: addr, width: 200, height: 200, colorDark: '#000000', colorLight: '#ffffff' });
+}
+
 function copyWalletAddr() {
   const addr = document.getElementById('deposit-wallet-addr').textContent;
   navigator.clipboard.writeText(addr).then(() => showToast('Address copied!'));
+}
+
+function saveWalletQR() {
+  const canvas = document.querySelector('#deposit-qr-wrap canvas');
+  if (!canvas) { showToast('Select a network first.', 'error'); return; }
+  const link  = document.createElement('a');
+  link.download = 'wallet-qr.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 }
 
 /* ── Deposit form submit — automatic on-chain verification ──── */
