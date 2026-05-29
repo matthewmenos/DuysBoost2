@@ -39,6 +39,28 @@
     {% endif %}
   </div>
 
+  <!-- 2FA card -->
+  <div class="card" style="margin-top:16px">
+    <div class="section-title mb-12">Two-Factor Authentication (2FA)</div>
+    {% if totp_enabled %}
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:16px">
+      2FA is <strong style="color:var(--green)">enabled</strong> on your account.
+      Your authenticator app is required at each login.
+    </p>
+    <a href="{{ url_for('auth.two_fa_setup') }}" class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)">
+      Disable 2FA
+    </a>
+    {% else %}
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:16px">
+      Add an extra layer of security. After entering your password you will also need a
+      6-digit code from your authenticator app (Google Authenticator, Authy, etc.).
+    </p>
+    <a href="{{ url_for('auth.two_fa_setup') }}" class="btn btn-primary btn-sm">
+      Set Up 2FA
+    </a>
+    {% endif %}
+  </div>
+
   <div style="margin-top:16px">
     <a href="{{ url_for('social.edit_profile') }}" class="btn btn-outline btn-sm">
       Back to Profile Settings

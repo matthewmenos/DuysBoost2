@@ -112,6 +112,12 @@ def login():
             reason = dict(user).get('ban_reason', '') or 'Community guidelines violation'
             return jsonify({'success': False, 'errors': [f'Account suspended: {reason}']}), 403
         maybe_upgrade_password_hash(db, user['id'], password, user['password'])
+        user_d = dict(user)
+        # If 2FA is enabled, send to challenge page instead of logging in directly
+        if user_d.get('totp_enabled') and user_d.get('totp_secret'):
+            session.clear()
+            session['2fa_pending_uid'] = user_d['id']
+            return jsonify({'success': True, 'redirect': url_for('auth.two_fa_challenge')})
         session.clear()
         session['user_id'] = user['id']
         try:
@@ -123,7 +129,6 @@ def login():
         except Exception:
             pass
         # Admin accounts land on the dashboard, not the social feed
-        user_d    = dict(user)
         is_admin  = bool(user_d.get('is_admin', 0))
         redirect_to = url_for('admin.admin') if is_admin else url_for('social.feed')
         return jsonify({'success': True, 'redirect': redirect_to})
@@ -442,4 +447,113 @@ def security_settings():
         ).fetchall()
     except Exception:
         history = []
-    return render_template('security_settings.html', login_history=[dict(h) for h in history])
+    user = db.execute('SELECT totp_enabled FROM users WHERE id=?', (uid,)).fetchone()
+    return render_template('security_settings.html',
+                           login_history=[dict(h) for h in history],
+                           totp_enabled=bool(user and user['totp_enabled']))
+
+
+# ── 2FA challenge (redirect target after password check when TOTP is on) ──────
+
+@bp.route('/login/2fa', methods=['GET', 'POST'])
+def two_fa_challenge():
+    if 'user_id' in session:
+        return redirect(url_for('social.feed'))
+    uid = session.get('2fa_pending_uid')
+    if not uid:
+        return redirect(url_for('auth.login'))
+    if request.method == 'POST':
+        import pyotp
+        db   = get_db()
+        code = (request.form.get('code') or '').strip().replace(' ', '')
+        user = db.execute('SELECT * FROM users WHERE id=?', (uid,)).fetchone()
+        if not user:
+            session.pop('2fa_pending_uid', None)
+            return redirect(url_for('auth.login'))
+        totp = pyotp.TOTP(user['totp_secret'])
+        if not totp.verify(code, valid_window=1):
+            return render_template('2fa_challenge.html', error='Invalid code. Try again.')
+        session.pop('2fa_pending_uid', None)
+        session['user_id'] = uid
+        try:
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()[:45]
+            ua = request.headers.get('User-Agent', '')[:300]
+            db.execute('INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?,?,?)',
+                       (uid, ip, ua))
+            db.commit()
+        except Exception:
+            pass
+        is_admin = bool(dict(user).get('is_admin', 0))
+        return redirect(url_for('admin.admin') if is_admin else url_for('social.feed'))
+    return render_template('2fa_challenge.html', error=None)
+
+
+# ── 2FA setup / enable / disable ──────────────────────────────────────────────
+
+@bp.route('/settings/2fa', methods=['GET'])
+@login_required
+def two_fa_setup():
+    import pyotp, qrcode, io, base64
+    db  = get_db()
+    uid = session['user_id']
+    user = db.execute('SELECT username, totp_secret, totp_enabled FROM users WHERE id=?', (uid,)).fetchone()
+    user_d = dict(user)
+
+    # Generate a fresh secret each time the page loads (only saved on enable)
+    secret = pyotp.random_base32()
+    session['2fa_setup_secret'] = secret
+
+    totp     = pyotp.TOTP(secret)
+    otp_uri  = totp.provisioning_uri(name=user_d['username'], issuer_name='DUYS Boost')
+    img      = qrcode.make(otp_uri)
+    buf      = io.BytesIO()
+    img.save(buf, format='PNG')
+    qr_b64   = base64.b64encode(buf.getvalue()).decode()
+
+    return render_template('settings_2fa.html',
+                           qr_b64=qr_b64,
+                           secret=secret,
+                           totp_enabled=bool(user_d.get('totp_enabled')))
+
+
+@bp.route('/settings/2fa/enable', methods=['POST'])
+@login_required
+@csrf_exempt
+def two_fa_enable():
+    import pyotp
+    db     = get_db()
+    uid    = session['user_id']
+    if request.is_json:
+        code = str((request.get_json(silent=True) or {}).get('code', '')).strip().replace(' ', '')
+    else:
+        code = str(request.form.get('code', '')).strip().replace(' ', '')
+    secret = session.get('2fa_setup_secret')
+    if not secret:
+        return jsonify({'success': False, 'error': 'Setup session expired. Please reload the page.'}), 400
+    totp = pyotp.TOTP(secret)
+    if not totp.verify(code, valid_window=1):
+        return jsonify({'success': False, 'error': 'Invalid code. Make sure your authenticator app time is correct.'}), 400
+    db.execute('UPDATE users SET totp_secret=?, totp_enabled=1 WHERE id=?', (secret, uid))
+    db.commit()
+    session.pop('2fa_setup_secret', None)
+    return jsonify({'success': True})
+
+
+@bp.route('/settings/2fa/disable', methods=['POST'])
+@login_required
+@csrf_exempt
+def two_fa_disable():
+    import pyotp
+    db   = get_db()
+    uid  = session['user_id']
+    data = request.get_json(silent=True) or {}
+    code = str(data.get('code', '') or request.form.get('code', '')).strip().replace(' ', '')
+    user = db.execute('SELECT totp_secret, totp_enabled FROM users WHERE id=?', (uid,)).fetchone()
+    if not user or not user['totp_enabled'] or not user['totp_secret']:
+        return jsonify({'success': False, 'error': '2FA is not enabled.'}), 400
+    totp = pyotp.TOTP(user['totp_secret'])
+    if not totp.verify(code, valid_window=1):
+        return jsonify({'success': False, 'error': 'Invalid code.'}), 400
+    db.execute('UPDATE users SET totp_secret=NULL, totp_enabled=0 WHERE id=?', (uid,))
+    db.commit()
+    return jsonify({'success': True})

@@ -945,6 +945,9 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
         # sensitive content warnings
         ('posts', 'is_sensitive',         'INTEGER DEFAULT 0'),
         ('users', 'auto_show_sensitive',  'INTEGER DEFAULT 0'),
+        # two-factor authentication (TOTP)
+        ('users', 'totp_secret',  'TEXT'),
+        ('users', 'totp_enabled', 'INTEGER DEFAULT 0'),
     ]
 
     cur = conn.cursor()

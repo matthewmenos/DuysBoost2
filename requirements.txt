@@ -31,3 +31,7 @@ flask-compress>=1.15
 
 # ── HTML parsing for Open Graph link previews ─────────────────────────────────
 beautifulsoup4>=4.12.0
+
+# ── Two-factor authentication (TOTP) ─────────────────────────────────────────
+pyotp>=2.9.0
+qrcode[pil]>=7.4.2

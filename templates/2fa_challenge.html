@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Authentication — DUYS Boost{% endblock %}
+{% block page_title %}2FA Verification{% endblock %}
+
+{% block content %}
+<div style="max-width:420px;margin:48px auto">
+  <div class="card" style="text-align:center">
+    <div style="font-size:40px;margin-bottom:16px">🔐</div>
+    <div class="section-title mb-8">Two-Factor Authentication</div>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:24px">
+      Enter the 6-digit code from your authenticator app to continue.
+    </p>
+    {% if error %}
+    <div class="error-list" style="margin-bottom:16px;text-align:left">{{ error }}</div>
+    {% endif %}
+    <form method="POST" action="{{ url_for('auth.two_fa_challenge') }}">
+      <div class="form-group" style="margin-bottom:20px">
+        <input class="form-input" type="text" name="code" inputmode="numeric"
+               pattern="[0-9 ]*" maxlength="7" autocomplete="one-time-code"
+               placeholder="000 000" autofocus
+               style="text-align:center;font-size:22px;letter-spacing:4px">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Verify</button>
+    </form>
+    <div style="margin-top:16px">
+      <a href="{{ url_for('auth.login') }}" style="font-size:13px;color:var(--muted)">
+        Back to login
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

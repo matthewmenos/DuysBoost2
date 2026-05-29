@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Authentication — DUYS Boost{% endblock %}
+{% block page_title %}2FA Setup{% endblock %}
+
+{% block content %}
+<div style="max-width:500px;margin:0 auto">
+
+  {% if totp_enabled %}
+  <!-- Disable flow -->
+  <div class="card">
+    <div class="section-title mb-12">Disable Two-Factor Authentication</div>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:20px">
+      Enter the 6-digit code from your authenticator app to confirm you want to disable 2FA.
+      This will remove the extra security layer from your account.
+    </p>
+    <div id="disable-error" class="error-list" style="display:none;margin-bottom:12px"></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Authenticator Code</label>
+      <input class="form-input" type="text" id="disable-code" inputmode="numeric"
+             pattern="[0-9 ]*" maxlength="7" placeholder="000 000" autocomplete="off"
+             style="font-size:20px;letter-spacing:3px;text-align:center">
+    </div>
+    <button class="btn btn-primary btn-block" id="disable-btn"
+            onclick="submitDisable()" style="background:var(--red);border-color:var(--red)">
+      Disable 2FA
+    </button>
+  </div>
+
+  {% else %}
+  <!-- Setup flow -->
+  <div class="card">
+    <div class="section-title mb-12">Set Up Two-Factor Authentication</div>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:20px">
+      Scan the QR code below with your authenticator app (Google Authenticator, Authy, 1Password, etc.),
+      then enter the 6-digit code to activate 2FA.
+    </p>
+
+    <div style="display:flex;justify-content:center;margin-bottom:20px">
+      <img src="data:image/png;base64,{{ qr_b64 }}" alt="2FA QR Code"
+           style="width:200px;height:200px;border-radius:8px;border:1px solid var(--border)">
+    </div>
+
+    <details style="margin-bottom:20px">
+      <summary style="font-size:13px;color:var(--muted);cursor:pointer">Can't scan? Enter code manually</summary>
+      <div style="margin-top:10px;background:var(--surface-2);border-radius:8px;padding:12px;font-family:monospace;font-size:14px;word-break:break-all;letter-spacing:2px">
+        {{ secret }}
+      </div>
+    </details>
+
+    <div id="enable-error" class="error-list" style="display:none;margin-bottom:12px"></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Enter the 6-digit code from your app</label>
+      <input class="form-input" type="text" id="enable-code" inputmode="numeric"
+             pattern="[0-9 ]*" maxlength="7" placeholder="000 000" autocomplete="one-time-code"
+             style="font-size:20px;letter-spacing:3px;text-align:center">
+    </div>
+    <button class="btn btn-primary btn-block" id="enable-btn" onclick="submitEnable()">
+      Activate 2FA
+    </button>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:16px">
+    <a href="{{ url_for('auth.security_settings') }}" class="btn btn-outline btn-sm">
+      Back to Security
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function submitEnable() {
+  const code = document.getElementById('enable-code').value.trim().replace(/\s/g,'');
+  const errEl = document.getElementById('enable-error');
+  const btn   = document.getElementById('enable-btn');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  try {
+    const fd = new FormData();
+    fd.append('code', code);
+    const r = await fetch('{{ url_for("auth.two_fa_enable") }}', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      showToast('2FA enabled!');
+      setTimeout(() => { window.location.href = '{{ url_for("auth.security_settings") }}'; }, 800);
+    } else {
+      errEl.textContent = d.error || 'Invalid code.';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Activate 2FA';
+    }
+  } catch (_) {
+    errEl.textContent = 'Network error.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Activate 2FA';
+  }
+}
+
+async function submitDisable() {
+  const code  = document.getElementById('disable-code').value.trim().replace(/\s/g,'');
+  const errEl = document.getElementById('disable-error');
+  const btn   = document.getElementById('disable-btn');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  try {
+    const r = await fetch('{{ url_for("auth.two_fa_disable") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('2FA disabled.');
+      setTimeout(() => { window.location.href = '{{ url_for("auth.security_settings") }}'; }, 800);
+    } else {
+      errEl.textContent = d.error || 'Invalid code.';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Disable 2FA';
+    }
+  } catch (_) {
+    errEl.textContent = 'Network error.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Disable 2FA';
+  }
+}
+</script>
+{% endblock %}
