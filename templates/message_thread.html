@@ -5,13 +5,17 @@
 {% block head_extra %}
 <style>
 /* Full-height chat — fills the viewport below the topbar, no scroll on page */
+html, body { overflow: hidden !important; height: 100%; }
 .page-content {
   padding: 0 !important;
   height: calc(100dvh - var(--topbar-height));
   overflow: hidden;
   display: flex; flex-direction: column;
 }
-.main-content { padding-bottom: 0 !important; }
+.main-content { padding-bottom: 0 !important; overflow: hidden !important; }
+
+/* All compose-area siblings must NOT shrink so the compose bar stays pinned */
+.attach-strip, .reply-strip, #reply-strip, .voice-preview { flex-shrink: 0; }
 
 .chat-shell {
   display: flex; flex-direction: column;
@@ -82,10 +86,27 @@
 .msg-row.seq.me   .msg-bub { border-bottom-right-radius: 18px; }
 .msg-row.seq.them .msg-bub { border-bottom-left-radius:  18px; }
 
-.msg-edited { font-size: 10px; opacity: .7; margin-left: 6px; font-style: italic; }
-.msg-tick      { font-size: 11px; margin-left: 4px; }
-.msg-tick-sent { color: rgba(255,255,255,.55); }
-.msg-tick-read { color: #50c8f4; }
+/* WhatsApp-style message meta (time + tick) */
+.msg-meta {
+  display: flex; align-items: center; gap: 1px;
+  margin-top: 2px;
+  justify-content: flex-end;
+}
+.msg-time {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.msg-row.me   .msg-time { color: rgba(255,255,255,.65); }
+.msg-row.them .msg-time { color: var(--muted); }
+
+/* WhatsApp-style SVG tick marks */
+.msg-tick { display: inline-flex; align-items: center; margin-left: 2px; }
+.msg-tick svg { width: 17px; height: 12px; overflow: visible; }
+.msg-tick-sent svg { stroke: rgba(255,255,255,.6); fill: none; }
+.msg-tick-read svg { stroke: #53bdeb; fill: none; }
+
+.msg-edited { font-size: 10px; opacity: .6; margin-left: 4px; font-style: italic; }
 .msg-pinned-badge { font-size: 11px; color: var(--accent-light); margin-right: 4px; }
 
 .msg-img { max-width: 240px; max-height: 280px; border-radius: 14px; cursor: zoom-in; display: block; object-fit: cover; }
@@ -224,10 +245,11 @@
 /* ── WhatsApp-style context menu ─────────────────────────────────────── */
 .ctx-overlay {
   position: fixed; inset: 0; z-index: 250;
-  background: rgba(0,0,0,.35); backdrop-filter: blur(2px);
-  display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.38); backdrop-filter: blur(1px);
+  display: none;
 }
-.ctx-overlay.open { display: flex; animation: fadeIn .15s; }
+/* block (not flex) so ctx-menu can use position:fixed for precise placement */
+.ctx-overlay.open { display: block; animation: fadeIn .15s; }
 
 .ctx-menu {
   position: fixed;
@@ -371,7 +393,7 @@
           {% if m.reactions %}
             <div class="reactions-strip" id="rx-{{ m.id }}"></div>
           {% endif %}
-          {% if not seq %}<div class="msg-meta"><span class="msg-time">{{ m.created_at[11:16] }}</span>{% if mine %}<span class="msg-tick {% if m.is_read %}msg-tick-read{% else %}msg-tick-sent{% endif %}">{% if m.is_read %}✓✓{% else %}✓{% endif %}</span>{% endif %}</div>{% endif %}
+          {% if not seq %}<div class="msg-meta"><span class="msg-time">{{ m.created_at[11:16] }}</span>{% if mine %}<span class="msg-tick {% if m.is_read %}msg-tick-read{% else %}msg-tick-sent{% endif %}" aria-label="{% if m.is_read %}Read{% else %}Sent{% endif %}">{% if m.is_read %}<svg viewBox="0 0 18 11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/><polyline points="6,6 10,10 17,2"/></svg>{% else %}<svg viewBox="0 0 12 11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/></svg>{% endif %}</span>{% endif %}</div>{% endif %}
         </div>
       </div>
     {% endfor %}
@@ -434,7 +456,7 @@
 <div class="lb" id="lb" onclick="lbClose()"><img id="lb-img" src="" alt=""></div>
 
 <!-- Context menu -->
-<div class="ctx-overlay" id="ctx-overlay" onclick="if(event.target===this)closeCtx()">
+<div class="ctx-overlay" id="ctx-overlay" onclick="if(event.target===this)closeCtxMenu()">
   <!-- WhatsApp-style context menu -->
   <div class="ctx-menu" id="ctx-menu" style="display:none">
     <!-- Quick reactions row -->
@@ -773,7 +795,9 @@ function buildBubble(msg, seq) {
     media = '<a class="msg-file" href="' + escapeHtml(msg.file_url) + '" download="' + escapeHtml(msg.file_name || 'file') + '" target="_blank"><span class="msg-file-icon"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span><div><div class="msg-fname">' + escapeHtml(msg.file_name || 'file') + '</div><div class="msg-fsub">Tap to download</div></div></a>';
   }
   const body = msg.body ? '<div class="msg-bub">' + escapeHtml(msg.body || '').replace(/\n/g, '<br>') + '</div>' : '';
-  const tick = mine ? '<span class="msg-tick ' + (msg.is_read ? 'msg-tick-read' : 'msg-tick-sent') + '">' + (msg.is_read ? '✓✓' : '✓') + '</span>' : '';
+  const TICK_SENT = '<svg viewBox="0 0 12 11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/></svg>';
+  const TICK_READ = '<svg viewBox="0 0 18 11" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,6 5,10 11,2"/><polyline points="6,6 10,10 17,2"/></svg>';
+  const tick = mine ? '<span class="msg-tick ' + (msg.is_read ? 'msg-tick-read' : 'msg-tick-sent') + '" aria-label="' + (msg.is_read ? 'Read' : 'Sent') + '">' + (msg.is_read ? TICK_READ : TICK_SENT) + '</span>' : '';
   const meta = seq ? '' : '<div class="msg-meta"><span class="msg-time">' + (msg.created_at || '').substring(11, 16) + '</span>' + tick + '</div>';
   return '<div class="msg-row ' + dir + (seq ? ' seq' : '') + '" data-id="' + msg.id + '" data-mine="' + (mine ? 1 : 0) + '" data-mt="' + (msg.msg_type || 'text') + '" data-body="' + escapeHtml(msg.body || '') + '" data-file-name="' + escapeHtml(msg.file_name || '') + '">' +
     (!mine ? '<div class="msg-av">' + av + '</div>' : '') +
@@ -1136,12 +1160,14 @@ function openCtxMenu(event, msgId, isMine) {
     pinLabel.textContent = row.classList.contains('pinned') ? 'Unpin' : 'Pin';
   }
 
-  // Position
-  menu.style.display = '';
-  if (bd) bd.style.display = '';
+  // Position and show
+  const overlay = document.getElementById('ctx-overlay');
+  if (overlay) overlay.classList.add('open');   // ← this makes ctx-overlay visible
+  menu.style.display = 'block';                 // ← ctx-menu is inside, now visible
+  // ctx-menu has position:fixed so it sits above the overlay
   const vw = window.innerWidth, vh = window.innerHeight;
-  let x = event.clientX || (event.touches && event.touches[0] ? event.touches[0].clientX : vw/2);
-  let y = event.clientY || (event.touches && event.touches[0] ? event.touches[0].clientY : vh/2);
+  let x = event.clientX || (event.touches && event.touches[0] ? event.touches[0].clientX : vw / 2);
+  let y = event.clientY || (event.touches && event.touches[0] ? event.touches[0].clientY : vh / 2);
   const mw = 270, mh = 380;
   if (x + mw > vw - 8)  x = vw - mw - 8;
   if (y + mh > vh - 8)  y = vh - mh - 8;
@@ -1149,6 +1175,7 @@ function openCtxMenu(event, msgId, isMine) {
   if (y < 8) y = 8;
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
+  menu.style.zIndex = '9999';  // above overlay z-index 250
 
   // Haptic feedback on mobile
   if (navigator.vibrate) navigator.vibrate(30);
@@ -1162,10 +1189,10 @@ function openCtxMenu(event, msgId, isMine) {
 window.openCtxMenu = openCtxMenu;
 
 function closeCtxMenu() {
-  const menu = document.getElementById('ctx-menu');
-  const bd   = document.getElementById('ctx-backdrop');
-  if (menu) menu.style.display = 'none';
-  if (bd)   bd.style.display   = 'none';
+  const menu    = document.getElementById('ctx-menu');
+  const overlay = document.getElementById('ctx-overlay');
+  if (menu)    menu.style.display = 'none';
+  if (overlay) overlay.classList.remove('open');
   document.querySelectorAll('.msg-row.selected').forEach(function(el) {
     el.classList.remove('selected');
   });
