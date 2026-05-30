@@ -6,14 +6,22 @@ from here instead of referencing a single huge file.
 """
 import hashlib
 import hmac
+import logging
 import secrets
 import re
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import wraps
 
 import markupsafe
 from flask import g, session, redirect, url_for, jsonify, request
+
+logger = logging.getLogger(__name__)
+
+# Bounded thread pool for background work (notifications, transactions).
+# Max 6 workers prevents resource exhaustion under load.
+_bg_pool = ThreadPoolExecutor(max_workers=6, thread_name_prefix='duys-bg')
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DB helpers
@@ -159,13 +167,11 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
                     (user_id, message)
                 )
         else:
-            # Cross-user write — run in background thread to avoid blocking the HTTP request
-            # (synchronous R2 download + upload adds 200–800ms per notification)
-            import threading as _threading
-
+            # Cross-user write — submit to bounded pool so R2 I/O doesn't block the request
+            # and we never spawn more threads than _bg_pool.max_workers.
             def _bg_notify(uid, msg, icn, lnk):
                 try:
-                    from db import _open_personal_db, _upload_personal_db, get_db as _gdb_bg
+                    from db import _open_personal_db, _upload_personal_db
                     _cn, _pt = _open_personal_db(uid)
                     try:
                         try:
@@ -183,7 +189,7 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
                     finally:
                         _cn.close()
                         _upload_personal_db(uid, _pt)
-                    # Fire push notification via global db (push_subscriptions lives there)
+                    # Fire push notification via global db
                     try:
                         import sqlite3 as _sq3
                         from flask import current_app as _ca
@@ -194,19 +200,11 @@ def add_notification(db, user_id, message, *, icon=None, link=None):
                     except Exception:
                         pass
                 except Exception as _e2:
-                    import logging as _l2
-                    _l2.getLogger(__name__).warning(
-                        'bg_notify uid=%s: %s', uid, _e2
-                    )
+                    logger.warning('bg_notify uid=%s: %s', uid, _e2)
 
-            _threading.Thread(
-                target=_bg_notify,
-                args=(user_id, message, icon, link),
-                daemon=True,
-            ).start()
+            _bg_pool.submit(_bg_notify, user_id, message, icon, link)
     except Exception as _e:
-        import logging as _log
-        _log.getLogger(__name__).warning('add_notification failed uid=%s: %s', user_id, _e)
+        logger.warning('add_notification failed uid=%s: %s', user_id, _e)
 
 
 def _send_push(db, user_id, title, body, url='/feed'):
@@ -265,8 +263,6 @@ def add_transaction(_db, user_id, type_, amount, description, status='completed'
         udb_conn.execute(_sql, _row)
         return
 
-    import threading as _threading
-
     def _bg(uid, row):
         try:
             from db import _open_personal_db, _upload_personal_db
@@ -280,7 +276,7 @@ def add_transaction(_db, user_id, type_, amount, description, status='completed'
         except Exception:
             pass
 
-    _threading.Thread(target=_bg, args=(user_id, _row), daemon=True).start()
+    _bg_pool.submit(_bg, user_id, _row)
 
 
 def check_and_award_referral_bonus(db, user_id):

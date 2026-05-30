@@ -71,7 +71,16 @@ def create_app() -> Flask:
     if os.environ.get('OAUTHLIB_INSECURE_TRANSPORT', '0') == '1':
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-    app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
+    _secret = os.environ.get('FLASK_SECRET_KEY', '')
+    if not _secret:
+        import logging as _log
+        _log.getLogger(__name__).critical(
+            'FLASK_SECRET_KEY is not set — using a random key. '
+            'All sessions will be invalidated on every restart. '
+            'Set FLASK_SECRET_KEY in your environment variables.'
+        )
+        _secret = secrets.token_hex(32)
+    app.secret_key = _secret
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE='Lax',

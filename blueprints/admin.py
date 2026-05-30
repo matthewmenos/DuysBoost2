@@ -823,16 +823,24 @@ def action_report(report_id):
                 '🗑️ Your post was removed following a community report.')
 
     elif action == 'warn' and report['target_type'] in ('user', 'post'):
-        target_user_id = (report['target_id'] if report['target_type'] == 'user'
-                          else db.execute('SELECT user_id FROM posts WHERE id=?',
-                                          (report['target_id'],)).fetchone()['user_id'])
-        add_notification(db, target_user_id,
-            f'⚠️ You received a community guideline warning. {note or "Please review our terms."}')
+        if report['target_type'] == 'user':
+            target_user_id = report['target_id']
+        else:
+            _p = db.execute('SELECT user_id FROM posts WHERE id=?', (report['target_id'],)).fetchone()
+            target_user_id = _p['user_id'] if _p else None
+        if target_user_id:
+            add_notification(db, target_user_id,
+                f'⚠️ You received a community guideline warning. {note or "Please review our terms."}')
 
     elif action == 'ban':
-        target_user_id = (report['target_id'] if report['target_type'] == 'user'
-                          else db.execute('SELECT user_id FROM posts WHERE id=?',
-                                          (report['target_id'],)).fetchone()['user_id'])
+        if report['target_type'] == 'user':
+            target_user_id = report['target_id']
+        else:
+            _p = db.execute('SELECT user_id FROM posts WHERE id=?', (report['target_id'],)).fetchone()
+            target_user_id = _p['user_id'] if _p else None
+        if not target_user_id:
+            db.commit()
+            return jsonify({'success': False, 'error': 'Target not found.'}), 404
         ban_reason = note or 'Violation of community guidelines'
         db.execute('DELETE FROM user_bans WHERE user_id=?', (target_user_id,))
         db.execute(

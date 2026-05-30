@@ -1,7 +1,10 @@
 """blueprints/social.py — feed, posts, profiles, explore, channels, groups, DMs."""
 import re
 import json
+import logging
 from datetime import datetime, timezone, timedelta
+
+logger = logging.getLogger(__name__)
 from flask import (
     Blueprint, jsonify, redirect, render_template,
     request, session, url_for
@@ -22,13 +25,16 @@ from security import (
 bp = Blueprint('social', __name__)
 
 # In-memory typing state: {(user_id, recipient_username): timestamp}
+# Entries expire after _TYPING_TTL seconds; pruned on every write to prevent unbounded growth.
 _typing_state: dict = {}
+_TYPING_TTL = 30  # seconds
 
 
 # ── Feed ─────────────────────────────────────────────────────────────────────
 
 @bp.route('/feed')
 @login_required
+@limiter.limit(LIMIT_POLL)
 def feed():
     db   = get_db()
     uid  = session['user_id']
@@ -354,13 +360,9 @@ def create_post():
                 except Exception:
                     pass
 
-            import threading as _ogth
             from flask import current_app as _ca_og
-            _ogth.Thread(
-                target=_fetch_og,
-                args=(_ca_og.app_context(), post_id, _fetch_url),
-                daemon=True
-            ).start()
+            from helpers import _bg_pool as _pool
+            _pool.submit(_fetch_og, _ca_og.app_context(), post_id, _fetch_url)
 
     if post_status == 'scheduled':
         return jsonify({'success': True, 'scheduled': True,
@@ -1016,21 +1018,11 @@ def delete_account():
 
     # Delete all user data (cascades via FK where set, manual otherwise)
     # Delete stories — R2 media AND DB rows
-    story_rows = db.execute('SELECT * FROM stories WHERE user_id=?', (uid,)).fetchall()
+    story_rows = db.execute('SELECT media_url FROM stories WHERE user_id=?', (uid,)).fetchall()
     for sr in story_rows:
         try:
-            import storage as _st
             if sr['media_url']:
-                _st.delete_object(sr['media_url'])
-        except Exception:
-            pass
-    # Delete stories — R2 media AND DB rows
-    story_rows = db.execute('SELECT * FROM stories WHERE user_id=?', (uid,)).fetchall()
-    for sr in story_rows:
-        try:
-            import storage as _st
-            if sr['media_url']:
-                _st.delete_object(sr['media_url'])
+                storage.delete_object(sr['media_url'])
         except Exception:
             pass
     db.execute('DELETE FROM stories WHERE user_id=?', (uid,))
@@ -2006,7 +1998,12 @@ def api_unread_dms():
 @csrf_exempt
 def set_typing(username):
     uid = session['user_id']
-    _typing_state[(uid, username)] = datetime.now(timezone.utc).timestamp()
+    now = datetime.now(timezone.utc).timestamp()
+    _typing_state[(uid, username)] = now
+    # Prune entries older than TTL to prevent unbounded memory growth
+    stale = [k for k, ts in _typing_state.items() if now - ts > _TYPING_TTL]
+    for k in stale:
+        _typing_state.pop(k, None)
     return jsonify({'ok': True})
 
 
@@ -2054,7 +2051,7 @@ def edit_message(msg_id):
 
     now = datetime.now(timezone.utc).isoformat()
     udb.execute('UPDATE messages SET body=?, edited_at=? WHERE id=?', (body, now, msg_id))
-    db.commit()
+    udb.commit()
     return jsonify({'success': True, 'body': body, 'edited_at': now})
 
 
@@ -2070,7 +2067,7 @@ def delete_message(msg_id):
     now = datetime.now(timezone.utc).isoformat()
     udb.execute("UPDATE messages SET body='(deleted)',msg_type='text',file_url=NULL,"
                "file_name=NULL,file_mime=NULL,deleted_at=? WHERE id=?", (now, msg_id))
-    db.commit()
+    udb.commit()
     return jsonify({'success': True})
 
 
@@ -2109,7 +2106,7 @@ def react_message(msg_id):
         reactions.pop(emoji, None)
 
     udb.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
-    db.commit()
+    udb.commit()
     return jsonify({'success': True, 'reactions': reactions})
 
 
@@ -2128,7 +2125,7 @@ def pin_message(msg_id):
 
     new_state = 0 if (msg['is_pinned'] if 'is_pinned' in msg.keys() else 0) else 1
     udb.execute('UPDATE messages SET is_pinned=? WHERE id=?', (new_state, msg_id))
-    db.commit()
+    udb.commit()
     return jsonify({'success': True, 'pinned': bool(new_state)})
 
 
@@ -2138,16 +2135,20 @@ def message_info(msg_id):
     db  = get_db()
     udb   = get_user_db()
     uid = session['user_id']
-    msg = db.execute('SELECT m.*,u.username as sender_username,u.display_name as sender_display '
-                     'FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.id=?', (msg_id,)).fetchone()
+    msg = udb.execute('SELECT * FROM messages WHERE id=?', (msg_id,)).fetchone()
     if not msg:
         return jsonify({'success': False}), 404
+    # Enrich with sender info from global DB
+    sender = db.execute('SELECT username, display_name FROM users WHERE id=?',
+                        (msg['sender_id'],)).fetchone()
     conv = udb.execute('SELECT * FROM conversations WHERE id=?', (msg['conversation_id'],)).fetchone()
     if not conv or (conv['user_a'] != uid and conv['user_b'] != uid):
         return jsonify({'success': False}), 403
     keys = msg.keys()
-    return jsonify({'success': True, 'sender': msg['sender_username'], 'sent_at': msg['created_at'],
-                    'is_read': bool(msg['is_read']),
+    return jsonify({'success': True,
+                    'sender':   sender['username'] if sender else '',
+                    'sent_at':  msg['created_at'],
+                    'is_read':  bool(msg['is_read']),
                     'edited_at': msg['edited_at'] if 'edited_at' in keys else None,
                     'msg_type':  msg['msg_type']  if 'msg_type'  in keys else 'text',
                     'pinned':    bool(msg['is_pinned']) if 'is_pinned' in keys else False})
@@ -2192,6 +2193,7 @@ def forward_message():
         udb.execute('UPDATE conversations SET last_msg_at=? WHERE id=?', (now, conv['id']))
         db.execute('UPDATE users SET unread_dm_count=unread_dm_count+1 WHERE id=?', (u['id'],))
         sent += 1
+    udb.commit()
     db.commit()
     return jsonify({'success': True, 'sent': sent})
 
@@ -2902,12 +2904,12 @@ def create_group_invite(slug):
     import secrets as _sec
     db  = get_db()
     uid = session['user_id']
-    group = db.execute('SELECT id, created_by FROM groups WHERE slug=?', (slug,)).fetchone()
+    group = db.execute('SELECT id, owner_id FROM groups WHERE slug=?', (slug,)).fetchone()
     if not group:
         return jsonify({'success': False, 'error': 'Group not found.'})
     member = db.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
                         (group['id'], uid)).fetchone()
-    if not (member and member['role'] in ('admin', 'owner')) and group['created_by'] != uid:
+    if not (member and member['role'] in ('admin', 'owner')) and group['owner_id'] != uid:
         return jsonify({'success': False, 'error': 'Not authorized.'})
     token = _sec.token_urlsafe(12)
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td

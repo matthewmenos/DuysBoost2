@@ -110,22 +110,18 @@ def create_ad():
         return jsonify({'success': False,
                         'error': 'Insufficient balance for this followers target.'})
 
-    ad_id = db.execute(
+    db.execute(
         'INSERT INTO ads (user_id,title,platform,target_url,task_type,'
         'reward_per_task,budget,followers_target) VALUES (?,?,?,?,?,?,?,?)',
         (uid, title, platform, target_url, task_type,
          WORKER_REWARD_PER_TASK, budget, followers_target)
-    ).fetchone()['id']
+    )
+    ad_id = db.lastrowid
     db.execute('UPDATE users SET balance=balance-? WHERE id=?', (budget, uid))
     ad = db.execute('SELECT * FROM ads WHERE id=?', (ad_id,)).fetchone()
     add_transaction(db, uid, 'spend', budget, f'Budget for ad: {ad["title"]}')
     check_and_award_referral_bonus(db, uid)
     add_notification(db, uid, f'📢 Ad "{ad["title"]}" is now live!')
-
-    users = db.execute('SELECT id FROM users WHERE id != ?', (uid,)).fetchall()
-    for u in users:
-        add_notification(db, u['id'],
-                         f'📢 New task available: "{ad["title"]}" on {ad["platform"]}')
     db.commit()
     return jsonify({'success': True})
 

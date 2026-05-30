@@ -444,31 +444,50 @@ CREATE INDEX IF NOT EXISTS idx_posts_user      ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created   ON posts(created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_score     ON posts(score);
 CREATE INDEX IF NOT EXISTS idx_posts_reply     ON posts(reply_to_id);
+CREATE INDEX IF NOT EXISTS idx_posts_status    ON posts(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON posts(scheduled_at) WHERE scheduled_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_reply_null ON posts(user_id, score) WHERE reply_to_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_follows_er      ON follows(follower_id);
 CREATE INDEX IF NOT EXISTS idx_follows_ing     ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_likes_post      ON post_likes(post_id);
 CREATE INDEX IF NOT EXISTS idx_likes_user      ON post_likes(user_id);
 CREATE INDEX IF NOT EXISTS idx_bm_user         ON bookmarks(user_id);
 CREATE INDEX IF NOT EXISTS idx_pv_post         ON post_views(post_id);
+CREATE INDEX IF NOT EXISTS idx_pv_user         ON post_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_ph_post         ON post_hashtags(post_id);
 CREATE INDEX IF NOT EXISTS idx_ph_hashtag      ON post_hashtags(hashtag_id);
 CREATE INDEX IF NOT EXISTS idx_ads_user        ON ads(user_id);
 CREATE INDEX IF NOT EXISTS idx_ads_status      ON ads(status);
+CREATE INDEX IF NOT EXISTS idx_ads_budget      ON ads(status, budget_spent, budget);
 CREATE INDEX IF NOT EXISTS idx_tc_worker       ON task_completions(worker_id);
 CREATE INDEX IF NOT EXISTS idx_tc_ad           ON task_completions(ad_id);
 CREATE INDEX IF NOT EXISTS idx_pb_post         ON post_boosts(post_id);
+CREATE INDEX IF NOT EXISTS idx_pb_active       ON post_boosts(status, budget_spent, budget, user_id);
 CREATE INDEX IF NOT EXISTS idx_be_worker       ON boost_engagements(worker_id);
+CREATE INDEX IF NOT EXISTS idx_be_boost        ON boost_engagements(boost_id, worker_id);
 CREATE INDEX IF NOT EXISTS idx_ch_owner        ON channels(owner_id);
 CREATE INDEX IF NOT EXISTS idx_chm_user        ON channel_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_chm_channel     ON channel_members(channel_id);
+CREATE INDEX IF NOT EXISTS idx_cp_post         ON channel_posts(post_id);
+CREATE INDEX IF NOT EXISTS idx_cp_channel      ON channel_posts(channel_id, post_id);
 CREATE INDEX IF NOT EXISTS idx_grp_owner       ON groups(owner_id);
 CREATE INDEX IF NOT EXISTS idx_grpm_user       ON group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_grpm_group      ON group_members(group_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_grpms_group     ON group_messages(group_id);
+CREATE INDEX IF NOT EXISTS idx_grpms_sender    ON group_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_grpms_created   ON group_messages(group_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_reactions_post  ON post_reactions(post_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_user  ON post_reactions(user_id, post_id);
 CREATE INDEX IF NOT EXISTS idx_stories_user    ON stories(user_id);
 CREATE INDEX IF NOT EXISTS idx_stories_exp     ON stories(expires_at);
 CREATE INDEX IF NOT EXISTS idx_reports_status  ON reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_target  ON reports(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_bans_user       ON user_bans(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_admin     ON admin_audit_log(admin_id);
 CREATE INDEX IF NOT EXISTS idx_sh_user         ON search_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_username  ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email);
+CREATE INDEX IF NOT EXISTS idx_push_user       ON push_subscriptions(user_id);
 
 CREATE TABLE IF NOT EXISTS post_edits (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -963,6 +982,33 @@ def run_schema_migrations(conn: sqlite3.Connection) -> None:
     if migrated:
         conn.commit()
         logger.info('Schema migration complete: %d column(s) added', migrated)
+
+    # ── ENSURE NEW INDEXES EXIST on existing deployed databases ──────────────
+    NEW_INDEXES = [
+        'CREATE INDEX IF NOT EXISTS idx_posts_status    ON posts(status, created_at)',
+        'CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON posts(scheduled_at) WHERE scheduled_at IS NOT NULL',
+        'CREATE INDEX IF NOT EXISTS idx_posts_reply_null ON posts(user_id, score) WHERE reply_to_id IS NULL',
+        'CREATE INDEX IF NOT EXISTS idx_pv_user         ON post_views(user_id)',
+        'CREATE INDEX IF NOT EXISTS idx_ads_budget      ON ads(status, budget_spent, budget)',
+        'CREATE INDEX IF NOT EXISTS idx_pb_active       ON post_boosts(status, budget_spent, budget, user_id)',
+        'CREATE INDEX IF NOT EXISTS idx_be_boost        ON boost_engagements(boost_id, worker_id)',
+        'CREATE INDEX IF NOT EXISTS idx_chm_channel     ON channel_members(channel_id)',
+        'CREATE INDEX IF NOT EXISTS idx_cp_post         ON channel_posts(post_id)',
+        'CREATE INDEX IF NOT EXISTS idx_cp_channel      ON channel_posts(channel_id, post_id)',
+        'CREATE INDEX IF NOT EXISTS idx_grpm_group      ON group_members(group_id, user_id)',
+        'CREATE INDEX IF NOT EXISTS idx_grpms_sender    ON group_messages(sender_id)',
+        'CREATE INDEX IF NOT EXISTS idx_grpms_created   ON group_messages(group_id, created_at)',
+        'CREATE INDEX IF NOT EXISTS idx_reactions_post  ON post_reactions(post_id)',
+        'CREATE INDEX IF NOT EXISTS idx_reactions_user  ON post_reactions(user_id, post_id)',
+        'CREATE INDEX IF NOT EXISTS idx_reports_target  ON reports(target_type, target_id)',
+        'CREATE INDEX IF NOT EXISTS idx_push_user       ON push_subscriptions(user_id)',
+    ]
+    for idx_sql in NEW_INDEXES:
+        try:
+            cur.execute(idx_sql)
+        except sqlite3.OperationalError:
+            pass
+    conn.commit()
 
     # ── BACKFILL_REFERRAL_CODES ──────────────────────────────────────────────
     # Update users whose referral_code looks like a random hex token (10 chars)

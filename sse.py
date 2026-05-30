@@ -1,162 +1,122 @@
 """
 sse.py — Server-Sent Events for DUYS Boost.
 
-Replaces all setInterval() polling with a single persistent HTTP connection
-per user. The browser opens one SSE stream at /api/stream and receives
-push notifications for:
+Architecture note — two SQLite files:
+  global.db   → users, posts, groups, group_messages, task_completions, ads
+  users/{n}.db → notifications, conversations, messages (personal/private)
 
-  • notifications   — unread count + latest message text
-  • dm_unread       — total unread DM count
-  • group_unread    — total unread group message count
-  • online_ping     — server heartbeat (keeps connection alive, updates presence)
-  • activity        — latest marketplace task completions (dashboard)
-
-Per-conversation message streams:
-  • /api/messages/<username>/stream  — new DMs in a specific thread
-  • /api/group/<slug>/stream         — new messages in a group chat
-
-SSE vs WebSocket for this use case:
-  • SSE is unidirectional (server → browser) — perfect here since all
-    user actions are already REST POST requests
-  • Works over HTTP/1.1, no protocol upgrade, no separate library needed
-  • Browsers reconnect automatically on disconnect (built-in)
-  • Much simpler to deploy — works with any WSGI server, no asyncio needed
-
-Threading note:
-  Each SSE connection runs a generator in a background thread (via
-  Flask's streaming response). This is safe with sqlite3 because each
-  generator opens its own short-lived DB connection, separate from the
-  per-request g.db connection.
-
-Production note:
-  With multiple Gunicorn workers, each worker maintains its own SSE
-  connections. This is fine — the client reconnects to any worker and
-  the DB is the shared source of truth. For >10k concurrent users,
-  consider an async framework (Quart/FastAPI) for the SSE endpoints only.
+Every SSE generator opens *both* connections where needed, because SSE runs
+in a streaming thread outside Flask's request context — it cannot use the
+g-based get_db() / get_user_db() helpers.
 """
 
 import json
+import os
+import sqlite3
 import time
 import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, session, request, stream_with_context
-import os
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('sse', __name__)
 
-# How often the generator polls the DB (seconds)
-_GLOBAL_INTERVAL   = 8    # global stream (notifications, badges)
-_MESSAGE_INTERVAL  = 1.5  # DM thread stream
-_GROUP_INTERVAL    = 1.5  # group chat stream
-_KEEPALIVE_EVERY   = 25   # send a comment ping to prevent proxy timeout
+# Polling intervals (seconds)
+_GLOBAL_INTERVAL  = 8
+_MESSAGE_INTERVAL = 1.5
+_GROUP_INTERVAL   = 1.5
+_KEEPALIVE_EVERY  = 25
 
 
-def _get_db_conn(user_id: int = None):
-    """
-    Open a short-lived SQLite connection for use inside an SSE generator.
-    For SSE generators we can't use Flask's g-based connection because generators
-    run outside the normal request context. We download the user DB directly.
-    """
-    if user_id:
-        from db import open_user_db
-        conn, _ = open_user_db(user_id)
-        return conn
-    # Fall back to global.db for non-user-specific queries
-    import sqlite3 as _sqlite
-    db_path = os.path.join(os.path.dirname(__file__), 'global.db')
-    conn = _sqlite.connect(db_path, check_same_thread=False)
-    conn.row_factory = _sqlite.Row
+# ── DB helpers (no Flask context needed) ─────────────────────────────────────
+
+def _open_global() -> sqlite3.Connection:
+    """Open global.db directly — safe to call from any thread."""
+    path = os.path.join(os.path.dirname(__file__), 'global.db')
+    conn = sqlite3.connect(path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode = WAL')
+    conn.execute('PRAGMA synchronous = NORMAL')
     return conn
 
 
-def _sse_event(event: str, data: dict) -> str:
-    """Format a single SSE message."""
-    return f'event: {event}\ndata: {json.dumps(data)}\n\n'
+def _open_personal(uid: int) -> sqlite3.Connection:
+    """Download and open the per-user personal DB — safe to call from any thread."""
+    from db import _open_personal_db
+    conn, _path = _open_personal_db(uid)
+    return conn
 
 
-def _sse_comment(text: str = '') -> str:
-    """SSE comment line — keeps the connection alive through proxies."""
+# ── SSE format helpers ────────────────────────────────────────────────────────
+
+def _event(name: str, data: dict) -> str:
+    return f'event: {name}\ndata: {json.dumps(data)}\n\n'
+
+
+def _comment(text: str = '') -> str:
     return f': {text}\n\n'
 
 
-# ── Global stream — notifications, badge counts, presence, activity ───────────
+# ── Global stream ─────────────────────────────────────────────────────────────
 
 def _global_generator(uid: int):
     """
-    Yields SSE events for the logged-in user.
-    Runs in a streaming thread — uses its own DB connection.
+    Yields SSE events for one logged-in user.
+
+    Uses two separate connections:
+      gconn  → global.db  (users, groups, group_messages, task_completions)
+      pconn  → personal DB (notifications)
     """
     try:
-        conn = _get_db_conn(uid)
+        gconn = _open_global()
     except Exception as e:
-        logger.error('SSE global: DB connect failed for uid=?: ?', uid, e)
+        logger.error('SSE global: global DB connect failed uid=%s: %s', uid, e)
+        return
+
+    try:
+        pconn = _open_personal(uid)
+    except Exception as e:
+        logger.error('SSE global: personal DB connect failed uid=%s: %s', uid, e)
+        try:
+            gconn.close()
+        except Exception:
+            pass
         return
 
     last_ping   = time.time()
-    last_notif  = 0          # last notification id sent
-    last_active = 0          # last activity row id sent
+    last_notif  = 0
+    last_active = 0
 
     try:
-        # Send an initial "connected" event so the client knows the stream is live
-        yield _sse_event('connected', {'uid': uid})
+        yield _event('connected', {'uid': uid})
 
         while True:
             now = time.time()
 
-            # ── Keepalive comment every 25 s ────────────────────────────────
             if now - last_ping >= _KEEPALIVE_EVERY:
-                yield _sse_comment('keepalive')
+                yield _comment('keepalive')
                 last_ping = now
 
+            # ── Global DB queries ─────────────────────────────────────────
             try:
-                cur = conn.cursor()
+                gcur = gconn.cursor()
 
-                # ── Update online presence ───────────────────────────────────
+                # Update online presence
                 ts = datetime.now(timezone.utc).isoformat()
-                cur.execute('UPDATE users SET online_at=? WHERE id=?', (ts, uid))
+                gcur.execute('UPDATE users SET online_at=? WHERE id=?', (ts, uid))
 
-                # ── Notification count + latest unseen ───────────────────────
-                cur.execute(
-                    'SELECT COUNT(*) as cnt FROM notifications '
-                    'WHERE user_id=? AND read=0',
-                    (uid,)
-                )
-                notif_count = cur.fetchone()['cnt']
-
-                cur.execute(
-                    'SELECT id, message, created_at FROM notifications '
-                    'WHERE user_id=? AND id > ? '
-                    'ORDER BY id DESC LIMIT 3',
-                    (uid, last_notif)
-                )
-                new_notifs = cur.fetchall()
-                if new_notifs:
-                    last_notif = new_notifs[0]['id']
-                    yield _sse_event('notifications', {
-                        'count':  notif_count,
-                        'recent': [
-                            {'msg': n['message'], 'time': str(n['created_at'])[:16]}
-                            for n in new_notifs
-                        ],
-                    })
-                elif notif_count == 0:
-                    # Badge cleared (user read notifications)
-                    yield _sse_event('notifications', {'count': 0, 'recent': []})
-
-                # ── DM unread count ──────────────────────────────────────────
-                cur.execute(
+                # DM unread count
+                gcur.execute(
                     'SELECT unread_dm_count FROM users WHERE id=?', (uid,)
                 )
-                dm_row = cur.fetchone()
+                dm_row   = gcur.fetchone()
                 dm_count = int(dm_row['unread_dm_count'] or 0) if dm_row else 0
-                yield _sse_event('dm_unread', {'count': dm_count})
+                yield _event('dm_unread', {'count': dm_count})
 
-                # ── Group unread count ───────────────────────────────────────
-                cur.execute("""
+                # Group unread count
+                gcur.execute("""
                     SELECT COUNT(DISTINCT gm.group_id) AS cnt
                     FROM group_messages gm
                     JOIN group_members gmp
@@ -164,24 +124,24 @@ def _global_generator(uid: int):
                     WHERE gm.sender_id != ?
                       AND gm.created_at > COALESCE(gmp.last_read_at, '1970-01-01')
                 """, (uid, uid))
-                grp_row = cur.fetchone()
+                grp_row   = gcur.fetchone()
                 grp_count = int(grp_row['cnt'] or 0) if grp_row else 0
-                yield _sse_event('group_unread', {'count': grp_count})
+                yield _event('group_unread', {'count': grp_count})
 
-                # ── Activity feed (dashboard recent completions) ─────────────
-                cur.execute("""
+                # Activity feed (latest marketplace completions)
+                gcur.execute("""
                     SELECT tc.id, tc.reward, tc.submitted_at,
-                           u.username as worker, a.title as ad
+                           u.username AS worker, a.title AS ad
                     FROM task_completions tc
                     JOIN users u ON u.id = tc.worker_id
                     JOIN ads   a ON a.id = tc.ad_id
                     WHERE tc.id > ?
                     ORDER BY tc.submitted_at DESC LIMIT 5
                 """, (last_active,))
-                new_activity = cur.fetchall()
+                new_activity = gcur.fetchall()
                 if new_activity:
                     last_active = new_activity[0]['id']
-                    yield _sse_event('activity', {
+                    yield _event('activity', {
                         'items': [
                             {
                                 'worker': r['worker'],
@@ -193,47 +153,95 @@ def _global_generator(uid: int):
                         ]
                     })
 
-                conn.commit()
-                cur.close()
+                gconn.commit()
+                gcur.close()
 
             except Exception as e:
-                logger.warning('SSE global DB error uid=?: ?', uid, e)
+                logger.warning('SSE global gconn error uid=%s: %s', uid, e)
                 try:
-                    conn = _get_db_conn(uid)
+                    gconn.close()
+                except Exception:
+                    pass
+                try:
+                    gconn = _open_global()
                 except Exception:
                     break
+
+            # ── Personal DB queries (notifications) ───────────────────────
+            try:
+                pcur = pconn.cursor()
+
+                pcur.execute(
+                    'SELECT COUNT(*) AS cnt FROM notifications WHERE user_id=? AND read=0',
+                    (uid,)
+                )
+                notif_count = pcur.fetchone()['cnt']
+
+                pcur.execute(
+                    'SELECT id, message, icon, link, created_at FROM notifications '
+                    'WHERE user_id=? AND id > ? ORDER BY id DESC LIMIT 5',
+                    (uid, last_notif)
+                )
+                new_notifs = pcur.fetchall()
+                if new_notifs:
+                    last_notif = new_notifs[0]['id']
+                    yield _event('notifications', {
+                        'count':  notif_count,
+                        'recent': [
+                            {
+                                'id':   n['id'],
+                                'msg':  n['message'],
+                                'icon': n['icon'],
+                                'link': n['link'],
+                                'time': str(n['created_at'])[:16],
+                            }
+                            for n in new_notifs
+                        ],
+                    })
+                elif notif_count == 0:
+                    yield _event('notifications', {'count': 0, 'recent': []})
+
+                pcur.close()
+
+            except Exception as e:
+                logger.warning('SSE global pconn error uid=%s: %s', uid, e)
+                try:
+                    pconn.close()
+                except Exception:
+                    pass
+                try:
+                    pconn = _open_personal(uid)
+                except Exception:
+                    pass  # non-fatal: notifications fail silently
 
             time.sleep(_GLOBAL_INTERVAL)
 
     except GeneratorExit:
-        pass  # client disconnected cleanly
+        pass
     finally:
-        try:
-            conn.commit()
-            conn.close()
-        except Exception:
-            pass
+        for c in (gconn, pconn):
+            try:
+                c.commit()
+                c.close()
+            except Exception:
+                pass
 
 
 @bp.route('/api/stream')
 def global_stream():
-    """
-    Global SSE endpoint — one connection per logged-in user.
-    Pushes: notifications, dm_unread, group_unread, activity, keepalive.
-    """
     uid = session.get('user_id')
     if not uid:
-        return Response('data: {"error":"not authenticated"}\n\n',
-                        status=401, mimetype='text/event-stream')
-
+        return Response(
+            'data: {"error":"not authenticated"}\n\n',
+            status=401, mimetype='text/event-stream',
+        )
     return Response(
         stream_with_context(_global_generator(uid)),
         mimetype='text/event-stream',
         headers={
-            'Cache-Control':    'no-cache',
-            'X-Accel-Buffering':'no',     # disable nginx buffering
-            'Connection':       'keep-alive',
-            'retry':            '15000',  # client retry hint (ms)
+            'Cache-Control':     'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection':        'keep-alive',
         },
     )
 
@@ -242,93 +250,141 @@ def global_stream():
 
 def _dm_generator(uid: int, other_username: str, after: int):
     """
-    Yields new messages in a specific DM conversation.
-    Also marks messages as read and updates the unread badge.
+    Yields new messages in a specific DM thread.
+
+    gconn → global.db  (find other user ID, fetch sender display info)
+    pconn → personal DB (conversations, messages)
     """
     try:
-        conn = _get_db_conn(uid)
+        gconn = _open_global()
     except Exception as e:
-        logger.error('SSE DM: DB connect failed: ?', e)
+        logger.error('SSE DM: global DB connect failed uid=%s: %s', uid, e)
         return
 
-    last_id    = after
-    last_ping  = time.time()
+    try:
+        pconn = _open_personal(uid)
+    except Exception as e:
+        logger.error('SSE DM: personal DB connect failed uid=%s: %s', uid, e)
+        try:
+            gconn.close()
+        except Exception:
+            pass
+        return
+
+    last_id   = after
+    last_ping = time.time()
 
     try:
-        cur = conn.cursor()
-        cur.execute('SELECT id FROM users WHERE username=?', (other_username,))
-        other = cur.fetchone()
+        # Resolve other user from global DB
+        gcur = gconn.cursor()
+        gcur.execute('SELECT id FROM users WHERE username=?', (other_username,))
+        other = gcur.fetchone()
+        gcur.close()
+
         if not other:
-            yield _sse_event('error', {'message': 'User not found'})
+            yield _event('error', {'message': 'User not found'})
             return
 
         a, b = min(uid, other['id']), max(uid, other['id'])
-        cur.execute(
+
+        # Find or confirm conversation in personal DB
+        pcur = pconn.cursor()
+        pcur.execute(
             'SELECT id FROM conversations WHERE user_a=? AND user_b=?', (a, b)
         )
-        conv = cur.fetchone()
+        conv = pcur.fetchone()
+        pcur.close()
+
         if not conv:
-            yield _sse_event('ready', {'conv_id': None})
+            yield _event('ready', {'conv_id': None})
             return
 
         conv_id = conv['id']
-        cur.close()
-        yield _sse_event('ready', {'conv_id': conv_id})
+        yield _event('ready', {'conv_id': conv_id})
 
         while True:
             now = time.time()
 
             if now - last_ping >= _KEEPALIVE_EVERY:
-                yield _sse_comment('keepalive')
+                yield _comment('keepalive')
                 last_ping = now
 
             try:
-                cur = conn.cursor()
-
-                cur.execute("""
-                    SELECT m.*, u.username AS sender_username,
-                           u.avatar_url AS sender_avatar
-                    FROM messages m
-                    JOIN users u ON u.id = m.sender_id
-                    WHERE m.conversation_id = ? AND m.id > ?
-                    ORDER BY m.created_at ASC LIMIT 50
-                """, (conv_id, last_id))
-                rows = cur.fetchall()
+                # Fetch new messages from personal DB
+                pcur = pconn.cursor()
+                pcur.execute(
+                    'SELECT * FROM messages '
+                    'WHERE conversation_id=? AND id > ? '
+                    'ORDER BY created_at ASC LIMIT 50',
+                    (conv_id, last_id)
+                )
+                rows = pcur.fetchall()
 
                 if rows:
                     last_id = rows[-1]['id']
+
                     # Mark received messages as read
-                    cur.execute(
+                    pcur.execute(
                         'UPDATE messages SET is_read=1 '
                         'WHERE conversation_id=? AND sender_id!=? AND id <= ?',
                         (conv_id, uid, last_id)
                     )
+
                     # Recalculate total unread
-                    cur.execute("""
+                    pcur.execute("""
                         SELECT COUNT(*) AS cnt
                         FROM messages m
                         JOIN conversations c ON c.id = m.conversation_id
                         WHERE (c.user_a=? OR c.user_b=?)
                           AND m.sender_id != ? AND m.is_read = 0
                     """, (uid, uid, uid))
-                    total_unread = cur.fetchone()['cnt']
-                    cur.execute(
-                        'UPDATE users SET unread_dm_count=? WHERE id=?',
-                        (total_unread, uid)
-                    )
-                    conn.commit()
-                    cur.close()
+                    total_unread = pcur.fetchone()['cnt']
+                    pconn.commit()
+                    pcur.close()
 
-                    yield _sse_event('messages', {
-                        'messages': [dict(r) for r in rows]
-                    })
+                    # Update unread count in global DB
+                    try:
+                        gcur = gconn.cursor()
+                        gcur.execute(
+                            'UPDATE users SET unread_dm_count=? WHERE id=?',
+                            (total_unread, uid)
+                        )
+                        gconn.commit()
+                        gcur.close()
+                    except Exception:
+                        pass
+
+                    # Enrich messages with sender info from global DB
+                    enriched = []
+                    for r in rows:
+                        msg = dict(r)
+                        try:
+                            gcur = gconn.cursor()
+                            gcur.execute(
+                                'SELECT username, avatar_url FROM users WHERE id=?',
+                                (msg['sender_id'],)
+                            )
+                            sender = gcur.fetchone()
+                            gcur.close()
+                            msg['sender_username'] = sender['username'] if sender else ''
+                            msg['sender_avatar']   = sender['avatar_url'] if sender else None
+                        except Exception:
+                            msg['sender_username'] = ''
+                            msg['sender_avatar']   = None
+                        enriched.append(msg)
+
+                    yield _event('messages', {'messages': enriched})
                 else:
-                    cur.close()
+                    pcur.close()
 
             except Exception as e:
-                logger.warning('SSE DM DB error: ?', e)
+                logger.warning('SSE DM DB error uid=%s: %s', uid, e)
                 try:
-                    conn = _get_db_conn(uid)
+                    pconn.close()
+                except Exception:
+                    pass
+                try:
+                    pconn = _open_personal(uid)
                 except Exception:
                     break
 
@@ -337,32 +393,29 @@ def _dm_generator(uid: int, other_username: str, after: int):
     except GeneratorExit:
         pass
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        for c in (gconn, pconn):
+            try:
+                c.close()
+            except Exception:
+                pass
 
 
 @bp.route('/api/messages/<username>/stream')
 def dm_stream(username):
-    """
-    SSE stream for a specific DM conversation.
-    Replaces the /api/messages/<username>/poll endpoint.
-    """
     uid = session.get('user_id')
     if not uid:
-        return Response('data: {"error":"not authenticated"}\n\n',
-                        status=401, mimetype='text/event-stream')
-
+        return Response(
+            'data: {"error":"not authenticated"}\n\n',
+            status=401, mimetype='text/event-stream',
+        )
     after = request.args.get('after', 0, type=int)
-
     return Response(
         stream_with_context(_dm_generator(uid, username, after)),
         mimetype='text/event-stream',
         headers={
-            'Cache-Control':    'no-cache',
-            'X-Accel-Buffering':'no',
-            'Connection':       'keep-alive',
+            'Cache-Control':     'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection':        'keep-alive',
         },
     )
 
@@ -370,48 +423,49 @@ def dm_stream(username):
 # ── Group chat stream ─────────────────────────────────────────────────────────
 
 def _group_generator(uid: int, slug: str, after: int):
-    """Yields new messages in a group chat."""
+    """
+    Yields new messages in a group chat.
+    Groups and group_messages both live in global.db — only one connection needed.
+    """
     try:
-        conn = _get_db_conn(uid)
+        gconn = _open_global()
     except Exception as e:
-        logger.error('SSE group: DB connect failed: ?', e)
+        logger.error('SSE group: DB connect failed uid=%s: %s', uid, e)
         return
 
     last_id   = after
     last_ping = time.time()
 
     try:
-        cur = conn.cursor()
+        cur = gconn.cursor()
         cur.execute('SELECT id FROM groups WHERE slug=?', (slug,))
         grp = cur.fetchone()
         if not grp:
-            yield _sse_event('error', {'message': 'Group not found'})
+            yield _event('error', {'message': 'Group not found'})
             return
 
         group_id = grp['id']
 
-        # Verify membership
         cur.execute(
             'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?',
             (group_id, uid)
         )
         if not cur.fetchone():
-            yield _sse_event('error', {'message': 'Not a member'})
+            yield _event('error', {'message': 'Not a member'})
             return
 
         cur.close()
-        yield _sse_event('ready', {'group_id': group_id})
+        yield _event('ready', {'group_id': group_id})
 
         while True:
             now = time.time()
 
             if now - last_ping >= _KEEPALIVE_EVERY:
-                yield _sse_comment('keepalive')
+                yield _comment('keepalive')
                 last_ping = now
 
             try:
-                cur = conn.cursor()
-
+                cur = gconn.cursor()
                 cur.execute("""
                     SELECT gm.*,
                            u.username     AS sender_username,
@@ -428,25 +482,26 @@ def _group_generator(uid: int, slug: str, after: int):
 
                 if rows:
                     last_id = rows[-1]['id']
-                    # Update last_read_at
                     ts = datetime.now(timezone.utc).isoformat()
                     cur.execute(
                         'UPDATE group_members SET last_read_at=? '
                         'WHERE group_id=? AND user_id=?',
                         (ts, group_id, uid)
                     )
-                    conn.commit()
+                    gconn.commit()
                     cur.close()
-                    yield _sse_event('messages', {
-                        'messages': [dict(r) for r in rows]
-                    })
+                    yield _event('messages', {'messages': [dict(r) for r in rows]})
                 else:
                     cur.close()
 
             except Exception as e:
-                logger.warning('SSE group DB error: ?', e)
+                logger.warning('SSE group DB error uid=%s: %s', uid, e)
                 try:
-                    conn = _get_db_conn(uid)
+                    gconn.close()
+                except Exception:
+                    pass
+                try:
+                    gconn = _open_global()
                 except Exception:
                     break
 
@@ -456,30 +511,27 @@ def _group_generator(uid: int, slug: str, after: int):
         pass
     finally:
         try:
-            conn.close()
+            gconn.commit()
+            gconn.close()
         except Exception:
             pass
 
 
 @bp.route('/api/group/<slug>/stream')
 def group_stream(slug):
-    """
-    SSE stream for a specific group chat.
-    Replaces the /api/group/<slug>/poll endpoint.
-    """
     uid = session.get('user_id')
     if not uid:
-        return Response('data: {"error":"not authenticated"}\n\n',
-                        status=401, mimetype='text/event-stream')
-
+        return Response(
+            'data: {"error":"not authenticated"}\n\n',
+            status=401, mimetype='text/event-stream',
+        )
     after = request.args.get('after', 0, type=int)
-
     return Response(
         stream_with_context(_group_generator(uid, slug, after)),
         mimetype='text/event-stream',
         headers={
-            'Cache-Control':    'no-cache',
-            'X-Accel-Buffering':'no',
-            'Connection':       'keep-alive',
+            'Cache-Control':     'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection':        'keep-alive',
         },
     )
