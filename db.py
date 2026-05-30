@@ -1143,60 +1143,79 @@ def get_user_db() -> sqlite3.Connection:
 
 def close_db(exc=None) -> None:
     """
-    Teardown: commit on success / rollback on error, then sync to R2.
+    Teardown: commit on success / rollback pending writes on error, then sync R2.
 
-    Flask passes the unhandled request exception as `exc`. If a request failed,
-    we MUST NOT commit its partial DB writes — doing so caused the long-standing
-    "server error shown but the post/message silently appears after refresh" bug:
-    the view raised after its INSERT, the response became a 500, yet this teardown
-    used to commit the pending INSERT anyway and upload it to R2.
+    WHY `exc` IS UNRELIABLE
+    Flask's @errorhandler(500) catches route exceptions before they reach
+    teardown, so `exc` here is ALWAYS None — even for 500 responses. The
+    after_request handler in app.py stamps `g._response_ok` (True for <500,
+    False for >=500) which is the correct signal we use instead.
+
+    COMMIT vs ROLLBACK DECISION (per connection)
+    We check `conn.in_transaction` (Python 3.2+ sqlite3 attribute):
+      - in_transaction=True  means there are uncommitted writes pending.
+        · response_ok → commit them
+        · response_error → rollback them (prevents phantom saves)
+      - in_transaction=False means the route already called conn.commit()
+        explicitly. Nothing to commit or rollback; always upload to R2 so
+        that explicitly-saved data reaches R2 even if a non-critical step
+        later caused a 5xx (e.g. send_message commits udb, then unread-count
+        update fails — the message should still be uploaded).
     """
-    errored = exc is not None
+    # True if the HTTP response was 2xx/3xx/4xx; False if 5xx.
+    # Default True so non-HTTP teardowns (app shutdown) still commit.
+    response_ok = getattr(g, '_response_ok', True)
 
     # ── Personal DB ──────────────────────────────────────────────────────────
     udb  = g.pop('udb',      None)
     uid  = g.pop('udb_uid',  None)
     path = g.pop('udb_path', None)
     if udb is not None:
+        has_pending = getattr(udb, 'in_transaction', False)
         try:
-            if errored:
-                udb.rollback()
-            else:
-                udb.commit()
+            if has_pending:
+                if response_ok:
+                    udb.commit()
+                else:
+                    udb.rollback()   # discard phantom writes
         except Exception as e:
             logger.warning('personal DB %s error: %s',
-                           'rollback' if errored else 'commit', e)
+                           'commit' if response_ok else 'rollback', e)
         try:
             udb.close()
         except Exception:
             pass
         if uid and path:
-            if errored:
-                # Failed request — discard the local copy without uploading,
-                # so R2 is never poisoned with a half-written transaction.
+            if response_ok or not has_pending:
+                # Upload if: success, OR route explicitly committed already
+                # (has_pending=False means route already committed; those
+                # writes are durable and must reach R2 regardless of status)
+                _upload_personal_db(uid, path)
+            else:
+                # 5xx with uncommitted data: discard local file, R2 unchanged
                 try:
                     os.remove(path)
                 except OSError:
                     pass
-            else:
-                _upload_personal_db(uid, path)
 
     # ── Global DB ─────────────────────────────────────────────────────────────
     gdb = g.pop('gdb', None)
     if gdb is not None:
+        has_pending = getattr(gdb, 'in_transaction', False)
         try:
-            if errored:
-                gdb.rollback()
-            else:
-                gdb.commit()
+            if has_pending:
+                if response_ok:
+                    gdb.commit()
+                else:
+                    gdb.rollback()   # discard phantom writes
         except Exception as e:
             logger.warning('global DB %s error: %s',
-                           'rollback' if errored else 'commit', e)
+                           'commit' if response_ok else 'rollback', e)
         try:
             gdb.close()
         except Exception:
             pass
-        if not errored:
+        if response_ok or not has_pending:
             _sync_global_to_r2()
 
 

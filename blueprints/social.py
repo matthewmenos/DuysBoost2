@@ -1863,7 +1863,11 @@ def send_message(username):
     if body and len(body) > 2000:
         return jsonify({'success': False, 'error': 'Message too long (max 2000 chars).'}), 400
 
-    conv = _get_or_create_conversation(db, uid, other['id'])
+    try:
+        conv = _get_or_create_conversation(db, uid, other['id'])
+    except Exception as _ce:
+        logger.warning('send_message: create conversation failed: %s', _ce)
+        conv = None
     if not conv:
         return jsonify({'success': False, 'error': 'Could not create conversation.'}), 500
     now  = datetime.now(timezone.utc).isoformat()
@@ -1873,7 +1877,7 @@ def send_message(username):
     if file_data:
         try:
             file_url = storage.upload_message_file(conv['id'], file_data)
-        except (ValueError, RuntimeError) as _e:
+        except Exception as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
     # Messages and conversations are personal data → udb
@@ -2641,12 +2645,12 @@ def group_send(slug):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Upload file attachment to B2 if present
+    # Upload file attachment to R2 if present
     file_url = None
     if file_data:
         try:
             file_url = storage.upload_group_file(g['id'], file_data)
-        except (ValueError, RuntimeError) as _e:
+        except Exception as _e:
             return jsonify({'success': False, 'error': f'File upload failed: {_e}'}), 400
 
     _cur = db.execute(

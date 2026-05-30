@@ -400,6 +400,20 @@ def create_app() -> Flask:
         from db import _global_synced
         return jsonify({'ok': True, 'db_synced': bool(_global_synced)}), 200
 
+    # ── Track response status for teardown ───────────────────────────────────
+    # Flask catches route exceptions with @errorhandler before teardown runs,
+    # so `exc` in teardown_appcontext is ALWAYS None — even for 500 responses.
+    # The only reliable way to know whether the request succeeded is to check
+    # the response status here (after_request runs before teardown while g
+    # is still alive).
+    @app.after_request
+    def _stamp_response_ok(response):
+        try:
+            g._response_ok = response.status_code < 500
+        except Exception:
+            pass
+        return response
+
     # ── Security headers ─────────────────────────────────────────────────────
     @app.after_request
     def set_security_headers(response):
