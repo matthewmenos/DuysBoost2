@@ -268,6 +268,13 @@ def create_post():
                        (channel_id, post_id))
             db.execute('UPDATE channels SET post_count=post_count+1 WHERE id=?', (channel_id,))
 
+    # ── Commit the core post NOW so it is durable and the request succeeds ────
+    # Everything below (parent counters, notifications, hashtags, mentions,
+    # follower/score recalculation) is best-effort enrichment. It must NEVER
+    # turn a successfully-saved post into a 500 — that was the root cause of the
+    # "server error shown, but the post appears after refresh" bug.
+    db.commit()
+
     try:
         if reply_to:
             db.execute('UPDATE posts SET reply_count=reply_count+1 WHERE id=?', (reply_to,))
@@ -276,9 +283,7 @@ def create_post():
                 me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
                 me_name = me['username'] if me else str(uid)
                 add_notification(db, parent['user_id'], f'💬 @{me_name} replied to your post.')
-    except Exception as _e:
-        logger.warning('reply notification failed: %s', _e)
-    try:
+
         if repost_of:
             db.execute('UPDATE posts SET repost_count=repost_count+1 WHERE id=?', (repost_of,))
             parent = db.execute('SELECT user_id FROM posts WHERE id=?', (repost_of,)).fetchone()
@@ -286,36 +291,40 @@ def create_post():
                 me = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
                 me_name = me['username'] if me else str(uid)
                 add_notification(db, parent['user_id'], f'🔁 @{me_name} reposted your post.')
-    except Exception as _e:
-        logger.warning('repost notification failed: %s', _e)
 
-    tags = list(set(t.lower() for t in re.findall(r'#(\w+)', body or '')))
-    for tag in tags[:10]:
-        db.execute('INSERT OR IGNORE INTO hashtags (name) VALUES (?) ', (tag,))
-        ht = db.execute('SELECT id FROM hashtags WHERE name=?', (tag,)).fetchone()
-        if ht:
-            db.execute('INSERT OR IGNORE INTO post_hashtags (post_id,hashtag_id) VALUES (?,?) ',
-                       (post_id, ht['id']))
-    if tags:
-        db.execute('UPDATE posts SET hashtags_cached=? WHERE id=?',
-                   (' '.join('#' + t for t in tags), post_id))
+        tags = list(set(t.lower() for t in re.findall(r'#(\w+)', body or '')))
+        for tag in tags[:10]:
+            db.execute('INSERT OR IGNORE INTO hashtags (name) VALUES (?) ', (tag,))
+            ht = db.execute('SELECT id FROM hashtags WHERE name=?', (tag,)).fetchone()
+            if ht:
+                db.execute('INSERT OR IGNORE INTO post_hashtags (post_id,hashtag_id) VALUES (?,?) ',
+                           (post_id, ht['id']))
+        if tags:
+            db.execute('UPDATE posts SET hashtags_cached=? WHERE id=?',
+                       (' '.join('#' + t for t in tags), post_id))
 
-    if body:
-        mentioned = list(set(re.findall(r'@(\w+)', body)))
-        me_row    = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
-        me_name   = me_row['username'] if me_row else ''
-        for username in mentioned[:10]:
-            if username.lower() == me_name.lower():
-                continue
-            target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
-            if target and target['id'] != uid:
-                add_notification(db, target['id'],
-                    f'🔔 @{me_name} mentioned you in a post.',
-                    icon='mention', link=f'/post/{post_id}')
+        if body:
+            mentioned = list(set(re.findall(r'@(\w+)', body)))
+            me_row    = db.execute('SELECT username FROM users WHERE id=?', (uid,)).fetchone()
+            me_name   = me_row['username'] if me_row else ''
+            for username in mentioned[:10]:
+                if username.lower() == me_name.lower():
+                    continue
+                target = db.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+                if target and target['id'] != uid:
+                    add_notification(db, target['id'],
+                        f'🔔 @{me_name} mentioned you in a post.',
+                        icon='mention', link=f'/post/{post_id}')
 
-    update_counts(db, uid)
-    recalc_post_score(db, post_id)
-    db.commit()
+        update_counts(db, uid)
+        recalc_post_score(db, post_id)
+        db.commit()
+    except Exception as _enrich_e:
+        logger.warning('post enrichment failed (post already saved): %s', _enrich_e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     # Background: fetch Open Graph tags for any URL in the post body
     if body:

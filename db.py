@@ -1141,30 +1141,63 @@ def get_user_db() -> sqlite3.Connection:
     return conn
 
 
-def close_db(_e=None) -> None:
-    """Teardown: commit+close both DBs, sync global to R2, upload personal."""
+def close_db(exc=None) -> None:
+    """
+    Teardown: commit on success / rollback on error, then sync to R2.
+
+    Flask passes the unhandled request exception as `exc`. If a request failed,
+    we MUST NOT commit its partial DB writes — doing so caused the long-standing
+    "server error shown but the post/message silently appears after refresh" bug:
+    the view raised after its INSERT, the response became a 500, yet this teardown
+    used to commit the pending INSERT anyway and upload it to R2.
+    """
+    errored = exc is not None
+
     # ── Personal DB ──────────────────────────────────────────────────────────
     udb  = g.pop('udb',      None)
     uid  = g.pop('udb_uid',  None)
     path = g.pop('udb_path', None)
-    if udb:
+    if udb is not None:
         try:
-            udb.commit()
-            udb.close()
+            if errored:
+                udb.rollback()
+            else:
+                udb.commit()
         except Exception as e:
-            logger.warning('personal DB close error: %s', e)
+            logger.warning('personal DB %s error: %s',
+                           'rollback' if errored else 'commit', e)
+        try:
+            udb.close()
+        except Exception:
+            pass
         if uid and path:
-            _upload_personal_db(uid, path)
+            if errored:
+                # Failed request — discard the local copy without uploading,
+                # so R2 is never poisoned with a half-written transaction.
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            else:
+                _upload_personal_db(uid, path)
 
     # ── Global DB ─────────────────────────────────────────────────────────────
     gdb = g.pop('gdb', None)
-    if gdb:
+    if gdb is not None:
         try:
-            gdb.commit()
-            gdb.close()
+            if errored:
+                gdb.rollback()
+            else:
+                gdb.commit()
         except Exception as e:
-            logger.warning('global DB close error: %s', e)
-        _sync_global_to_r2()
+            logger.warning('global DB %s error: %s',
+                           'rollback' if errored else 'commit', e)
+        try:
+            gdb.close()
+        except Exception:
+            pass
+        if not errored:
+            _sync_global_to_r2()
 
 
 def init_app(app) -> None:

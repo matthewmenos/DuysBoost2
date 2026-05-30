@@ -160,6 +160,82 @@ html, body { overflow: hidden !important; height: 100%; }
 .vo-pill-btn.active { color: var(--accent); }
 .vo-pill-btn svg { display: block; }
 
+/* ── WhatsApp-style media/file attachment preview (before send) ──────────── */
+.attach-strip { display: none; }
+.attach-strip.has-files {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.attach-strip.has-files::-webkit-scrollbar { height: 6px; }
+.attach-strip.has-files::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 99px; }
+
+.att-prev {
+  position: relative;
+  flex-shrink: 0;
+  width: 84px; height: 84px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.att-prev img,
+.att-prev video {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+/* File / voice attachments show a centred icon on a tinted tile */
+.att-prev > span {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+}
+.att-prev > span svg { width: 30px !important; height: 30px !important; }
+
+/* Remove (×) badge — top-right corner, WhatsApp style */
+.att-rm {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(0,0,0,.62); color: #fff;
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; line-height: 0;
+  transition: background .15s, transform .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.att-rm:hover  { background: var(--red); }
+.att-rm:active { transform: scale(.88); }
+.att-rm svg { width: 13px !important; height: 13px !important; stroke-width: 2.6; }
+
+/* Play badge overlaid on video thumbnails */
+.att-vbadge {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.att-vbadge i {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.att-vbadge i svg { width: 14px !important; height: 14px !important; }
+/* Filename caption for non-media files */
+.att-fname {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  font-size: 9.5px; color: #fff; font-weight: 600;
+  background: rgba(0,0,0,.6); padding: 3px 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* ── WhatsApp-style voice note bubble ───────────────────────────────────── */
 .msg-voice {
   display: flex; align-items: center; gap: 10px;
@@ -894,11 +970,22 @@ function renderStrip() {
   }
   attStrip.className = 'attach-strip has-files';
   attStrip.innerHTML = pendingFiles.map(function(f, i) {
-    const inner = f.type === 'image' ? '<img src="' + f.dataUrl + '" alt="">'
-                : f.type === 'video' ? '<video src="' + f.dataUrl + '" preload="metadata"></video>'
-                : f.type === 'voice' ? '<span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>'
-                : '<span><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>';
-    return '<div class="att-prev">' + inner + '<button class="att-rm" onclick="rmFile(' + i + ')"><svg class="i-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+    var inner, extra = '';
+    if (f.type === 'image') {
+      inner = '<img src="' + f.dataUrl + '" alt="">';
+    } else if (f.type === 'video') {
+      inner = '<video src="' + f.dataUrl + '" preload="metadata" muted></video>';
+      extra = '<div class="att-vbadge"><i><svg viewBox="0 0 24 24" fill="#fff" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></i></div>';
+    } else if (f.type === 'voice') {
+      inner = '<span><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>';
+    } else {
+      inner = '<span><svg class="i-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></span>';
+      extra = '<div class="att-fname">' + escapeHtml(f.name || 'file') + '</div>';
+    }
+    return '<div class="att-prev">' + inner + extra +
+           '<button class="att-rm" onclick="rmFile(' + i + ')" aria-label="Remove">' +
+           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+           '</button></div>';
   }).join('');
   _syncComposeMediaMode();
 }
