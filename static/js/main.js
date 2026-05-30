@@ -1537,6 +1537,38 @@ function revealSensitive(postId) {
 }
 window.revealSensitive = revealSensitive;
 
+/* ── Post action button click animations ─────────────────────────────────── */
+(function () {
+  var ANIM_MAP = {
+    'like-btn':     'anim-heart',
+    'repost-btn':   'anim-repost',
+    'bookmark-btn': 'anim-bookmark',
+    'reply-btn':    'anim-pop',
+    'share-btn':    'anim-pop',
+  };
+  function _triggerAnim(btn) {
+    var icon = btn.querySelector('.action-icon');
+    if (!icon) return;
+    var cls = null;
+    for (var k in ANIM_MAP) {
+      if (btn.classList.contains(k)) { cls = ANIM_MAP[k]; break; }
+    }
+    if (!cls) cls = 'anim-pop';
+    icon.classList.remove('anim-pop','anim-heart','anim-repost','anim-bookmark');
+    void icon.offsetWidth;   // force reflow to restart animation
+    icon.classList.add(cls);
+    icon.addEventListener('animationend', function _done() {
+      icon.classList.remove(cls);
+      icon.removeEventListener('animationend', _done);
+    });
+  }
+  // Delegated listener so it works for dynamically-added posts too
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.post-action-btn');
+    if (btn && !btn.classList.contains('views-btn')) _triggerAnim(btn);
+  }, true);
+})();
+
 /* ── Compose: sensitive toggle ───────────────────────────────────────────── */
 function toggleSensitive() {
   var inp = document.getElementById('compose-sensitive');

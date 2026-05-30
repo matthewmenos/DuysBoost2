@@ -33,6 +33,9 @@
   --yellow:       #ffd400;
   --orange:       #ff7a00;
 
+  /* Post card hover — neutral, no colour tint */
+  --surface-hover: rgba(255,255,255,.025);
+
   /* Surface glass variables */
   --glass-bg:     rgba(17, 19, 24, 0.85);
   --glass-border: rgba(255,255,255,0.08);
@@ -105,6 +108,7 @@
   --shadow:    0 8px 30px rgba(0,0,0,.09);
   --shadow-lg: 0 16px 50px rgba(0,0,0,.12);
   --glow-accent: 0 0 0 1px rgba(102,68,232,.2), 0 4px 16px rgba(102,68,232,.12);
+  --surface-hover: rgba(0,0,0,.03);
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -1286,10 +1290,11 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   padding: 16px;
-  transition: background var(--transition);
+  transition: background .15s;
   cursor: pointer;
 }
-.post-card:hover { background: rgba(127,90,240,.025); }
+/* X-style post hover: just the faintest background shift, no color */
+.post-card:hover { background: var(--surface-hover, rgba(255,255,255,.03)); }
 .post-card:first-child { border-top: 1px solid var(--border); }
 
 .post-card.post-expanded {
@@ -1436,15 +1441,18 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   .post-action-btn { padding: 0 3px; }
 }
 
-/* ── Icon container — fixed 18×18, flex-centred ──────────────────── */
+/* ── Icon container — 34×34 circle, icon at 18×18 centre ─────────── */
+/* X uses a circle ring around the icon on hover, NOT the full button */
 .action-icon {
   display:         flex;
   align-items:     center;
   justify-content: center;
-  width:           18px;
-  height:          18px;
+  width:           34px;
+  height:          34px;
+  border-radius:   50%;
   flex-shrink:     0;
   flex-grow:       0;
+  transition:      background .15s, transform .15s;
 }
 
 /* ── SVGs always exactly 18×18, never default 300×150 ───────────── */
@@ -1465,30 +1473,70 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
   text-align:  left;
 }
 
-/* ── Hover / active states ───────────────────────────────────────── */
-.post-action-btn:hover  { background: rgba(29,155,240,.08); color: var(--accent); }
-.post-action-btn:active { opacity: .7; }
+/* ── Hover: X-style — colour the ICON CIRCLE only, not the full button ── */
+.post-action-btn:hover              { background: none; color: var(--accent); }
+.post-action-btn:hover .action-icon { background: rgba(29,155,240,.10); }
 
 /* ── Per-button colour overrides ─────────────────────────────────── */
-.post-action-btn.like-btn:hover      { background: rgba(249,24,128,.10); color: #f91880; }
-.post-action-btn.like-btn.liked      { color: #f91880; }
+.post-action-btn.reply-btn:hover              { color: #1d9bf0; }
+.post-action-btn.reply-btn:hover .action-icon { background: rgba(29,155,240,.10); }
+.post-action-btn.reply-btn:hover .action-count { color: #1d9bf0; }
+
+.post-action-btn.repost-btn:hover              { color: #00ba7c; }
+.post-action-btn.repost-btn:hover .action-icon { background: rgba(0,186,124,.10); }
+.post-action-btn.repost-btn.reposted           { color: #00ba7c; }
+.post-action-btn.repost-btn.reposted .action-count { color: #00ba7c; }
+
+.post-action-btn.like-btn:hover              { color: #f91880; }
+.post-action-btn.like-btn:hover .action-icon { background: rgba(249,24,128,.10); }
+.post-action-btn.like-btn.liked              { color: #f91880; }
 .post-action-btn.like-btn.liked .action-icon svg { fill: #f91880; stroke: #f91880; }
 .post-action-btn.like-btn.liked .action-count    { color: #f91880; }
 
-.post-action-btn.repost-btn:hover    { background: rgba(0,186,124,.10); color: #00ba7c; }
-.post-action-btn.repost-btn.reposted { color: #00ba7c; }
-.post-action-btn.repost-btn.reposted .action-count { color: #00ba7c; }
-
-.post-action-btn.bookmark-btn:hover      { background: rgba(29,155,240,.10); color: #1d9bf0; }
-.post-action-btn.bookmark-btn.bookmarked { color: #1d9bf0; }
+.post-action-btn.bookmark-btn:hover              { color: #1d9bf0; }
+.post-action-btn.bookmark-btn:hover .action-icon { background: rgba(29,155,240,.10); }
+.post-action-btn.bookmark-btn.bookmarked         { color: #1d9bf0; }
 .post-action-btn.bookmark-btn.bookmarked .action-icon svg { fill: #1d9bf0; stroke: #1d9bf0; }
 
-.post-action-btn.share-btn:hover   { background: rgba(29,155,240,.10); color: #1d9bf0; }
-.post-action-btn.boost-btn:hover   { background: rgba(168,85,247,.10); color: #a855f7; }
+.post-action-btn.share-btn:hover              { color: #1d9bf0; }
+.post-action-btn.share-btn:hover .action-icon { background: rgba(29,155,240,.10); }
+
+.post-action-btn.boost-btn:hover              { color: #a855f7; }
+.post-action-btn.boost-btn:hover .action-icon { background: rgba(168,85,247,.10); }
+
 .post-action-btn.views-btn         { cursor: default !important; pointer-events: none; }
 
-.post-action-btn.reply-btn:hover   { background: rgba(29,155,240,.10); color: #1d9bf0; }
-.post-action-btn.reply-btn:hover .action-count { color: #1d9bf0; }
+/* ── Click animations ─────────────────────────────────────────────── */
+@keyframes action-pop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.35); }
+  65%  { transform: scale(.88); }
+  100% { transform: scale(1); }
+}
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  20%  { transform: scale(1.45); }
+  55%  { transform: scale(.80); }
+  75%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+@keyframes repost-spin {
+  0%   { transform: rotate(0deg)   scale(1); }
+  40%  { transform: rotate(200deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+@keyframes bookmark-stamp {
+  0%   { transform: scale(1) translateY(0); }
+  30%  { transform: scale(1.3) translateY(-3px); }
+  60%  { transform: scale(.88) translateY(1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.action-icon.anim-pop      { animation: action-pop   .35s cubic-bezier(.36,.07,.19,.97); }
+.action-icon.anim-heart    { animation: heart-pop    .45s cubic-bezier(.36,.07,.19,.97); }
+.action-icon.anim-repost   { animation: repost-spin  .42s cubic-bezier(.36,.07,.19,.97); }
+.action-icon.anim-bookmark { animation: bookmark-stamp .38s cubic-bezier(.36,.07,.19,.97); }
+
 .action-count { font-size: 12.5px; min-width: 14px; }
 
 .post-stats-row {
@@ -1872,10 +1920,8 @@ tbody tr:hover td { background: rgba(127,90,240,.04); }
 .sub-only-pill:hover { border-color: var(--accent); color: var(--accent-light); }
 
 /* ── Tip button style ────────────────────────────────────────────────────── */
-.post-action-btn.tip-btn:hover {
-  background: rgba(44,182,125,.1);
-  color: var(--green);
-}
+.post-action-btn.tip-btn:hover              { background: none; color: var(--green); }
+.post-action-btn.tip-btn:hover .action-icon { background: rgba(44,182,125,.1); }
 
 /* ── Reaction picker ────────────────────────────────────────────────────── */
 .reaction-wrap { position: relative; display: inline-flex; }
@@ -2475,13 +2521,12 @@ button:hover .i-icon, a:hover .i-icon,
 /* Post cards glass */
 .post-card {
   background: var(--surface) !important;
-  border: 1px solid rgba(29,155,240,.1) !important;
-  backdrop-filter: blur(12px);
-  transition: border-color .2s, box-shadow .2s;
+  border: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  backdrop-filter: none;
 }
 .post-card:hover {
-  border-color: rgba(29,155,240,.22) !important;
-  box-shadow: 0 4px 24px rgba(29,155,240,.08);
+  background: rgba(255,255,255,.025) !important;
 }
 
 /* Widgets glass */
@@ -2596,10 +2641,18 @@ body { background: var(--bg) !important; }
 [data-theme="light"] body { background: var(--bg) !important; }
 [data-theme="light"] .sidebar,
 [data-theme="light"] .topbar,
-[data-theme="light"] .post-card,
 [data-theme="light"] .modal {
   background: rgba(255,255,255,0.85) !important;
-  border-color: rgba(29,155,240,.16) !important;
+}
+[data-theme="light"] .post-card {
+  background: #fff !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+}
+[data-theme="light"] .post-card:hover {
+  background: rgba(0,0,0,.025) !important;
 }
 
 .toast-container {
@@ -2654,10 +2707,16 @@ body:has(.bottom-nav.force-hidden) .toast-container {
   vertical-align: middle;
   margin-left: 3px;
 }
+@keyframes badge-shimmer {
+  0%, 70%, 100% { filter: drop-shadow(0 1px 2px rgba(0,0,0,.22)) brightness(1); }
+  80%           { filter: drop-shadow(0 0 5px currentColor) brightness(1.4); }
+}
 .badge-verified .badge-shell {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  color: #1D9BF0;          /* default blue */
+  color: #1D9BF0;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,.22));
+  animation: badge-shimmer 5s ease-in-out infinite;
+  animation-delay: calc(var(--badge-delay, 0) * 1s + 2s);
 }
 .badge-verified .badge-check {
   position: relative; z-index: 2;
