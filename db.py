@@ -444,9 +444,6 @@ CREATE INDEX IF NOT EXISTS idx_posts_user      ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created   ON posts(created_at);
 CREATE INDEX IF NOT EXISTS idx_posts_score     ON posts(score);
 CREATE INDEX IF NOT EXISTS idx_posts_reply     ON posts(reply_to_id);
-CREATE INDEX IF NOT EXISTS idx_posts_status    ON posts(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_posts_scheduled ON posts(scheduled_at) WHERE scheduled_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_reply_null ON posts(user_id, score) WHERE reply_to_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_follows_er      ON follows(follower_id);
 CREATE INDEX IF NOT EXISTS idx_follows_ing     ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_likes_post      ON post_likes(post_id);
@@ -669,8 +666,19 @@ def _global_db_path() -> str:
     return os.path.join(current_app.root_path, 'global.db')
 
 
+def _verify_db_integrity(path: str) -> bool:
+    """Return True if the SQLite file at path passes integrity_check."""
+    try:
+        _c = sqlite3.connect(path)
+        row = _c.execute('PRAGMA integrity_check').fetchone()
+        _c.close()
+        return row is not None and row[0] == 'ok'
+    except Exception:
+        return False
+
+
 def _sync_global_from_r2() -> None:
-    """Download global.db from R2 once per worker boot."""
+    """Download global.db from R2 once per worker boot, then verify integrity."""
     global _global_synced
     with _global_sync_lock:
         if _global_synced:
@@ -682,6 +690,20 @@ def _sync_global_from_r2() -> None:
                 _get_r2().download_file(bucket, 'global.db', path)
                 size_kb = os.path.getsize(path) // 1024
                 logger.info('global.db downloaded from R2 (%d KB)', size_kb)
+
+                # Integrity check: reject a corrupted download instead of
+                # letting every request crash with "database disk image is malformed"
+                if not _verify_db_integrity(path):
+                    logger.critical(
+                        'Downloaded global.db failed integrity check — '
+                        'deleting corrupt file and starting with a fresh database. '
+                        'Data in R2 may be lost; re-seed or restore from backup.'
+                    )
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+
             except ClientError as e:
                 code = e.response.get('Error', {}).get('Code', '')
                 if code in ('404', 'NoSuchKey'):
@@ -694,11 +716,20 @@ def _sync_global_from_r2() -> None:
 
 
 def _sync_global_to_r2() -> None:
-    """Upload global.db to R2 after each request."""
+    """Upload global.db to R2 after each request — only if integrity passes."""
     path   = _global_db_path()
     bucket = os.environ.get('R2_DB_BUCKET_NAME', '').strip()
     if not bucket or not os.path.exists(path):
         return
+
+    # Never upload a corrupted file — a bad R2 write would brick every future startup
+    if not _verify_db_integrity(path):
+        logger.critical(
+            'Refusing to upload malformed global.db to R2. '
+            'The local copy is corrupted; R2 copy is unchanged.'
+        )
+        return
+
     try:
         _get_r2().upload_file(
             path, bucket, 'global.db',
@@ -712,8 +743,31 @@ def _sync_global_to_r2() -> None:
 def _open_global_db() -> sqlite3.Connection:
     global _migrations_done
     path = _global_db_path()
+
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+
+    # Integrity check before doing anything — a corrupted R2 download would
+    # crash every single request with "database disk image is malformed".
+    try:
+        row = conn.execute('PRAGMA integrity_check').fetchone()
+        if row is None or row[0] != 'ok':
+            raise sqlite3.DatabaseError(
+                f'integrity_check returned: {row[0] if row else "no result"}'
+            )
+    except sqlite3.DatabaseError as _ice:
+        logger.critical(
+            'global.db is malformed (%s) — wiping and recreating from schema.', _ice
+        )
+        conn.close()
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        _migrations_done = False  # force re-migration on the empty replacement
+
     conn.executescript(GLOBAL_SCHEMA)   # CREATE TABLE IF NOT EXISTS (new tables)
     conn.commit()
     if not _migrations_done:

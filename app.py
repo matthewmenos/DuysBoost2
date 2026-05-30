@@ -490,6 +490,26 @@ def init_db():
     _logger = _log.getLogger(__name__)
 
     db_path = os.path.join(_base_dir, 'global.db')
+
+    # If the local DB file is malformed (from a previous crashed run), wipe it
+    # so executescript can start clean. run_schema_migrations will add columns.
+    if os.path.exists(db_path):
+        try:
+            _tmp = _sqlite.connect(db_path)
+            _row = _tmp.execute('PRAGMA integrity_check').fetchone()
+            _tmp.close()
+            if _row is None or _row[0] != 'ok':
+                import logging as _log2
+                _log2.getLogger(__name__).critical(
+                    'init_db: local global.db is malformed — removing before re-init.'
+                )
+                os.remove(db_path)
+        except Exception:
+            try:
+                os.remove(db_path)
+            except OSError:
+                pass
+
     conn    = _sqlite.connect(db_path)
     conn.row_factory = _sqlite.Row
 
@@ -563,7 +583,12 @@ def init_db():
 
 
 if __name__ == '__main__':
-    # create_app() calls init_db() automatically — no manual step needed.
+    try:
+        init_db()
+    except Exception as _e:
+        import logging as _ilog
+        _ilog.getLogger(__name__).critical('init_db() failed at startup: %s', _e)
+
     app   = create_app()
     port  = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', '0') == '1'
